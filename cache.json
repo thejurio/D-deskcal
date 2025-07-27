@@ -32,6 +32,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
             "color": "#a17cdd",
             "emoji": ""
@@ -68,6 +69,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -103,6 +105,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -144,6 +147,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -185,6 +189,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -226,41 +231,7 @@
                 ]
             },
             "eventType": "default",
-            "calendarId": "thejurio@gmail.com",
-            "color": "#a0aee5",
-            "emoji": ""
-        },
-        {
-            "kind": "calendar#event",
-            "etag": "\"3507038421989886\"",
-            "id": "69oco8j064fllc5q846l17fih0",
-            "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=NjlvY284ajA2NGZsbGM1cTg0NmwxN2ZpaDAgdGhlanVyaW9AbQ",
-            "created": "2025-07-26T08:40:10.000Z",
-            "updated": "2025-07-26T08:40:10.994Z",
-            "summary": "구글테스티잉",
-            "creator": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "organizer": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "start": {
-                "dateTime": "2025-07-11T17:00:00+09:00",
-                "timeZone": "Asia/Seoul"
-            },
-            "end": {
-                "dateTime": "2025-07-11T18:00:00+09:00",
-                "timeZone": "Asia/Seoul"
-            },
-            "iCalUID": "69oco8j064fllc5q846l17fih0@google.com",
-            "sequence": 0,
-            "reminders": {
-                "useDefault": true
-            },
-            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -302,13 +273,14 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
         },
         {
             "kind": "calendar#event",
-            "etag": "\"3504415142531230\"",
+            "etag": "\"3505800339274078\"",
             "id": "_8krjgc1i8krk2b9j6d138b9k8orj6ba27523aba270ok2h9n8d336h1j74",
             "status": "confirmed",
             "htmlLink": "https://www.google.com/calendar/event?eid=XzhrcmpnYzFpOGtyazJiOWo2ZDEzOGI5azhvcmo2YmEyNzUyM2FiYTI3MG9rMmg5bjhkMzM2aDFqNzQgdGhlanVyaW9AbQ",
@@ -334,15 +306,10 @@
             "iCalUID": "E7802E7A-33B4-4F73-B9D5-B81AE7CF3D39",
             "sequence": 0,
             "reminders": {
-                "useDefault": false,
-                "overrides": [
-                    {
-                        "method": "popup",
-                        "minutes": 30
-                    }
-                ]
+                "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -384,6 +351,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -426,6 +394,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -467,19 +436,20 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
         },
         {
             "kind": "calendar#event",
-            "etag": "\"3507038439512286\"",
+            "etag": "\"3507173906216094\"",
             "id": "p55f3eqvtqkt97ngj39nk5rl1c",
             "status": "confirmed",
             "htmlLink": "https://www.google.com/calendar/event?eid=cDU1ZjNlcXZ0cWt0OTduZ2ozOW5rNXJsMWMgdGhlanVyaW9AbQ",
             "created": "2025-07-26T08:40:19.000Z",
-            "updated": "2025-07-26T08:40:19.756Z",
-            "summary": "테스트",
+            "updated": "2025-07-27T03:29:13.108Z",
+            "summary": "테스트-변경",
             "creator": {
                 "email": "thejurio@gmail.com",
                 "self": true
@@ -510,6 +480,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -551,6 +522,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -590,6 +562,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -625,49 +598,7 @@
                 "useDefault": true
             },
             "eventType": "default",
-            "calendarId": "thejurio@gmail.com",
-            "color": "#a0aee5",
-            "emoji": ""
-        },
-        {
-            "kind": "calendar#event",
-            "etag": "\"3507012603918110\"",
-            "id": "_6sq38d9h68qkcb9g6cok4b9k88r36b9p6h0jiba284q3ac1l6cpjie9n8o",
-            "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=XzZzcTM4ZDloNjhxa2NiOWc2Y29rNGI5azg4cjM2YjlwNmgwamliYTI4NHEzYWMxbDZjcGppZTluOG8gdGhlanVyaW9AbQ",
-            "created": "2025-07-26T05:05:01.000Z",
-            "updated": "2025-07-26T05:05:01.959Z",
-            "summary": "테스트",
-            "creator": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "organizer": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "start": {
-                "date": "2025-07-23"
-            },
-            "end": {
-                "date": "2025-07-25"
-            },
-            "iCalUID": "7445125F-031B-4B63-94A9-BA450533997F",
-            "sequence": 0,
-            "reminders": {
-                "useDefault": false,
-                "overrides": [
-                    {
-                        "method": "popup",
-                        "minutes": 30
-                    },
-                    {
-                        "method": "email",
-                        "minutes": 430
-                    }
-                ]
-            },
-            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -703,6 +634,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -746,6 +678,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -781,24 +714,60 @@
             "iCalUID": "20250717_lm3ucbomdtjg0vefsqmbmtaod0@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
         },
         {
-            "summary": "테스팅",
+            "summary": "로컬 테스트",
             "description": "",
             "start": {
-                "date": "2025-07-10"
+                "dateTime": "2025-07-10T14:00:00",
+                "timeZone": "Asia/Seoul"
             },
             "end": {
-                "date": "2025-07-11"
+                "dateTime": "2025-07-10T15:00:00",
+                "timeZone": "Asia/Seoul"
             },
-            "id": "d7a9bee3-f483-41ee-b711-7fce90d2642a",
+            "id": "0065adec-e0c4-4748-a837-2fe15e59cba8",
             "provider": "LocalCalendarProvider",
             "calendarId": "local_calendar",
             "color": "#4CAF50",
             "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3507190213356414\"",
+            "id": "pesm5o8b7k2q80jn31okrn4hhs",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=cGVzbTVvOGI3azJxODBqbjMxb2tybjRoaHMgdGhlanVyaW9AbQ",
+            "created": "2025-07-27T05:45:06.000Z",
+            "updated": "2025-07-27T05:45:06.678Z",
+            "summary": "555",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "dateTime": "2025-07-15T14:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "end": {
+                "dateTime": "2025-07-15T15:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "iCalUID": "pesm5o8b7k2q80jn31okrn4hhs@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": true
+            },
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider"
         }
     ],
     "2025-8": [
@@ -833,6 +802,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -876,6 +846,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -919,6 +890,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -954,6 +926,7 @@
             "iCalUID": "20250815_knmv06v079vsg39cs1sk48oi14@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -999,6 +972,7 @@
                 "type": "birthday"
             },
             "eventType": "birthday",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1038,6 +1012,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1080,6 +1055,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1119,6 +1095,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1154,6 +1131,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1197,6 +1175,7 @@
                 "type": "birthday"
             },
             "eventType": "birthday",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1232,6 +1211,7 @@
             "iCalUID": "20250603_j6dkfpji7eqg9rscjgvup56kh8@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1267,6 +1247,7 @@
             "iCalUID": "20250606_l98b4ci86sfibkvnljg26tqglc@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1311,6 +1292,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1352,6 +1334,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1396,6 +1379,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1431,6 +1415,7 @@
             "iCalUID": "20251001_a93n0ak0pj8levv7jfif3smjk8@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1476,6 +1461,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1519,6 +1505,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1554,6 +1541,7 @@
                 "useDefault": true
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1599,6 +1587,7 @@
                 "useDefault": false
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1646,6 +1635,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1681,6 +1671,7 @@
             "iCalUID": "20250501_ai5ncosoiemieqar2rl29h44ac@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1716,6 +1707,7 @@
             "iCalUID": "20250505_rkfd5g3ief0kd3sc0ruir0uimg@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1751,6 +1743,7 @@
             "iCalUID": "20250505_urak2voga76elrk5k8g6dmb8jc@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1786,6 +1779,7 @@
             "iCalUID": "20250506_1bfohrtjavfnjtn0hnbn8ekv6c@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1821,6 +1815,7 @@
             "iCalUID": "20250508_hvt0779rmn2t0f1tl3ogno28i4@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1856,6 +1851,7 @@
             "iCalUID": "20250515_8rk0qkj815eo4opuvtjv92a5do@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -1908,6 +1904,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1950,6 +1947,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -1990,6 +1988,7 @@
                 "useDefault": false
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -2033,6 +2032,7 @@
                 "type": "birthday"
             },
             "eventType": "birthday",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -2083,6 +2083,7 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -2126,6 +2127,7 @@
                 "type": "birthday"
             },
             "eventType": "birthday",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -2169,6 +2171,7 @@
                 "type": "birthday"
             },
             "eventType": "birthday",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
             "emoji": ""
@@ -2204,6 +2207,7 @@
             "iCalUID": "20251001_a93n0ak0pj8levv7jfif3smjk8@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -2239,6 +2243,7 @@
             "iCalUID": "20251003_9292etmvk5fcep6gf5q1mgc4qk@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -2274,6 +2279,7 @@
             "iCalUID": "20251005_cfmuabt1v5j1472rea61eaqlm0@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -2309,6 +2315,7 @@
             "iCalUID": "20251006_1fk9oridfifu6d93dn4iammj78@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -2344,6 +2351,7 @@
             "iCalUID": "20251007_qd64fgdsha1btfq62inr3083b0@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -2379,6 +2387,7 @@
             "iCalUID": "20251008_jloh96ugbf8h13kvoevnsufdv8@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
@@ -2414,149 +2423,22 @@
             "iCalUID": "20251009_ja2un5elqo36un7sp79dphmgj4@google.com",
             "sequence": 0,
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
             "emoji": ""
         }
     ],
-    "2025-11": [
+    "2025-4": [
         {
             "kind": "calendar#event",
-            "etag": "\"3484700685565374\"",
-            "id": "9pdo1d4ae0er78k2ka8061ooj8_20251101",
+            "etag": "\"2813533897321000\"",
+            "id": "nqhe2vpl4bpr8d35a25480m4ds_20250405",
             "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=OXBkbzFkNGFlMGVyNzhrMmthODA2MW9vajhfMjAyNTExMDEgdGhlanVyaW9AbQ",
-            "created": "2025-03-19T02:12:22.000Z",
-            "updated": "2025-03-19T02:12:22.782Z",
-            "summary": "모지랭이님의 생일",
-            "creator": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "organizer": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "start": {
-                "date": "2025-11-01"
-            },
-            "end": {
-                "date": "2025-11-02"
-            },
-            "recurringEventId": "9pdo1d4ae0er78k2ka8061ooj8",
-            "originalStartTime": {
-                "date": "2025-11-01"
-            },
-            "transparency": "transparent",
-            "visibility": "private",
-            "iCalUID": "9pdo1d4ae0er78k2ka8061ooj8@google.com",
-            "sequence": 0,
-            "reminders": {
-                "useDefault": false
-            },
-            "birthdayProperties": {
-                "contact": "people/c4998235154219141700",
-                "type": "birthday"
-            },
-            "eventType": "birthday",
-            "calendarId": "thejurio@gmail.com",
-            "color": "#a0aee5",
-            "emoji": ""
-        },
-        {
-            "kind": "calendar#event",
-            "etag": "\"3479865009636000\"",
-            "id": "llsb60b0jjj8rptb4vr56tr8uk_20251101",
-            "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=bGxzYjYwYjBqamo4cnB0YjR2cjU2dHI4dWtfMjAyNTExMDEgdGhlanVyaW9AbQ",
-            "created": "2024-12-06T12:50:39.000Z",
-            "updated": "2025-02-19T02:35:04.818Z",
-            "summary": "모지랭이님의 생일",
-            "creator": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "organizer": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "start": {
-                "date": "2025-11-01"
-            },
-            "end": {
-                "date": "2025-11-02"
-            },
-            "recurringEventId": "llsb60b0jjj8rptb4vr56tr8uk",
-            "originalStartTime": {
-                "date": "2025-11-01"
-            },
-            "transparency": "transparent",
-            "visibility": "private",
-            "iCalUID": "llsb60b0jjj8rptb4vr56tr8uk@google.com",
-            "sequence": 0,
-            "reminders": {
-                "useDefault": false
-            },
-            "birthdayProperties": {
-                "contact": "people/c7840219527823903973",
-                "type": "birthday"
-            },
-            "eventType": "birthday",
-            "calendarId": "thejurio@gmail.com",
-            "color": "#a0aee5",
-            "emoji": ""
-        },
-        {
-            "kind": "calendar#event",
-            "etag": "\"3501977490526270\"",
-            "id": "_890k6c9m8kp3ib9j60pk2b9k60okcb9o6cs3gb9n6d23ic1p6924achj68",
-            "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=Xzg5MGs2YzltOGtwM2liOWo2MHBrMmI5azYwb2tjYjlvNmNzM2diOW42ZDIzaWMxcDY5MjRhY2hqNjggdGhlanVyaW9AbQ",
-            "created": "2025-06-27T01:45:45.000Z",
-            "updated": "2025-06-27T01:45:45.263Z",
-            "summary": "전일초 찾학컨 보",
-            "location": "6년 교실",
-            "creator": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "organizer": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "start": {
-                "dateTime": "2025-11-12T16:00:00+09:00",
-                "timeZone": "Asia/Seoul"
-            },
-            "end": {
-                "dateTime": "2025-11-12T17:00:00+09:00",
-                "timeZone": "Asia/Seoul"
-            },
-            "iCalUID": "BAC16E29-303A-401F-8388-73D9092DE232",
-            "sequence": 0,
-            "reminders": {
-                "useDefault": false,
-                "overrides": [
-                    {
-                        "method": "popup",
-                        "minutes": 30
-                    }
-                ]
-            },
-            "eventType": "default",
-            "calendarId": "thejurio@gmail.com",
-            "color": "#a0aee5",
-            "emoji": ""
-        },
-        {
-            "kind": "calendar#event",
-            "etag": "\"2813533008792000\"",
-            "id": "pv21leec09f136f443e1d7gcpo_20251128",
-            "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=cHYyMWxlZWMwOWYxMzZmNDQzZTFkN2djcG9fMjAyNTExMjggdGhlanVyaW9AbQ",
-            "created": "2014-07-31T00:28:24.000Z",
-            "updated": "2014-07-31T00:28:24.396Z",
-            "summary": "엄마생일",
+            "htmlLink": "https://www.google.com/calendar/event?eid=bnFoZTJ2cGw0YnByOGQzNWEyNTQ4MG00ZHNfMjAyNTA0MDUgdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:34:25.000Z",
+            "updated": "2014-07-31T00:35:48.700Z",
+            "summary": "이지연생일",
             "description": "{birthday_e_b}",
             "creator": {
                 "email": "thejurio@gmail.com",
@@ -2569,16 +2451,217 @@
                 "self": true
             },
             "start": {
-                "date": "2025-11-28"
+                "date": "2025-04-05"
             },
             "end": {
-                "date": "2025-11-29"
+                "date": "2025-04-06"
             },
-            "recurringEventId": "pv21leec09f136f443e1d7gcpo",
+            "recurringEventId": "nqhe2vpl4bpr8d35a25480m4ds",
             "originalStartTime": {
-                "date": "2025-11-28"
+                "date": "2025-04-05"
             },
-            "iCalUID": "pv21leec09f136f443e1d7gcpo@google.com",
+            "iCalUID": "nqhe2vpl4bpr8d35a25480m4ds@google.com",
+            "sequence": 1,
+            "reminders": {
+                "useDefault": false
+            },
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3478889047952000\"",
+            "id": "_8l348dpm6914ab9i8h330b9k6d33gb9o8osj4ba584p32cho6gq3gc1g74",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=XzhsMzQ4ZHBtNjkxNGFiOWk4aDMzMGI5azZkMzNnYjlvOG9zajRiYTU4NHAzMmNobzZncTNnYzFnNzQgdGhlanVyaW9AbQ",
+            "created": "2025-02-13T11:02:03.000Z",
+            "updated": "2025-02-13T11:02:03.976Z",
+            "summary": "군산 새만금 마라톤",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "dateTime": "2025-04-06T07:30:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "end": {
+                "dateTime": "2025-04-06T08:30:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "iCalUID": "EFD762BE-2DF0-43F8-8F92-EA2128448009",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": true
+            },
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3479929236566000\"",
+            "id": "_6oq4ahhj6csjab9h89236b9k61246ba2610k2ba58opj8gpj84r46c9m64",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=XzZvcTRhaGhqNmNzamFiOWg4OTIzNmI5azYxMjQ2YmEyNjEwazJiYTU4b3BqOGdwajg0cjQ2YzltNjQgdGhlanVyaW9AbQ",
+            "created": "2025-02-19T11:30:18.000Z",
+            "updated": "2025-02-19T11:30:18.283Z",
+            "summary": "영종마라톤",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "dateTime": "2025-04-19T16:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "end": {
+                "dateTime": "2025-04-19T17:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "iCalUID": "64EF3395-1BD3-40DC-B0AA-EF34C3A6C161",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": true
+            },
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3479865009636000\"",
+            "id": "am5eg0i082vaktcgmbdr0525tg_20250427",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=YW01ZWcwaTA4MnZha3RjZ21iZHIwNTI1dGdfMjAyNTA0MjcgdGhlanVyaW9AbQ",
+            "created": "2024-12-06T12:50:39.000Z",
+            "updated": "2025-02-19T02:35:04.818Z",
+            "summary": "곽희남선생님연대한국학교님의 생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-04-27"
+            },
+            "end": {
+                "date": "2025-04-28"
+            },
+            "recurringEventId": "am5eg0i082vaktcgmbdr0525tg",
+            "originalStartTime": {
+                "date": "2025-04-27"
+            },
+            "transparency": "transparent",
+            "visibility": "private",
+            "iCalUID": "am5eg0i082vaktcgmbdr0525tg@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "birthdayProperties": {
+                "contact": "people/c2139327142460725468",
+                "type": "birthday"
+            },
+            "eventType": "birthday",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3049633324832000\"",
+            "id": "0mcan79fg530qbstjn200vatd4_20250428",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MG1jYW43OWZnNTMwcWJzdGpuMjAwdmF0ZDRfMjAyNTA0MjggdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:31:09.000Z",
+            "updated": "2018-04-27T08:11:02.416Z",
+            "summary": "이웅비생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-04-28"
+            },
+            "end": {
+                "date": "2025-04-29"
+            },
+            "recurringEventId": "0mcan79fg530qbstjn200vatd4",
+            "originalStartTime": {
+                "date": "2025-04-28"
+            },
+            "iCalUID": "0mcan79fg530qbstjn200vatd4@google.com",
+            "sequence": 1,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    },
+                    {
+                        "method": "email",
+                        "minutes": 430
+                    }
+                ]
+            },
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3480033462966000\"",
+            "id": "_8csk6c9m6ko36ba26gs4cb9k8h2k2ba268pk8b9h8l14cc228kqjig9g68",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=Xzhjc2s2YzltNmtvMzZiYTI2Z3M0Y2I5azhoMmsyYmEyNjhwazhiOWg4bDE0Y2MyMjhrcWppZzlnNjggdGhlanVyaW9AbQ",
+            "created": "2025-02-20T01:58:51.000Z",
+            "updated": "2025-02-20T01:58:51.483Z",
+            "summary": "재량휴업일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-05-01"
+            },
+            "end": {
+                "date": "2025-05-03"
+            },
+            "iCalUID": "C9C16503-B48F-4DEA-B23D-1EBF0BE59A02",
             "sequence": 0,
             "reminders": {
                 "useDefault": false,
@@ -2594,8 +2677,81 @@
                 ]
             },
             "eventType": "default",
+            "provider": "GoogleCalendarProvider",
             "calendarId": "thejurio@gmail.com",
             "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812926356000\"",
+            "id": "20250405_m986k52t4offknfcbnelfsrn3k",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTA0MDVfbTk4Nms1MnQ0b2Zma25mY2JuZWxmc3JuM2sga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:23.000Z",
+            "updated": "2024-05-22T19:34:23.178Z",
+            "summary": "식목일",
+            "description": "기념일\n기념일을 숨기려면 Google Calendar 설정 > 대한민국의 휴일 캘린더로 이동하세요.",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-04-05"
+            },
+            "end": {
+                "date": "2025-04-06"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20250405_m986k52t4offknfcbnelfsrn3k@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812931894000\"",
+            "id": "20250501_ai5ncosoiemieqar2rl29h44ac",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTA1MDFfYWk1bmNvc29pZW1pZXFhcjJybDI5aDQ0YWMga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:25.000Z",
+            "updated": "2024-05-22T19:34:25.947Z",
+            "summary": "노동절",
+            "description": "공휴일",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-05-01"
+            },
+            "end": {
+                "date": "2025-05-02"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20250501_ai5ncosoiemieqar2rl29h44ac@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "provider": "GoogleCalendarProvider",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
             "emoji": ""
         }
     ]

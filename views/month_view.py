@@ -1,6 +1,6 @@
 import datetime
 import calendar
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
 
@@ -123,17 +123,12 @@ class MonthViewWidget(QWidget):
         for i in range(self.calendar_grid.columnCount()): self.calendar_grid.setColumnStretch(i, 1)
         QTimer.singleShot(0, self.redraw_events_with_current_data)
 
-# views/month_view.py 파일입니다.
-
     def redraw_events_with_current_data(self):
         all_events = self.data_manager.get_events(self.current_date.year, self.current_date.month)
         
         selected_ids = self.main_widget.settings.get("selected_calendars", [])
         
-        # 'selected_ids'에 포함된 calendarId를 가진 이벤트만 필터링합니다.
-        # selected_ids가 비어있으면 아무것도 표시하지 않습니다.
         filtered_events = [event for event in all_events if event.get('calendarId') in selected_ids]
-        # --- ▲▲▲ 여기까지가 수정된 핵심입니다 ▲▲▲ ---
 
         self.redraw_events(filtered_events)
 
@@ -202,10 +197,8 @@ class MonthViewWidget(QWidget):
                     event_widget = EventLabelWidget(event, self)
                     event_widget.edit_requested.connect(self.on_edit_event_requested)
                     
-                    # --- ▼▼▼ 여기가 이번 수정의 핵심입니다 ▼▼▼ ---
                     if is_true_start or is_week_start: 
                         event_widget.setText(event.get('summary', ''))
-                    # --- ▲▲▲ 여기까지가 이번 수정의 핵심입니다 ▲▲▲ ---
                     
                     event_widget.setGeometry(x, y, width, height)
                     event_color = event.get('color', '#555555')
@@ -229,3 +222,66 @@ class MonthViewWidget(QWidget):
     def go_to_next_month(self):
         self.current_date = (self.current_date.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
         self.refresh()
+
+    def get_events_for_date(self, date_obj):
+        events = self.data_manager.get_events(date_obj.year, date_obj.month)
+        return [e for e in events if datetime.date.fromisoformat(e['start'].get('date', e['start'].get('dateTime')[:10])) <= date_obj <= datetime.date.fromisoformat(e['end'].get('date', e['end'].get('dateTime')[:10])) - datetime.timedelta(days=1 if 'date' in e['end'] else 0)]
+
+    def contextMenuEvent(self, event):
+        from PyQt6.QtGui import QAction
+        from PyQt6.QtWidgets import QMenu
+
+        pos = event.pos()
+        target_date = None
+        target_event = None
+
+        # 마우스 위치에 이벤트 위젯이 있는지 확인
+        for event_widget in self.event_widgets:
+            if event_widget.geometry().contains(pos):
+                target_event = event_widget.event_data
+                break
+        
+        # 이벤트 위젯이 없다면, 날짜 셀이 있는지 확인
+        if not target_event:
+            for date, cell_info in self.date_to_cell_map.items():
+                cell_rect = self.calendar_grid.cellRect(cell_info['row'], cell_info['col'])
+                if cell_rect.contains(pos):
+                    target_date = date
+                    break
+
+        menu = QMenu(self)
+        
+        # 상황별 메뉴 추가
+        if target_event:
+            edit_action = QAction("수정", self)
+            edit_action.triggered.connect(lambda: self.edit_event_requested.emit(target_event))
+            menu.addAction(edit_action)
+            
+            delete_action = QAction("삭제", self)
+            # 삭제 액션에 확인 창을 띄우는 함수를 연결합니다.
+            delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
+            menu.addAction(delete_action)
+
+        elif target_date:
+            add_action = QAction("일정 추가", self)
+            add_action.triggered.connect(lambda: self.add_event_requested.emit(target_date))
+            menu.addAction(add_action)
+
+        # 공통 메뉴 추가 (MainWidget의 메서드 호출)
+        self.main_widget.add_common_context_menu_actions(menu)
+        
+        menu.exec(event.globalPos())
+
+    def confirm_delete_event(self, event_data):
+        """삭제 확인 대화 상자를 표시하고 사용자의 선택에 따라 이벤트를 삭제합니다."""
+        summary = event_data.get('summary', '(제목 없음)')
+        reply = QMessageBox.question(
+            self,
+            '삭제 확인',
+            f"'{summary}' 일정을 정말 삭제하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.main_widget.data_manager.delete_event(event_data)

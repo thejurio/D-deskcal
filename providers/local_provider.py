@@ -64,39 +64,64 @@ class LocalCalendarProvider(BaseCalendarProvider):
 # providers/local_provider.py 파일입니다.
 
     def add_event(self, event_data):
-        """새로운 로컬 이벤트를 DB에 추가합니다."""
+        """새로운 로컬 이벤트를 DB에 추가하고, 추가된 이벤트 객체를 반환합니다."""
         try:
-            body = event_data['body']
-            event_id = body['id']
-            start_date = body['start'].get('date') or body['start'].get('dateTime')[:10]
-            end_date = body['end'].get('date') or body['end'].get('dateTime')[:10]
+            body = event_data.get('body')
+            if not body:
+                return None
+
+            event_id = body.get('id')
+            start_date = body.get('start', {}).get('date') or body.get('start', {}).get('dateTime', '')[:10]
+            end_date = body.get('end', {}).get('date') or body.get('end', {}).get('dateTime', '')[:10]
             
-            # 나중에 구글 이벤트와 구별하기 위해 provider 정보를 추가합니다.
+            if not all([event_id, start_date, end_date]):
+                return None
+
             body['provider'] = 'LocalCalendarProvider'
+            body['calendarId'] = 'local_calendar'
 
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
-                # INSERT OR REPLACE는 id가 이미 존재하면 UPDATE처럼 동작합니다.
                 cursor.execute("""
                     INSERT OR REPLACE INTO events (id, start_date, end_date, event_json)
                     VALUES (?, ?, ?, ?)
                 """, (event_id, start_date, end_date, json.dumps(body)))
                 conn.commit()
-            return True
-        except sqlite3.Error as e:
+            
+            # DataManager와의 일관성을 위해 저장된 이벤트 본문을 반환
+            return body
+        except (sqlite3.Error, KeyError) as e:
             print(f"로컬 이벤트 추가 중 오류 발생: {e}")
-            return False
+            return None
 
-    def update_event(self, event_id, event_data):
-        """기존 로컬 이벤트를 수정합니다."""
+    def update_event(self, event_data):
+        """기존 로컬 이벤트를 수정하고, 수정된 이벤트 객체를 반환합니다."""
         # INSERT OR REPLACE를 사용하므로 add_event와 로직이 동일합니다.
         return self.add_event(event_data)
 
-    def delete_event(self, event_id):
+    def delete_event(self, event_data):
         """기존 로컬 이벤트를 삭제합니다."""
-        # TODO: 다음 단계에서 구현
-        print(f"Local Provider: 이벤트 삭제 (ID: {event_id})")
-        pass
+        try:
+            # event_data 딕셔너리에서 실제 이벤트 ID를 추출합니다.
+            event_id = event_data.get('body', {}).get('id') or event_data.get('id')
+            if not event_id:
+                print("삭제할 이벤트의 ID를 찾을 수 없습니다.")
+                return False
+
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
+                conn.commit()
+                # 실제로 삭제가 일어났는지 확인
+                if cursor.rowcount > 0:
+                    print(f"Local Provider: 이벤트 삭제 성공 (ID: {event_id})")
+                    return True
+                else:
+                    print(f"Local Provider: 삭제할 이벤트를 찾지 못함 (ID: {event_id})")
+                    return False
+        except sqlite3.Error as e:
+            print(f"로컬 이벤트 삭제 중 오류 발생: {e}")
+            return False
 
     def get_calendars(self):
         """'로컬 캘린더' 자체에 대한 정보를 표준 형식으로 반환합니다."""

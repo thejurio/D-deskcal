@@ -80,6 +80,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 events = events_result.get("items", [])
                 
                 for event in events:
+                    event['provider'] = 'GoogleCalendarProvider' # Provider 정보 추가
                     event['calendarId'] = cal_id
                     default_color = calendar_color_map.get(cal_id, '#555555')
                     event['color'] = custom_colors.get(cal_id, default_color)
@@ -96,64 +97,83 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         """새로운 이벤트를 Google Calendar에 추가합니다."""
         try:
             service = self._get_service_for_current_thread()
-            calendar_id = event_data['calendarId']
-            event_body = event_data['body']
+            calendar_id = event_data.get('calendarId')
+            event_body = event_data.get('body')
+
+            if not calendar_id or not event_body:
+                print("이벤트 추가에 필요한 정보(calendarId, body)가 부족합니다.")
+                return None
+
+            # 로컬 ID는 구글 캘린더에 저장할 필요 없으므로 제거
             if 'id' in event_body:
                 del event_body['id']
             
-            service.events().insert(
+            created_event = service.events().insert(
                 calendarId=calendar_id, 
                 body=event_body
             ).execute()
             
-            print(f"Google Calendar에 '{event_body.get('summary')}' 일정이 추가되었습니다.")
-            return True
+            # 반환된 객체에 calendarId를 추가하여 완전한 객체로 만듭니다.
+            created_event['calendarId'] = calendar_id
+            
+            print(f"Google Calendar에 '{created_event.get('summary')}' 일정이 추가되었습니다.")
+            return created_event
         except HttpError as e:
             print(f"Google Calendar 이벤트 추가 중 오류 발생: {e}")
-            return False
+            return None
 
     def update_event(self, event_data):
         """기존 이벤트를 수정합니다."""
         try:
             service = self._get_service_for_current_thread()
-            calendar_id = event_data['calendarId']
-            event_body = event_data['body']
+            calendar_id = event_data.get('calendarId')
+            event_body = event_data.get('body')
             event_id = event_body.get('id')
 
-            if not event_id:
-                print("이벤트 ID가 없어 업데이트할 수 없습니다.")
-                return False
+            if not all([calendar_id, event_body, event_id]):
+                print("이벤트 수정에 필요한 정보(calendarId, body, eventId)가 부족합니다.")
+                return None
 
-            service.events().update(
+            updated_event = service.events().update(
                 calendarId=calendar_id, 
                 eventId=event_id, 
                 body=event_body
             ).execute()
             
-            print(f"Google Calendar의 '{event_body.get('summary')}' 일정이 수정되었습니다.")
-            return True
+            # 반환된 객체에 calendarId를 추가하여 완전한 객체로 만듭니다.
+            updated_event['calendarId'] = calendar_id
+            
+            print(f"Google Calendar의 '{updated_event.get('summary')}' 일정이 수정되었습니다.")
+            return updated_event
         except HttpError as e:
             print(f"Google Calendar 이벤트 수정 중 오류 발생: {e}")
-            return False
+            return None
 
     def delete_event(self, event_data):
         """기존 이벤트를 삭제합니다."""
         try:
             service = self._get_service_for_current_thread()
-            calendar_id = event_data['calendarId']
-            event_id = event_data['body'].get('id')
+            
+            # 두 가지 데이터 구조 모두 처리
+            event_body = event_data.get('body', event_data)
+            calendar_id = event_data.get('calendarId') or event_body.get('calendarId')
+            event_id = event_body.get('id')
 
-            if not event_id:
-                print("이벤트 ID가 없어 삭제할 수 없습니다.")
+            if not all([calendar_id, event_id]):
+                print("이벤트 삭제에 필요한 정보(calendarId, eventId)가 부족합니다.")
                 return False
 
             service.events().delete(
                 calendarId=calendar_id,
                 eventId=event_id
             ).execute()
-            print(f"Google Calendar에서 일정이 삭제되었습니다.")
+            print(f"Google Calendar에서 ID '{event_id}' 일정이 삭제되었습니다.")
             return True
         except HttpError as e:
+            # 410 Gone 오류는 이미 삭제된 이벤트를 다시 삭제하려 할 때 발생하므로, 성공으로 간주합니다.
+            if e.resp.status == 410:
+                print(f"이미 삭제된 이벤트입니다 (ID: {event_data.get('id', 'N/A')}). 성공으로 처리합니다.")
+                return True
             print(f"Google Calendar 이벤트 삭제 중 오류 발생: {e}")
             return False
 

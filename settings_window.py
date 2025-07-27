@@ -22,15 +22,34 @@ class SettingsWindow(QDialog):
         self.selected_calendars = self.settings.get("selected_calendars", [])
         self.calendar_colors = self.settings.get("calendar_colors", {}).copy()
         self.calendar_emojis = self.settings.get("calendar_emojis", {}).copy()
+        self.oldPos = None # 창 드래그를 위한 변수 초기화
 
         self.setWindowTitle("설정")
         self.setModal(True)
         self.setMinimumWidth(400)
+        self.setMinimumHeight(500) # 최소 높이 추가
+        
+        # --- ▼▼▼ 프레임리스 윈도우 설정 추가 ▼▼▼ ---
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
+        # 다이얼로그 자체에 메인 레이아웃을 설정합니다.
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0) # 여백 제거
+
+        # 배경 위젯 추가 (둥근 모서리 및 배경색 적용을 위해)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        # 스타일시트에서 QDialog의 배경이 아닌, 이 위젯의 배경을 제어하도록 변경할 수 있습니다.
+        # background_widget.setStyleSheet("background-color: #353535; border-radius: 10px;")
+        main_layout.addWidget(background_widget)
+
+        # 실제 콘텐츠 레이아웃
+        content_layout = QVBoxLayout(background_widget)
+        
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        main_layout.addWidget(scroll_area)
+        content_layout.addWidget(scroll_area)
         
         scroll_content = QWidget()
         self.layout = QVBoxLayout(scroll_content)
@@ -118,9 +137,33 @@ class SettingsWindow(QDialog):
         except Exception as e:
             self.layout.addWidget(QLabel(f"캘린더 목록 로드 실패:\n{e}"))
 
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        
         self.save_button = QPushButton("저장")
         self.save_button.clicked.connect(self.save_and_close)
-        main_layout.addWidget(self.save_button)
+        button_layout.addWidget(self.save_button)
+
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject) # reject()는 창을 닫고 변경사항을 버립니다.
+        button_layout.addWidget(self.cancel_button)
+
+        content_layout.addLayout(button_layout)
+
+    # --- ▼▼▼ 창 드래그 이동을 위한 이벤트 핸들러 추가 ▼▼▼ ---
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.oldPos = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event):
+        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
+            delta = event.globalPosition().toPoint() - self.oldPos
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self.oldPos = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event):
+        self.oldPos = None
+    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     # create_color_icon, create_color_combo, handle_color_change, save_and_close 메서드는 변경사항 없습니다.
     def create_color_icon(self, color_hex):

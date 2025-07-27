@@ -1,7 +1,7 @@
 import datetime
 import uuid
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-                             QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox)
+                             QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox, QWidget)
 from PyQt6.QtCore import QDateTime, Qt
 
 class EventEditorWindow(QDialog):
@@ -13,14 +13,29 @@ class EventEditorWindow(QDialog):
         self.settings = settings if settings else {} # settings를 저장합니다.
         self.event_data = data if isinstance(data, dict) else {}
         self.date_info = data if isinstance(data, datetime.date) else None
+        self.oldPos = None # 창 드래그를 위한 변수 초기화
 
         self.setWindowTitle("일정 추가" if self.mode == 'new' else "일정 수정")
         self.setMinimumWidth(400)
+        self.setMinimumHeight(450) # 최소 높이 추가
+
+        # --- ▼▼▼ 프레임리스 윈도우 설정 추가 ▼▼▼ ---
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
         self.initUI()
         self.populate_data()
 
     def initUI(self):
-        layout = QVBoxLayout(self)
+        # 전체 레이아웃과 배경 위젯 설정
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+        
+        layout = QVBoxLayout(background_widget)
+        layout.setContentsMargins(15, 15, 15, 15) # 콘텐츠 여백 추가
 
         # --- ▼▼▼ 캘린더 선택 콤보박스를 추가합니다. ▼▼▼ ---
         self.calendar_combo = QComboBox()
@@ -58,6 +73,7 @@ class EventEditorWindow(QDialog):
 
         # 설명
         self.description_edit = QTextEdit()
+        self.description_edit.setMinimumHeight(100) # 설명란 최소 높이 지정
         layout.addWidget(QLabel("설명:"))
         layout.addWidget(self.description_edit)
 
@@ -72,6 +88,21 @@ class EventEditorWindow(QDialog):
 
         self.save_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
+
+    # --- ▼▼▼ 창 드래그 이동을 위한 이벤트 핸들러 추가 ▼▼▼ ---
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.oldPos = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event):
+        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
+            delta = event.globalPosition().toPoint() - self.oldPos
+            self.move(self.x() + delta.x(), self.y() + delta.y())
+            self.oldPos = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event):
+        self.oldPos = None
+    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def toggle_time_edit(self, state):
         is_all_day = (state == Qt.CheckState.Checked.value)

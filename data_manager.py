@@ -252,11 +252,29 @@ class DataManager(QObject):
         provider_name = event_data.get('provider')
         for provider in self.providers:
             if type(provider).__name__ == provider_name:
-                if provider.add_event(event_data):
-                    start_str = event_data['body']['start'].get('date') or event_data['body']['start'].get('dateTime')[:10]
+                new_event = provider.add_event(event_data)
+                if new_event:
+                    if 'provider' not in new_event:
+                        new_event['provider'] = provider_name
+
+                    cal_id = new_event.get('calendarId')
+                    if cal_id:
+                        all_calendars = self.get_all_calendars()
+                        cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+                        default_color = cal_info.get('backgroundColor') if cal_info else '#555555'
+                        
+                        new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+                        new_event['emoji'] = self.settings.get("calendar_emojis", {}).get(cal_id, '')
+
+                    start_str = new_event['start'].get('date') or new_event['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)
-                    if cache_key in self.event_cache: del self.event_cache[cache_key]
+                    
+                    if cache_key in self.event_cache:
+                        self.event_cache[cache_key].append(new_event)
+                    else:
+                        self.event_cache[cache_key] = [new_event]
+                    
                     self.data_updated.emit(event_date.year, event_date.month)
                     return True
         return False
@@ -265,11 +283,33 @@ class DataManager(QObject):
         provider_name = event_data.get('provider')
         for provider in self.providers:
             if type(provider).__name__ == provider_name:
-                if provider.update_event(event_data):
-                    start_str = event_data['body']['start'].get('date') or event_data['body']['start'].get('dateTime')[:10]
+                updated_event = provider.update_event(event_data)
+                if updated_event:
+                    if 'provider' not in updated_event:
+                        updated_event['provider'] = provider_name
+
+                    cal_id = updated_event.get('calendarId')
+                    if cal_id:
+                        all_calendars = self.get_all_calendars()
+                        cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+                        default_color = cal_info.get('backgroundColor') if cal_info else '#555555'
+
+                        updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+                        updated_event['emoji'] = self.settings.get("calendar_emojis", {}).get(cal_id, '')
+
+                    start_str = updated_event['start'].get('date') or updated_event['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)
-                    if cache_key in self.event_cache: del self.event_cache[cache_key]
+                    
+                    if cache_key in self.event_cache:
+                        event_id = updated_event.get('id')
+                        self.event_cache[cache_key] = [
+                            event for event in self.event_cache[cache_key] if event.get('id') != event_id
+                        ]
+                        self.event_cache[cache_key].append(updated_event)
+                    else:
+                        self.event_cache[cache_key] = [updated_event]
+
                     self.data_updated.emit(event_date.year, event_date.month)
                     return True
         return False
@@ -279,10 +319,17 @@ class DataManager(QObject):
         for provider in self.providers:
             if type(provider).__name__ == provider_name:
                 if provider.delete_event(event_data):
-                    start_str = event_data['body']['start'].get('date') or event_data['body']['start'].get('dateTime')[:10]
+                    event_body = event_data.get('body', event_data)
+                    event_id_to_delete = event_body.get('id')
+                    start_str = event_body['start'].get('date') or event_body['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)
-                    if cache_key in self.event_cache: del self.event_cache[cache_key]
+
+                    if cache_key in self.event_cache:
+                        self.event_cache[cache_key] = [
+                            event for event in self.event_cache[cache_key] if event.get('id') != event_id_to_delete
+                        ]
+
                     self.data_updated.emit(event_date.year, event_date.month)
                     return True
         return False
