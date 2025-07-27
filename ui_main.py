@@ -86,8 +86,14 @@ class MainWidget(QWidget):
         QTimer.singleShot(0, self.initial_load)
 
     def initial_load(self):
-        self.data_manager.pre_cache_months()
-        self.change_view(0)
+        """현재 달을 먼저 로딩하고, 백그라운드 캐싱을 시작합니다."""
+        # 1. 현재 달 데이터만 즉시 로딩하여 UI를 보여줍니다.
+        self.data_manager.load_initial_month()
+        # 2. 백그라운드에서 나머지 달의 데이터 캐싱을 시작시킵니다.
+        self.data_manager.start_background_precaching()
+        
+        # change_view는 load_initial_month에서 보내는 신호로 처리되므로 여기서 호출할 필요가 없습니다.
+        # self.change_view(0)
 
     def init_sync_timer(self):
         self.sync_timer = QTimer(self)
@@ -171,6 +177,7 @@ class MainWidget(QWidget):
     def closeEvent(self, event):
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
         save_settings(self.settings)
+        self.data_manager.save_cache_to_file()
         event.accept()
 
     def mousePressEvent(self, event):
