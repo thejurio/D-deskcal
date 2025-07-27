@@ -49,11 +49,18 @@ class MonthViewWidget(QWidget):
         self.resize_timer.setInterval(50)
         self.resize_timer.timeout.connect(self.redraw_events_with_current_data)
         
-        # DataManager의 신호를 받으면 refresh 메서드를 호출하여 화면을 다시 그리도록 연결
-        self.data_manager.data_updated.connect(self.refresh)
+        # DataManager의 신호를 받으면 on_data_updated 슬롯을 호출
+        self.data_manager.data_updated.connect(self.on_data_updated)
         
         self.initUI()
         self.refresh() # 위젯 생성 시 기본 틀을 한번 그려줌
+
+    def on_data_updated(self, year, month):
+        """데이터가 업데이트되었다는 신호를 받았을 때 호출되는 슬롯."""
+        # 현재 보고 있는 월의 데이터가 업데이트되었을 때만 화면을 다시 그림
+        if year == self.current_date.year and month == self.current_date.month:
+            print(f"{year}년 {month}월 데이터 변경 감지, 화면을 새로고침합니다.")
+            self.redraw_events_with_current_data()
 
     def initUI(self):
         main_layout = QVBoxLayout(self)

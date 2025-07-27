@@ -20,7 +20,6 @@ class MainWidget(QWidget):
         # DataManager 생성 시 'service' 객체를 전달하지 않습니다.
         self.data_manager = DataManager(settings)
         self.initUI()
-        self.init_sync_timer()
 
     def initUI(self):
         self.setWindowTitle('Glassy Calendar')
@@ -50,7 +49,7 @@ class MainWidget(QWidget):
         
         main_layout.addWidget(self.background_widget)
 
-        self.data_manager.data_updated.connect(self.refresh_current_view)
+        self.data_manager.data_updated.connect(self.on_data_updated)
         
         view_mode_layout = QHBoxLayout()
         month_button, list_button = QPushButton("월력"), QPushButton("목록")
@@ -89,20 +88,16 @@ class MainWidget(QWidget):
         """현재 달을 기준으로 초기 캐싱 계획을 수립합니다."""
         self.data_manager.load_initial_month()
 
-    def init_sync_timer(self):
-        self.sync_timer = QTimer(self)
-        self.sync_timer.setInterval(300000)
-        self.sync_timer.timeout.connect(self.background_sync)
-        self.sync_timer.start()
-        print("자동 동기화 타이머가 시작되었습니다. (주기: 5분)")
-
-    def background_sync(self):
-        print(f"백그라운드에서 캐시된 모든 월의 동기화를 시작합니다...")
-        cached_months = list(self.data_manager.event_cache.keys())
-        for year, month in cached_months:
-            self.data_manager.sync_month(year, month, emit_signal=False)
-        self.refresh_current_view()
-        print("모든 캐시 동기화 완료.")
+    def on_data_updated(self, year, month):
+        """
+        데이터 변경 신호를 받아 현재 활성화된 뷰에 새로고침이 필요한지 확인합니다.
+        MonthView는 자체적으로 신호를 처리하므로, 여기서는 다른 뷰(ListView)를 위해 처리합니다.
+        """
+        # MonthView가 보고 있는 월의 데이터가 변경되었고, 현재 ListView가 활성화 상태일 때
+        if (year == self.month_view.current_date.year and 
+            month == self.month_view.current_date.month and
+            self.stacked_widget.currentWidget() == self.list_view):
+            self.list_view.refresh()
 
     def change_view(self, index, checked_button=None, other_buttons=None):
         self.stacked_widget.setCurrentIndex(index)
@@ -120,11 +115,12 @@ class MainWidget(QWidget):
 
     def open_settings_window(self):
         """설정 창을 열고, 변경사항이 저장되면 UI를 새로고침하여 필터를 다시 적용합니다."""
-        settings_dialog = SettingsWindow(self.data_manager, self.settings, self)
-        if settings_dialog.exec():
-            print("설정이 변경되었습니다. 필터를 다시 적용합니다.")
-            # 전체 데이터를 다시 불러오는 대신, UI만 새로고침하도록 신호를 보냅니다.
-            self.data_manager.data_updated.emit()
+        with self.data_manager.user_action_priority():
+            settings_dialog = SettingsWindow(self.data_manager, self.settings, self)
+            if settings_dialog.exec():
+                print("설정이 변경되었습니다. UI 및 동기화 설정을 업데이트합니다.")
+                self.data_manager.update_sync_timer() # 동기화 주기 즉시 변경
+                self.data_manager.data_updated.emit() # 필터링된 캘린더 다시 적용
 
 
     # ui_main.py 파일입니다.
@@ -133,26 +129,27 @@ class MainWidget(QWidget):
         """
         새 일정을 추가하거나 기존 일정을 수정하는 창을 엽니다.
         """
-        all_calendars = self.data_manager.get_all_calendars()
-        if not all_calendars:
-            print("편집할 캘린더가 없습니다. 설정을 확인해주세요.")
-            return
+        with self.data_manager.user_action_priority():
+            all_calendars = self.data_manager.get_all_calendars()
+            if not all_calendars:
+                print("편집할 캘린더가 없습니다. 설정을 확인해주세요.")
+                return
 
-        if isinstance(data, datetime.date):
-            editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self)
-            if editor.exec():
-                new_event_data = editor.get_event_data()
-                self.data_manager.add_event(new_event_data)
-                # --- ▼▼▼ 마지막 선택 캘린더 ID를 저장합니다. ▼▼▼ ---
-                self.settings['last_selected_calendar_id'] = new_event_data.get('calendarId')
+            if isinstance(data, datetime.date):
+                editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self)
+                if editor.exec():
+                    new_event_data = editor.get_event_data()
+                    self.data_manager.add_event(new_event_data)
+                    # --- ▼▼▼ 마지막 선택 캘린더 ID를 저장합니다. ▼▼▼ ---
+                    self.settings['last_selected_calendar_id'] = new_event_data.get('calendarId')
 
-        elif isinstance(data, dict):
-            editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self)
-            if editor.exec():
-                updated_event_data = editor.get_event_data()
-                self.data_manager.update_event(updated_event_data)
-                # --- ▼▼▼ 마지막 선택 캘린더 ID를 저장합니다. ▼▼▼ ---
-                self.settings['last_selected_calendar_id'] = updated_event_data.get('calendarId')
+            elif isinstance(data, dict):
+                editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self)
+                if editor.exec():
+                    updated_event_data = editor.get_event_data()
+                    self.data_manager.update_event(updated_event_data)
+                    # --- ▼▼▼ 마지막 선택 캘린더 ID를 저장합니다. ▼▼▼ ---
+                    self.settings['last_selected_calendar_id'] = updated_event_data.get('calendarId')
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
@@ -160,7 +157,8 @@ class MainWidget(QWidget):
         settingsAction.triggered.connect(self.open_settings_window)
         menu.addAction(settingsAction)
         refreshAction = QAction("새로고침 (Refresh)", self)
-        refreshAction.triggered.connect(self.background_sync)
+        # 새로고침 요청을 DataManager를 통해 백그라운드에서 처리하도록 변경
+        refreshAction.triggered.connect(self.data_manager.request_full_sync)
         menu.addAction(refreshAction)
         menu.addSeparator()
         exitAction = QAction("종료 (Exit)", self)

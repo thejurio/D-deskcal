@@ -48,6 +48,33 @@ class SettingsWindow(QDialog):
         self.color_combos = {}
         self.emoji_combos = {}
 
+        # --- 동기화 설정 UI 추가 ---
+        self.layout.addWidget(QLabel("-" * 50))
+        sync_layout = QHBoxLayout()
+        sync_layout.addWidget(QLabel("자동 동기화 주기:"))
+        self.sync_interval_combo = QComboBox()
+        # (값, 표시 텍스트) 쌍으로 저장
+        self.sync_options = {
+            0: "사용 안 함",
+            1: "1분",
+            5: "5분",
+            15: "15분",
+            30: "30분",
+            60: "1시간"
+        }
+        for minutes, text in self.sync_options.items():
+            self.sync_interval_combo.addItem(text, minutes)
+        
+        # 현재 설정값 불러오기
+        current_interval = self.settings.get("sync_interval_minutes", 5) # 기본값 5분
+        current_text = self.sync_options.get(current_interval, "5분")
+        self.sync_interval_combo.setCurrentText(current_text)
+
+        sync_layout.addWidget(self.sync_interval_combo)
+        self.layout.addLayout(sync_layout)
+        self.layout.addWidget(QLabel("-" * 50))
+        # --- 여기까지 동기화 설정 UI 추가 ---
+
         try:
             # --- ▼▼▼ 캘린더 목록을 가져오는 방식이 변경되었습니다. ▼▼▼ ---
             calendar_list = self.data_manager.get_all_calendars()
@@ -130,4 +157,9 @@ class SettingsWindow(QDialog):
             selected_emoji = combo.currentText()
             self.calendar_emojis[cal_id] = selected_emoji if selected_emoji != "없음" else ""
         self.settings["calendar_emojis"] = self.calendar_emojis
+        
+        # 동기화 주기 설정 저장
+        selected_interval_minutes = self.sync_interval_combo.currentData()
+        self.settings["sync_interval_minutes"] = selected_interval_minutes
+
         self.accept()

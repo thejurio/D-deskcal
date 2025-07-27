@@ -1,5 +1,6 @@
 import datetime
 import os.path
+import threading
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -14,7 +15,17 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 class GoogleCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings):
         self.settings = settings
-        self.service = self._authenticate()
+        self._services_lock = threading.Lock()
+        self._services_by_thread = {}
+        self._calendar_list_cache = None
+
+    def _get_service_for_current_thread(self):
+        """현재 스레드에 맞는 독립적인 service 객체를 가져오거나 생성합니다."""
+        thread_id = threading.get_ident()
+        with self._services_lock:
+            if thread_id not in self._services_by_thread:
+                self._services_by_thread[thread_id] = self._authenticate()
+            return self._services_by_thread[thread_id]
 
     def _authenticate(self):
         """Google Calendar API와 통신하기 위한 서비스 객체를 생성하고 반환합니다."""
@@ -35,20 +46,26 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         return build("calendar", "v3", credentials=creds)
 
     def get_calendar_list(self):
-        """사용자의 캘린더 목록 전체를 반환합니다. (설정 창에서 사용)"""
-        try:
-            return self.service.calendarList().list().execute().get("items", [])
-        except HttpError as e:
-            print(f"구글 캘린더 목록을 가져오는 중 오류 발생: {e}")
-            return []
+        """사용자의 캘린더 목록 전체를 반환합니다. (메모리 캐시 사용)"""
+        # 캘린더 목록은 자주 바뀌지 않으므로, 한 번 가져온 후 캐시하여 사용
+        if self._calendar_list_cache is None:
+            try:
+                service = self._get_service_for_current_thread()
+                self._calendar_list_cache = service.calendarList().list().execute().get("items", [])
+            except HttpError as e:
+                print(f"구글 캘린더 목록을 가져오는 중 오류 발생: {e}")
+                return []
+        return self._calendar_list_cache
 
     def get_events(self, start_date, end_date):
-        calendar_ids = [cal['id'] for cal in self.get_calendar_list()]
+        service = self._get_service_for_current_thread()
+        if not service: return []
+
+        calendar_list = self.get_calendar_list()
+        calendar_ids = [cal['id'] for cal in calendar_list]
         custom_colors = self.settings.get("calendar_colors", {})
         custom_emojis = self.settings.get("calendar_emojis", {})
-
-        # 캘린더별 기본 색상 정보 미리 가져오기
-        calendar_color_map = {cal['id']: cal['backgroundColor'] for cal in self.get_calendar_list()}
+        calendar_color_map = {cal['id']: cal['backgroundColor'] for cal in calendar_list}
 
         all_events = []
         time_min = datetime.datetime.combine(start_date, datetime.time.min).isoformat() + 'Z'
@@ -56,7 +73,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
 
         for cal_id in calendar_ids:
             try:
-                events_result = self.service.events().list(
+                events_result = service.events().list(
                     calendarId=cal_id, timeMin=time_min, timeMax=time_max,
                     singleEvents=True, orderBy="startTime"
                 ).execute()
@@ -75,17 +92,16 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 
         return all_events
 
-# providers/google_provider.py 파일입니다.
-
     def add_event(self, event_data):
         """새로운 이벤트를 Google Calendar에 추가합니다."""
         try:
+            service = self._get_service_for_current_thread()
             calendar_id = event_data['calendarId']
             event_body = event_data['body']
             if 'id' in event_body:
                 del event_body['id']
             
-            self.service.events().insert(
+            service.events().insert(
                 calendarId=calendar_id, 
                 body=event_body
             ).execute()
@@ -99,6 +115,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
     def update_event(self, event_data):
         """기존 이벤트를 수정합니다."""
         try:
+            service = self._get_service_for_current_thread()
             calendar_id = event_data['calendarId']
             event_body = event_data['body']
             event_id = event_body.get('id')
@@ -107,7 +124,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 print("이벤트 ID가 없어 업데이트할 수 없습니다.")
                 return False
 
-            self.service.events().update(
+            service.events().update(
                 calendarId=calendar_id, 
                 eventId=event_id, 
                 body=event_body
@@ -119,11 +136,26 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             print(f"Google Calendar 이벤트 수정 중 오류 발생: {e}")
             return False
 
-    def delete_event(self, event_id):
+    def delete_event(self, event_data):
         """기존 이벤트를 삭제합니다."""
-        # TODO: 다음 단계에서 구현
-        print(f"Google Provider: 이벤트 삭제 (ID: {event_id})")
-        pass
+        try:
+            service = self._get_service_for_current_thread()
+            calendar_id = event_data['calendarId']
+            event_id = event_data['body'].get('id')
+
+            if not event_id:
+                print("이벤트 ID가 없어 삭제할 수 없습니다.")
+                return False
+
+            service.events().delete(
+                calendarId=calendar_id,
+                eventId=event_id
+            ).execute()
+            print(f"Google Calendar에서 일정이 삭제되었습니다.")
+            return True
+        except HttpError as e:
+            print(f"Google Calendar 이벤트 삭제 중 오류 발생: {e}")
+            return False
 
     def get_calendars(self):
         """Google 캘린더 목록을 가져와 '표준 형식'으로 변환하여 반환합니다."""

@@ -1,7 +1,7 @@
 {
     "geometry": [
-        82,
-        34,
+        235,
+        40,
         711,
         584
     ],
@@ -26,5 +26,6 @@
         "thejurio@gmail.com": "",
         "ko.south_korea#holiday@group.v.calendar.google.com": "",
         "local_calendar": ""
-    }
+    },
+    "sync_interval_minutes": 5
 }
