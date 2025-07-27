@@ -3,27 +3,27 @@ import uuid
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox, QWidget)
 from PyQt6.QtCore import QDateTime, Qt
+
+from custom_dialogs import CustomMessageBox, BaseDialog
 from config import GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME
 
-class EventEditorWindow(QDialog):
+class EventEditorWindow(BaseDialog):
+    # 삭제 액션을 위한 커스텀 반환 코드
+    DeleteRole = 2
+
     # __init__ 생성자에 'calendars' 파라미터를 추가합니다.
     def __init__(self, mode='new', data=None, calendars=None, settings=None, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent, settings=settings)
         self.mode = mode
         self.calendars = calendars if calendars else []
-        self.settings = settings if settings else {} # settings를 저장합니다.
+        # self.settings는 BaseDialog에서 이미 처리됨
         self.event_data = data if isinstance(data, dict) else {}
         # data가 datetime.date 또는 datetime.datetime 객체일 수 있으므로 date_info로 저장
         self.date_info = data if isinstance(data, (datetime.date, datetime.datetime)) else None
-        self.oldPos = None # 창 드래그를 위한 변수 초기화
-
+        
         self.setWindowTitle("일정 추가" if self.mode == 'new' else "일정 수정")
         self.setMinimumWidth(400)
         self.setMinimumHeight(450) # 최소 높이 추가
-
-        # --- ▼▼▼ 프레임리스 윈도우 설정 추가 ▼▼▼ ---
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
         self.initUI()
         self.populate_data()
@@ -81,30 +81,33 @@ class EventEditorWindow(QDialog):
 
         # 버튼
         button_layout = QHBoxLayout()
+        self.delete_button = QPushButton("삭제")
         self.save_button = QPushButton("저장")
         self.cancel_button = QPushButton("취소")
+        
+        button_layout.addWidget(self.delete_button)
         button_layout.addStretch(1)
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
 
+        self.delete_button.setVisible(self.mode == 'edit') # 수정 모드일 때만 보이도록 설정
+
         self.save_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
+        self.delete_button.clicked.connect(self.request_delete)
 
-    # --- ▼▼▼ 창 드래그 이동을 위한 이벤트 핸들러 추가 ▼▼▼ ---
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.oldPos = event.globalPosition().toPoint()
+    def request_delete(self):
+        """삭제 버튼 클릭 시 확인 메시지를 표시하고, 확인 시 삭제 코드를 반환하며 창을 닫습니다."""
+        msg_box = CustomMessageBox(
+            self,
+            title='삭제 확인',
+            text=f"'{self.summary_edit.text()}' 일정을 정말 삭제하시겠습니까?",
+            settings=self.settings
+        )
+        if msg_box.exec():
+            self.done(self.DeleteRole) # '삭제' 역할로 다이얼로그 종료
 
-    def mouseMoveEvent(self, event):
-        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
-            delta = event.globalPosition().toPoint() - self.oldPos
-            self.move(self.x() + delta.x(), self.y() + delta.y())
-            self.oldPos = event.globalPosition().toPoint()
-
-    def mouseReleaseEvent(self, event):
-        self.oldPos = None
-    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def toggle_time_edit(self, state):
         is_all_day = (state == Qt.CheckState.Checked.value)

@@ -1,8 +1,10 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QHBoxLayout,
-                             QColorDialog, QComboBox)
+                             QColorDialog, QComboBox, QSlider)
 from PyQt6.QtGui import QColor, QPixmap, QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+
+from custom_dialogs import BaseDialog # BaseDialog import
 from config import DEFAULT_SYNC_INTERVAL
 
 # --- 미리 정의된 상수들은 그대로 둡니다. ---
@@ -12,28 +14,25 @@ PASTEL_COLORS = {
 EMOJI_LIST = ["없음", "💻", "😊", "🎂", "💪", "✈️", "🗓️", "❤️", "🎓", "🎉", "🔥", "⚽"]
 CUSTOM_COLOR_TEXT = "사용자 지정..."
 
-class SettingsWindow(QDialog):
+class SettingsWindow(BaseDialog):
+    transparency_changed = pyqtSignal(float) # 실시간 미리보기를 위한 신호 추가
+
     # --- ▼▼▼ __init__ 메서드의 파라미터가 변경되었습니다. ▼▼▼ ---
     def __init__(self, data_manager, settings, parent=None):
-        super().__init__(parent)
+        super().__init__(parent=parent, settings=settings)
         self.data_manager = data_manager # service 대신 data_manager를 저장합니다.
-        self.settings = settings
+        # self.settings는 BaseDialog에서 처리
         
         self.use_local_calendar = self.settings.get("use_local_calendar", True)
         self.selected_calendars = self.settings.get("selected_calendars", [])
         self.calendar_colors = self.settings.get("calendar_colors", {}).copy()
         self.calendar_emojis = self.settings.get("calendar_emojis", {}).copy()
-        self.oldPos = None # 창 드래그를 위한 변수 초기화
 
         self.setWindowTitle("설정")
         self.setModal(True)
         self.setMinimumWidth(400)
         self.setMinimumHeight(500) # 최소 높이 추가
         
-        # --- ▼▼▼ 프레임리스 윈도우 설정 추가 ▼▼▼ ---
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
         # 다이얼로그 자체에 메인 레이아웃을 설정합니다.
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0) # 여백 제거
@@ -41,8 +40,6 @@ class SettingsWindow(QDialog):
         # 배경 위젯 추가 (둥근 모서리 및 배경색 적용을 위해)
         background_widget = QWidget()
         background_widget.setObjectName("dialog_background")
-        # 스타일시트에서 QDialog의 배경이 아닌, 이 위젯의 배경을 제어하도록 변경할 수 있습니다.
-        # background_widget.setStyleSheet("background-color: #353535; border-radius: 10px;")
         main_layout.addWidget(background_widget)
 
         # 실제 콘텐츠 레이아웃
@@ -73,30 +70,62 @@ class SettingsWindow(QDialog):
         sync_layout = QHBoxLayout()
         sync_layout.addWidget(QLabel("자동 동기화 주기:"))
         self.sync_interval_combo = QComboBox()
-        # (값, 표시 텍스트) 쌍으로 저장
         self.sync_options = {
-            0: "사용 안 함",
-            1: "1분",
-            5: "5분",
-            15: "15분",
-            30: "30분",
-            60: "1시간"
+            0: "사용 안 함", 1: "1분", 5: "5분", 15: "15분", 30: "30분", 60: "1시간"
         }
         for minutes, text in self.sync_options.items():
             self.sync_interval_combo.addItem(text, minutes)
         
-        # 현재 설정값 불러오기
-        current_interval = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL) # 기본값 5분
+        current_interval = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
         current_text = self.sync_options.get(current_interval, "5분")
         self.sync_interval_combo.setCurrentText(current_text)
 
         sync_layout.addWidget(self.sync_interval_combo)
         self.layout.addLayout(sync_layout)
+
+        # --- 시작 요일 설정 UI 추가 ---
         self.layout.addWidget(QLabel("-" * 50))
-        # --- 여기까지 동기화 설정 UI 추가 ---
+        start_day_layout = QHBoxLayout()
+        start_day_layout.addWidget(QLabel("한 주의 시작 요일:"))
+        self.start_day_combo = QComboBox()
+        self.start_day_options = {
+            6: "일요일", # calendar.SUNDAY
+            0: "월요일"  # calendar.MONDAY
+        }
+        for value, text in self.start_day_options.items():
+            self.start_day_combo.addItem(text, value)
+        
+        current_start_day = self.settings.get("start_day_of_week", 6) # 기본값 일요일
+        self.start_day_combo.setCurrentText(self.start_day_options.get(current_start_day, "일요일"))
+
+        start_day_layout.addWidget(self.start_day_combo)
+        self.layout.addLayout(start_day_layout)
+        # --- 여기까지 시작 요일 설정 UI 추가 ---
+        
+        # --- 투명도 설정 UI 추가 ---
+        self.layout.addWidget(QLabel("-" * 50))
+        opacity_layout = QHBoxLayout()
+        opacity_layout.addWidget(QLabel("전체 투명도:"))
+        
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(20, 100)
+        
+        current_opacity = int(self.settings.get("window_opacity", 0.95) * 100)
+        self.opacity_slider.setValue(current_opacity)
+        
+        self.opacity_label = QLabel(f"{current_opacity}%")
+        self.opacity_label.setMinimumWidth(40)
+        
+        self.opacity_slider.valueChanged.connect(self.on_opacity_changed)
+        
+        opacity_layout.addWidget(self.opacity_slider)
+        opacity_layout.addWidget(self.opacity_label)
+        self.layout.addLayout(opacity_layout)
+        # --- 여기까지 투명도 설정 UI 추가 ---
+
+        self.layout.addWidget(QLabel("-" * 50))
 
         try:
-            # --- ▼▼▼ 캘린더 목록을 가져오는 방식이 변경되었습니다. ▼▼▼ ---
             calendar_list = self.data_manager.get_all_calendars()
             
             if not calendar_list and self.data_manager.providers:
@@ -146,25 +175,22 @@ class SettingsWindow(QDialog):
         button_layout.addWidget(self.save_button)
 
         self.cancel_button = QPushButton("취소")
-        self.cancel_button.clicked.connect(self.reject) # reject()는 창을 닫고 변경사항을 버립니다.
+        self.cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_button)
 
         content_layout.addLayout(button_layout)
 
-    # --- ▼▼▼ 창 드래그 이동을 위한 이벤트 핸들러 추가 ▼▼▼ ---
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.oldPos = event.globalPosition().toPoint()
-
-    def mouseMoveEvent(self, event):
-        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
-            delta = event.globalPosition().toPoint() - self.oldPos
-            self.move(self.x() + delta.x(), self.y() + delta.y())
-            self.oldPos = event.globalPosition().toPoint()
-
-    def mouseReleaseEvent(self, event):
-        self.oldPos = None
-    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+    def on_opacity_changed(self, value):
+        """슬라이더 값이 변경될 때 호출됩니다."""
+        main_opacity = value / 100.0
+        self.opacity_label.setText(f"{value}%")
+        
+        # 1. 메인 창의 실시간 미리보기를 위해 신호를 보냅니다.
+        self.transparency_changed.emit(main_opacity)
+        
+        # 2. 이 설정 창 자체도 "85% 더 진하게" 규칙을 따르도록 실시간으로 투명도를 조절합니다.
+        dialog_opacity = main_opacity + (1 - main_opacity) * 0.85
+        self.setWindowOpacity(dialog_opacity)
 
     # create_color_icon, create_color_combo, handle_color_change, save_and_close 메서드는 변경사항 없습니다.
     def create_color_icon(self, color_hex):
@@ -205,5 +231,8 @@ class SettingsWindow(QDialog):
         # 동기화 주기 설정 저장
         selected_interval_minutes = self.sync_interval_combo.currentData()
         self.settings["sync_interval_minutes"] = selected_interval_minutes
+
+        # 투명도 설정 저장
+        self.settings["window_opacity"] = self.opacity_slider.value() / 100.0
 
         self.accept()

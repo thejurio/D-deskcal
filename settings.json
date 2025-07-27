@@ -1,9 +1,9 @@
 {
     "geometry": [
-        84,
-        28,
-        979,
-        785
+        462,
+        41,
+        735,
+        686
     ],
     "use_local_calendar": false,
     "selected_calendars": [
@@ -28,5 +28,7 @@
         "local_calendar": ""
     },
     "sync_interval_minutes": 5,
-    "last_selected_calendar_id": "thejurio@gmail.com"
+    "last_selected_calendar_id": "thejurio@gmail.com",
+    "window_opacity": 0.75,
+    "start_day_of_week": 6
 }

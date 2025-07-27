@@ -2,9 +2,9 @@
 import datetime
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QPushButton, QMenu
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QCursor
 
-from .widgets import EventLabelWidget
+from .widgets import EventLabelWidget, TimeScaleWidget
 from custom_dialogs import CustomMessageBox
 
 class WeekViewWidget(QWidget):
@@ -17,6 +17,8 @@ class WeekViewWidget(QWidget):
         self.data_manager = main_widget.data_manager
         self.current_date = datetime.date.today() 
         self.day_labels = []
+        self.hour_height = 40
+        self.padding = 10 # TimeScaleWidget과 동일한 여백 값
         self.initUI()
 
         self.timeline_timer = QTimer(self)
@@ -30,27 +32,26 @@ class WeekViewWidget(QWidget):
             if not self.scroll_area.geometry().contains(pos): return
             
             pos_in_viewport = self.scroll_area.widget().mapFrom(self, pos)
+            pos_in_event_container = self.event_container.mapFromParent(pos_in_viewport)
 
-            time_label_width = self.grid_layout.itemAtPosition(0, 0).widget().width()
-            hour_height = 40
+            time_label_width = 50
             
             if pos_in_viewport.x() < time_label_width: return
 
-            content_widget = self.scroll_area.widget()
-            days_width = content_widget.width() - time_label_width
+            days_width = self.event_container.width()
             if days_width <= 0: return
             
             day_column_width = days_width / 7
-            day_index = int((pos_in_viewport.x() - time_label_width) // day_column_width)
+            day_index = int(pos_in_event_container.x() // day_column_width)
             if not (0 <= day_index < 7): return
 
-            hour = int(pos_in_viewport.y() // hour_height)
-            minute = int((pos_in_viewport.y() % hour_height) / hour_height * 60)
+            hour = int(pos_in_event_container.y() // self.hour_height)
+            minute = int((pos_in_event_container.y() % self.hour_height) / self.hour_height * 60)
             minute = round(minute / 15) * 15
             if minute == 60:
                 minute = 0
                 hour += 1
-            if not (0 <= hour < 24): return
+            if not (0 <= hour < 25): return
 
             start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
             target_date = start_of_week + datetime.timedelta(days=day_index)
@@ -100,53 +101,36 @@ class WeekViewWidget(QWidget):
         self.all_day_layout.setSpacing(1)
         main_layout.addWidget(self.all_day_widget)
 
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setObjectName("week_scroll_area")
-        main_layout.addWidget(scroll_area)
-        container = QWidget()
-        scroll_area.setWidget(container)
-        self.grid_layout = QGridLayout(container)
-        self.grid_layout.setSpacing(0)
-
-        # --- Time Labels and Grid Lines (Revised) ---
-        for hour in range(24):
-            time_label = QLabel(f"{hour:02d}:00")
-            time_label.setFixedSize(50, 40)
-            # Align vertically centered, then use padding to push the text up.
-            time_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter)
-            time_label.setStyleSheet("color: #aaa; background-color: transparent; padding-bottom: 38px;")
-            self.grid_layout.addWidget(time_label, hour, 0)
-
-            for col in range(7):
-                line_widget = QWidget()
-                line_widget.setObjectName("time_slot")
-                # Use a more visible solid line for the top border
-                line_widget.setStyleSheet("border-top: 1px solid #444; border-right: 1px solid #444;")
-                self.grid_layout.addWidget(line_widget, hour, col + 1)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setObjectName("week_scroll_area")
+        main_layout.addWidget(self.scroll_area)
         
-        # Add a final line for the end of the last hour
-        final_line_container = QWidget()
-        final_line_container.setFixedHeight(1)
-        final_line_layout = QHBoxLayout(final_line_container)
-        final_line_layout.setContentsMargins(0,0,0,0)
-        final_line = QWidget()
-        final_line.setStyleSheet("border-top: 1px solid #444;")
-        final_line_layout.addWidget(final_line)
-        self.grid_layout.addWidget(final_line_container, 24, 1, 1, 7)
+        container = QWidget()
+        self.scroll_area.setWidget(container)
+        
+        self.time_scale = TimeScaleWidget(container)
+        self.time_scale.padding = self.padding
+        container.setMinimumHeight(self.time_scale.minimumHeight())
 
-
-        for i in range(1, 8): self.grid_layout.setColumnStretch(i, 1)
+        self.event_container = QWidget(container)
+        self.event_container.setStyleSheet("background-color: transparent;")
         
         self.timeline = QWidget(container)
         self.timeline.setObjectName("timeline")
         self.timeline.setStyleSheet("background-color: #FF3333;")
-        self.update_timeline()
-
+        
         self.event_widgets = []
         self.all_day_event_widgets = []
-        self.scroll_area = scroll_area
         self.last_mouse_pos = None
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        container_widget = self.scroll_area.widget()
+        self.time_scale.setGeometry(0, 0, container_widget.width(), container_widget.minimumHeight())
+        self.event_container.setGeometry(50, self.padding, container_widget.width() - 50, self.hour_height * 24)
+        self.update_timeline()
+        self.redraw_events_with_current_data()
 
     def go_to_previous_week(self):
         self.current_date -= datetime.timedelta(days=7)
@@ -162,18 +146,15 @@ class WeekViewWidget(QWidget):
         end_of_week = start_of_week + datetime.timedelta(days=6)
         if start_of_week <= now.date() <= end_of_week:
             self.timeline.show()
-            hour_height = 40
-            y = now.hour * hour_height + int(now.minute / 60 * hour_height)
-            x = self.grid_layout.itemAtPosition(0, 0).widget().width()
-            width = self.grid_layout.parentWidget().width() - x
-            self.timeline.setGeometry(x, y, width, 2)
+            y = now.hour * self.hour_height + int(now.minute / 60 * self.hour_height)
+            self.timeline.setGeometry(50, y + self.padding, self.event_container.width(), 2)
         else:
             self.timeline.hide()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.last_mouse_pos = event.pos()
-            self.setCursor(Qt.CursorShape.DragMoveCursor)
+            self.setCursor(QCursor(Qt.CursorShape.DragMoveCursor))
 
     def mouseMoveEvent(self, event):
         if event.buttons() == Qt.MouseButton.LeftButton and self.last_mouse_pos:
@@ -190,21 +171,22 @@ class WeekViewWidget(QWidget):
     def contextMenuEvent(self, event):
         pos = event.pos()
         target_event = None
-
-        pos_in_scroll_widget = self.scroll_area.widget().mapFrom(self, pos)
+        pos_in_viewport = self.scroll_area.widget().mapFrom(self, pos)
+        pos_in_event_container = self.event_container.mapFromParent(pos_in_viewport)
         for widget in self.event_widgets:
-            if widget.geometry().contains(pos_in_scroll_widget) and widget.isVisible():
+            if widget.geometry().contains(pos_in_event_container) and widget.isVisible():
                 target_event = widget.event_data
                 break
-        
         if not target_event:
             pos_in_all_day_widget = self.all_day_widget.mapFrom(self, pos)
             for widget in self.all_day_event_widgets:
                 if widget.geometry().contains(pos_in_all_day_widget) and widget.isVisible():
                     target_event = widget.event_data
                     break
-        
         menu = QMenu(self)
+        main_opacity = self.main_widget.settings.get("window_opacity", 0.95)
+        menu_opacity = main_opacity + (1 - main_opacity) * 0.85
+        menu.setWindowOpacity(menu_opacity)
         if target_event:
             edit_action = QAction("수정", self)
             edit_action.triggered.connect(lambda: self.edit_event_requested.emit(target_event))
@@ -212,13 +194,12 @@ class WeekViewWidget(QWidget):
             delete_action = QAction("삭제", self)
             delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
             menu.addAction(delete_action)
-        
         self.main_widget.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
 
     def confirm_delete_event(self, event_data):
         summary = event_data.get('summary', '(제목 없음)')
-        msg_box = CustomMessageBox(self, title='삭제 확인', text=f"'{summary}' 일정을 정말 삭제하시겠습니까?")
+        msg_box = CustomMessageBox(self, title='삭제 확인', text=f"'{summary}' 일정을 정말 삭제하시겠습니까?", settings=self.main_widget.settings)
         if msg_box.exec():
             self.data_manager.delete_event(event_data)
 
@@ -229,75 +210,61 @@ class WeekViewWidget(QWidget):
         self.all_day_event_widgets.clear()
 
     def draw_events(self, events, start_of_week):
-        parent_widget = self.grid_layout.parentWidget()
-        end_of_week = start_of_week + datetime.timedelta(days=6)
+        parent_widget = self.event_container
         
         events_by_day = {}
         for event in events:
             start_dt = datetime.datetime.fromisoformat(event['start']['dateTime']).replace(tzinfo=None)
             end_dt = datetime.datetime.fromisoformat(event['end']['dateTime']).replace(tzinfo=None)
-
-            loop_end_date = end_dt.date()
-            if end_dt.time() == datetime.time.min:
-                loop_end_date -= datetime.timedelta(days=1)
-
             d = start_dt.date()
-            while d <= loop_end_date:
-                if start_of_week <= d <= end_of_week:
-                    if d not in events_by_day:
-                        events_by_day[d] = []
-                    
-                    seg_start = start_dt if d == start_dt.date() else datetime.datetime.combine(d, datetime.time.min)
-                    seg_end = end_dt if d == end_dt.date() else datetime.datetime.combine(d + datetime.timedelta(days=1), datetime.time.min)
-                    
-                    events_by_day[d].append((seg_start, seg_end, event))
+            while d <= end_dt.date():
+                if start_of_week <= d <= start_of_week + datetime.timedelta(days=6):
+                    if d not in events_by_day: events_by_day[d] = []
+                    events_by_day[d].append(event)
                 d += datetime.timedelta(days=1)
 
-        for day, day_event_tuples in events_by_day.items():
-            day_event_tuples.sort(key=lambda e: e[0])
+        for day_date, day_events in events_by_day.items():
+            day_events.sort(key=lambda e: datetime.datetime.fromisoformat(e['start']['dateTime']))
             
             groups = []
-            for event_tuple in day_event_tuples:
+            for event in day_events:
                 placed = False
-                seg_start = event_tuple[0]
+                start_dt = datetime.datetime.fromisoformat(event['start']['dateTime'])
                 for group in groups:
-                    last_seg_end = group[-1][1]
-                    if seg_start >= last_seg_end:
-                        group.append(event_tuple)
+                    last_event_end_dt = datetime.datetime.fromisoformat(group[-1]['end']['dateTime'])
+                    if start_dt >= last_event_end_dt:
+                        group.append(event)
                         placed = True
                         break
                 if not placed:
-                    groups.append([event_tuple])
+                    groups.append([event])
+
+            day_column_width = parent_widget.width() / 7
+            col_index = (day_date - start_of_week).days
 
             for group in groups:
                 num_columns = len(group)
-                for i, event_tuple in enumerate(group):
-                    start_dt, end_dt, original_event = event_tuple
+                for i, event in enumerate(group):
+                    start_dt = datetime.datetime.fromisoformat(event['start']['dateTime']).replace(tzinfo=None)
+                    end_dt = datetime.datetime.fromisoformat(event['end']['dateTime']).replace(tzinfo=None)
                     
-                    col_index = (start_dt.weekday() + 1) % 7 + 1
+                    y = start_dt.hour * self.hour_height + (start_dt.minute / 60) * self.hour_height
+                    height = ((end_dt - start_dt).total_seconds() / 3600) * self.hour_height
                     
-                    start_rect = self.grid_layout.cellRect(start_dt.hour, col_index)
-                    
-                    y = start_rect.y() + int(start_dt.minute / 60 * start_rect.height())
-                    duration_minutes = (end_dt - start_dt).total_seconds() / 60
-                    height = int(duration_minutes / 60 * start_rect.height())
-                    
-                    total_width = start_rect.width()
-                    width = total_width // num_columns
-                    x = start_rect.x() + i * width
+                    width = day_column_width / num_columns
+                    x = col_index * day_column_width + i * width
 
-                    event_widget = EventLabelWidget(original_event, parent_widget)
-                    event_widget.setText(original_event.get('summary', '(제목 없음)'))
+                    event_widget = EventLabelWidget(event, parent_widget)
+                    event_widget.setText(event.get('summary', '(제목 없음)'))
                     event_widget.edit_requested.connect(self.edit_event_requested)
-                    event_widget.setStyleSheet(f"background-color: {original_event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;")
+                    event_widget.setStyleSheet(f"background-color: {event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;")
                     event_widget.setWordWrap(True)
                     event_widget.setAlignment(Qt.AlignmentFlag.AlignTop)
-                    event_widget.setGeometry(x + 1, y, width - 2, height)
+                    event_widget.setGeometry(int(x + 1), int(y), int(width - 2), int(height))
                     event_widget.show()
                     self.event_widgets.append(event_widget)
 
     def refresh(self):
-        self.clear_events()
         today = datetime.date.today()
         start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
         end_of_week = start_of_week + datetime.timedelta(days=6)
@@ -316,8 +283,20 @@ class WeekViewWidget(QWidget):
             elif i == 6: font_color = "#8080ff"
             self.day_labels[i].setStyleSheet(f"color: {font_color}; font-weight: bold;")
 
-        week_events = self.data_manager.get_events_for_period(start_of_week, end_of_week)
+        self.redraw_events_with_current_data()
+        self.update_timeline()
+
+        if start_of_week <= today <= end_of_week:
+            now = datetime.datetime.now()
+            target_y = now.hour * self.hour_height
+            self.scroll_area.verticalScrollBar().setValue(target_y - self.scroll_area.height() // 2)
+
+    def redraw_events_with_current_data(self):
+        self.clear_events()
+        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
+        end_of_week = start_of_week + datetime.timedelta(days=6)
         
+        week_events = self.data_manager.get_events_for_period(start_of_week, end_of_week)
         selected_ids = self.main_widget.settings.get("selected_calendars", [])
         filtered_events = [event for event in week_events if event.get('calendarId') in selected_ids]
 
@@ -325,14 +304,7 @@ class WeekViewWidget(QWidget):
         all_day_events = [e for e in filtered_events if 'date' in e.get('start', {})]
         self.draw_events(time_events, start_of_week)
         self.draw_all_day_events(all_day_events, start_of_week)
-        self.update_timeline()
-
-        if start_of_week <= today <= end_of_week:
-            now = datetime.datetime.now()
-            hour_height = 40
-            target_y = now.hour * hour_height
-            scroll_to = target_y - self.scroll_area.height() // 2
-            self.scroll_area.verticalScrollBar().setValue(scroll_to)
+        self.time_scale.update()
 
     def draw_all_day_events(self, events, start_of_week):
         if not events:
@@ -377,8 +349,7 @@ class WeekViewWidget(QWidget):
             draw_start_date = max(start_date, start_of_week)
             draw_end_date = min(end_date, start_of_week + datetime.timedelta(days=6))
 
-            if draw_start_date > draw_end_date:
-                continue
+            if draw_start_date > draw_end_date: continue
 
             start_offset = (draw_start_date - start_of_week).days
             span = (draw_end_date - draw_start_date).days + 1
@@ -395,7 +366,3 @@ class WeekViewWidget(QWidget):
         
         num_lanes = max(event_to_lane.values()) + 1 if event_to_lane else 0
         self.all_day_widget.setMinimumHeight(max(1, num_lanes) * 22 if num_lanes > 0 else 25)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.update_timeline()
