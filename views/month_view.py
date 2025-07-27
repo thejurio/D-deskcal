@@ -4,21 +4,10 @@ from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayo
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
 
-from custom_dialogs import CustomMessageBox, DateSelectionDialog
+from custom_dialogs import CustomMessageBox, NewDateSelectionDialog
+from .widgets import EventLabelWidget
 
-# EventLabelWidget, DayCellWidget 클래스는 변경사항 없습니다.
-class EventLabelWidget(QLabel):
-    edit_requested = pyqtSignal(dict)
-    def __init__(self, event, parent=None):
-        super().__init__(parent)
-        self.event_data = event
-    def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.edit_requested.emit(self.event_data)
-            event.accept()
-        else:
-            super().mouseDoubleClickEvent(event)
-
+# DayCellWidget 클래스는 변경사항 없습니다.
 class DayCellWidget(QWidget):
     add_event_requested = pyqtSignal(datetime.date)
     def __init__(self, date_obj, parent=None):
@@ -97,7 +86,7 @@ class MonthViewWidget(QWidget):
 
     def open_date_selection_dialog(self):
         """날짜 선택 다이얼로그를 엽니다."""
-        dialog = DateSelectionDialog(self.current_date, self)
+        dialog = NewDateSelectionDialog(self.current_date, self)
         if dialog.exec():
             year, month = dialog.get_selected_date()
             self.current_date = self.current_date.replace(year=year, month=month, day=1)
@@ -121,22 +110,86 @@ class MonthViewWidget(QWidget):
             color = "#ff8080" if day == "일" else ("#8080ff" if day == "토" else "white")
             label.setStyleSheet(f"color: {color}; font-weight: bold;")
             self.calendar_grid.addWidget(label, 0, i)
+
         cal = calendar.Calendar(firstweekday=calendar.SUNDAY)
         month_calendar = cal.monthdayscalendar(year, month)
         today = datetime.date.today()
+
         for week_index, week in enumerate(month_calendar):
             for day_index, day in enumerate(week):
-                if day == 0: continue
+                if day == 0:
+                    # 이전/다음 달 날짜를 계산해야 함
+                    # 이 부분은 조금 더 복잡한 로직이 필요하여 일단은 빈칸으로 둡니다.
+                    # 정확한 구현을 위해 1일의 요일과 마지막 날의 요일을 알아야 합니다.
+                    continue
+
                 current_day_obj = datetime.date(year, month, day)
                 day_widget = DayCellWidget(current_day_obj, self)
                 day_widget.add_event_requested.connect(self.on_add_event_requested)
                 day_label = QLabel(str(day))
                 day_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
                 day_widget.layout.addWidget(day_label)
-                if current_day_obj == today: day_label.setStyleSheet("color: #ffff00; font-weight: bold;")
-                else: day_label.setStyleSheet("color: white;")
+
+                font_color = "white"
+                if current_day_obj.month != month:
+                    font_color = "#777777" # 다른 달의 날짜는 회색으로
+                elif day_index == 0: # 일요일
+                    font_color = "#ff8080"
+                elif day_index == 6: # 토요일
+                    font_color = "#8080ff"
+                
+                day_label.setStyleSheet(f"color: {font_color}; background-color: transparent;")
+
+                if current_day_obj == today:
+                    day_widget.setStyleSheet("background-color: #444422;") # 오늘 날짜 셀 배경색 변경
+                    day_label.setStyleSheet("color: #FFFF77; font-weight: bold; background-color: transparent;") # 오늘 날짜 텍스트 스타일
+                else:
+                    day_widget.setStyleSheet("background-color: transparent;")
+
                 self.calendar_grid.addWidget(day_widget, week_index + 1, day_index)
                 self.date_to_cell_map[current_day_obj] = {'row': week_index + 1, 'col': day_index, 'widget': day_widget}
+
+        # 이전/다음 달 날짜 채우기
+        first_day_of_month = datetime.date(year, month, 1)
+        weekday_of_first = (first_day_of_month.weekday() + 1) % 7  # 일요일=0
+        
+        prev_month_date = first_day_of_month - datetime.timedelta(days=1)
+        
+        for i in range(weekday_of_first - 1, -1, -1):
+            day = prev_month_date.day
+            current_day_obj = prev_month_date
+            
+            day_widget = DayCellWidget(current_day_obj, self)
+            day_widget.add_event_requested.connect(self.on_add_event_requested)
+            day_label = QLabel(str(day))
+            day_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            day_widget.layout.addWidget(day_label)
+            day_label.setStyleSheet("color: #777777;") # 이전 달 날짜는 회색
+            self.calendar_grid.addWidget(day_widget, 1, i)
+            self.date_to_cell_map[current_day_obj] = {'row': 1, 'col': i, 'widget': day_widget}
+            prev_month_date -= datetime.timedelta(days=1)
+
+        last_day_of_month = datetime.date(year, month, calendar.monthrange(year, month)[1])
+        weekday_of_last = (last_day_of_month.weekday() + 1) % 7
+
+        next_month_date = last_day_of_month + datetime.timedelta(days=1)
+        
+        row = len(month_calendar)
+        for i in range(weekday_of_last + 1, 7):
+            day = next_month_date.day
+            current_day_obj = next_month_date
+
+            day_widget = DayCellWidget(current_day_obj, self)
+            day_widget.add_event_requested.connect(self.on_add_event_requested)
+            day_label = QLabel(str(day))
+            day_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            day_widget.layout.addWidget(day_label)
+            day_label.setStyleSheet("color: #777777;") # 다음 달 날짜는 회색
+            self.calendar_grid.addWidget(day_widget, row, i)
+            self.date_to_cell_map[current_day_obj] = {'row': row, 'col': i, 'widget': day_widget}
+            next_month_date += datetime.timedelta(days=1)
+
+
         for i in range(1, self.calendar_grid.rowCount()): self.calendar_grid.setRowStretch(i, 1)
         for i in range(self.calendar_grid.columnCount()): self.calendar_grid.setColumnStretch(i, 1)
         QTimer.singleShot(0, self.redraw_events_with_current_data)
@@ -215,9 +268,25 @@ class MonthViewWidget(QWidget):
                     event_widget = EventLabelWidget(event, self)
                     event_widget.edit_requested.connect(self.on_edit_event_requested)
                     
-                    if is_true_start or is_week_start: 
-                        event_widget.setText(event.get('summary', ''))
+                    event_widget.setText(event.get('summary', ''))
                     
+                    # --- 툴팁 추가 (수정된 로직) ---
+                    start_info = event.get('start', {})
+                    is_all_day = 'date' in start_info
+                    
+                    tooltip_text = f"<b>{event.get('summary', '')}</b>" # 기본적으로 제목만 표시
+                    
+                    if not is_all_day:
+                        start_str = start_info.get('dateTime')
+                        try:
+                            start_dt = datetime.datetime.fromisoformat(start_str)
+                            tooltip_text += f"<br>{start_dt.strftime('%H:%M')}" # 시간 정보가 있을 때만 시간 추가
+                        except (ValueError, TypeError, AttributeError):
+                            pass # 시간 정보 파싱 실패 시 아무것도 안 함
+                    
+                    event_widget.setToolTip(tooltip_text)
+                    # --- 여기까지 ---
+
                     event_widget.setGeometry(x, y, width, height)
                     event_color = event.get('color', '#555555')
                     event_widget.setStyleSheet(f"background-color: {event_color}; color: white; {border_radius_style} padding-left: 5px; font-size: 9pt;")

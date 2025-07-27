@@ -10,7 +10,7 @@ from config import DEFAULT_WINDOW_GEOMETRY
 
 from data_manager import DataManager
 from views.month_view import MonthViewWidget
-from views.list_view import ListViewWidget
+from views.week_view import WeekViewWidget
 from settings_window import SettingsWindow
 from event_editor_window import EventEditorWindow 
 
@@ -52,13 +52,26 @@ DARK_THEME_STYLESHEET = """
     }
     QPushButton:hover {
         background-color: #6E6E6E;
+        border-color: #888888;
     }
     QPushButton:pressed {
-        background-color: #454545;
+        background-color: #4D4D4D;
+        border-color: #666666;
     }
     QPushButton:checked {
         background-color: #0078D7;
         border-color: #005A9E;
+    }
+    /* '오늘' 버튼 특별 스타일 */
+    QPushButton#today_button {
+        background-color: #0078D7;
+        border-color: #005A9E;
+    }
+    QPushButton#today_button:hover {
+        background-color: #0082F0;
+    }
+    QPushButton#today_button:pressed {
+        background-color: #006AC5;
     }
     /* 텍스트 입력 필드 */
     QLineEdit, QTextEdit {
@@ -176,6 +189,19 @@ DARK_THEME_STYLESHEET = """
     QMessageBox QLabel {
         color: #FFFFFF;
     }
+    /* 날짜 셀 위젯 */
+    DayCellWidget {
+        border: 1px solid #484848; /* 테두리 색상을 조금 더 밝게 */
+    }
+    /* 툴팁 */
+    QToolTip {
+        background-color: #424242;
+        color: #FFFFFF;
+        border: none; /* 테두리 완전히 제거 */
+        border-radius: 5px;
+        padding: 5px;
+        opacity: 230;
+    }
 """
 
 class MainWidget(QWidget):
@@ -217,40 +243,53 @@ class MainWidget(QWidget):
 
         self.data_manager.data_updated.connect(self.on_data_updated)
         
+        # --- '오늘' 버튼 추가 ---
         view_mode_layout = QHBoxLayout()
-        month_button, list_button = QPushButton("월력"), QPushButton("목록")
-        # 개별 스타일 지정 제거 (전역 스타일시트 사용)
-        # view_button_style = "QPushButton { color: white; background-color: #555; border: 1px solid #777; padding: 5px; border-radius: 5px; } QPushButton:checked { background-color: #0078d7; }"
-        # month_button.setStyleSheet(view_button_style)
-        # list_button.setStyleSheet(view_button_style)
+        month_button, week_button = QPushButton("월력"), QPushButton("주간")
         month_button.setCheckable(True)
-        list_button.setCheckable(True)
+        week_button.setCheckable(True)
+        
+        today_button = QPushButton("오늘")
+        today_button.setObjectName("today_button") # 스타일 구분을 위한 ID 설정
+        today_button.clicked.connect(self.go_to_today)
+
         view_mode_layout.addStretch(1)
         view_mode_layout.addWidget(month_button)
-        view_mode_layout.addWidget(list_button)
+        view_mode_layout.addWidget(week_button)
         view_mode_layout.addStretch(1)
+        view_mode_layout.addWidget(today_button)
         content_layout.addLayout(view_mode_layout)
 
         self.stacked_widget = QStackedWidget()
         content_layout.addWidget(self.stacked_widget)
 
         self.month_view = MonthViewWidget(self)
-        self.list_view = ListViewWidget(self)
+        self.week_view = WeekViewWidget(self) # ListViewWidget -> WeekViewWidget
         self.month_view.add_event_requested.connect(self.open_event_editor)
         self.month_view.edit_event_requested.connect(self.open_event_editor)
 
         self.stacked_widget.addWidget(self.month_view)
-        self.stacked_widget.addWidget(self.list_view)
+        self.stacked_widget.addWidget(self.week_view) # ListViewWidget -> WeekViewWidget
         
-        month_button.clicked.connect(lambda: self.change_view(0, month_button, [list_button]))
-        list_button.clicked.connect(lambda: self.change_view(1, list_button, [month_button]))
+        month_button.clicked.connect(lambda: self.change_view(0, month_button, [week_button]))
+        week_button.clicked.connect(lambda: self.change_view(1, week_button, [month_button]))
         
         month_button.setChecked(True)
         self.oldPos = None
 
+    def go_to_today(self):
+        """오늘 날짜가 포함된 뷰로 이동합니다."""
+        today = datetime.date.today()
+        self.month_view.current_date = today
+        self.month_view.refresh()
+        self.refresh_current_view() # 목록 뷰도 새로고침되도록 추가
+
     def start(self):
         QTimer.singleShot(0, self.initial_load)
-    # ... (이하 기존 메서드들은 변경 없음) ...
+
+    def initial_load(self):
+        """현재 달을 기준으로 초기 캐싱 계획을 수립합니다."""
+        self.data_manager.load_initial_month()
     def initial_load(self):
         """현재 달을 기준으로 초기 캐싱 계획을 수립합니다."""
         self.data_manager.load_initial_month()
@@ -258,13 +297,13 @@ class MainWidget(QWidget):
     def on_data_updated(self, year, month):
         """
         데이터 변경 신호를 받아 현재 활성화된 뷰에 새로고침이 필요한지 확인합니다.
-        MonthView는 자체적으로 신호를 처리하므로, 여기서는 다른 뷰(ListView)를 위해 처리합니다.
+        MonthView는 자체적으로 신호를 처리하므로, 여기서는 다른 뷰(WeekView)를 위해 처리합니다.
         """
-        # MonthView가 보고 있는 월의 데이터가 변경되었고, 현재 ListView가 활성화 상태일 때
+        # MonthView가 보고 있는 월의 데이터가 변경되었고, 현재 WeekView가 활성화 상태일 때
         if (year == self.month_view.current_date.year and 
             month == self.month_view.current_date.month and
-            self.stacked_widget.currentWidget() == self.list_view):
-            self.list_view.refresh()
+            self.stacked_widget.currentWidget() == self.week_view):
+            self.week_view.refresh()
 
     def change_view(self, index, checked_button=None, other_buttons=None):
         self.stacked_widget.setCurrentIndex(index)
