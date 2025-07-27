@@ -53,6 +53,7 @@ class MonthViewWidget(QWidget):
         self.data_manager.data_updated.connect(self.refresh)
         
         self.initUI()
+        self.refresh() # 위젯 생성 시 기본 틀을 한번 그려줌
 
     def initUI(self):
         main_layout = QVBoxLayout(self)

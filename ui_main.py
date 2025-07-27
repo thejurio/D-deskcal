@@ -86,9 +86,8 @@ class MainWidget(QWidget):
         QTimer.singleShot(0, self.initial_load)
 
     def initial_load(self):
-        """현재 달을 먼저 로딩하고, 점진적 백그라운드 캐싱을 시작합니다."""
+        """현재 달을 기준으로 초기 캐싱 계획을 수립합니다."""
         self.data_manager.load_initial_month()
-        self.data_manager.start_progressive_precaching()
 
     def init_sync_timer(self):
         self.sync_timer = QTimer(self)

@@ -1,30 +1,30 @@
 {
     "geometry": [
-        147,
-        47,
-        934,
-        611
+        82,
+        34,
+        711,
+        584
     ],
+    "use_local_calendar": false,
     "selected_calendars": [
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "family01556510902891015712@group.calendar.google.com",
         "thejurio@gmail.com",
         "ko.south_korea#holiday@group.v.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
-        "ko.south_korea#holiday@group.v.calendar.google.com": "#e95f72",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#a17cdd",
+        "family01556510902891015712@group.calendar.google.com": "#b99aff",
         "thejurio@gmail.com": "#a0aee5",
-        "family01556510902891015712@group.calendar.google.com": "#fdffb6",
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#ffadad",
+        "ko.south_korea#holiday@group.v.calendar.google.com": "#e95f72",
         "local_calendar": "#4CAF50"
     },
     "calendar_emojis": {
-        "ko.south_korea#holiday@group.v.calendar.google.com": "",
-        "thejurio@gmail.com": "",
-        "family01556510902891015712@group.calendar.google.com": "",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "",
+        "family01556510902891015712@group.calendar.google.com": "",
+        "thejurio@gmail.com": "",
+        "ko.south_korea#holiday@group.v.calendar.google.com": "",
         "local_calendar": ""
-    },
-    "last_selected_calendar_id": "thejurio@gmail.com",
-    "use_local_calendar": false
+    }
 }
