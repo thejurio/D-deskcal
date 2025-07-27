@@ -19,12 +19,30 @@ class WeekViewWidget(QWidget):
         self.day_labels = []
         self.hour_height = 40
         self.padding = 10 # TimeScaleWidget과 동일한 여백 값
+        
+        # --- ▼▼▼ 리사이즈 최적화 코드 추가 ▼▼▼ ---
+        self.is_resizing = False
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
         self.initUI()
 
         self.timeline_timer = QTimer(self)
         self.timeline_timer.setInterval(60 * 1000)
         self.timeline_timer.timeout.connect(self.update_timeline)
         self.timeline_timer.start()
+
+    # --- ▼▼▼ 리사이즈 최적화 코드 추가 ▼▼▼ ---
+    def set_resizing(self, is_resizing):
+        """리사이즈 상태를 설정하고, 상태에 따라 이벤트 위젯을 숨기거나 다시 그립니다."""
+        self.is_resizing = is_resizing
+        if self.is_resizing:
+            # 리사이즈 시작 시, 모든 이벤트 위젯을 숨깁니다.
+            for widget in self.event_widgets + self.all_day_event_widgets:
+                widget.hide()
+        else:
+            # 리사이즈 종료 시, 이벤트를 다시 그립니다.
+            self.redraw_events_with_current_data()
+    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -130,7 +148,12 @@ class WeekViewWidget(QWidget):
         self.time_scale.setGeometry(0, 0, container_widget.width(), container_widget.minimumHeight())
         self.event_container.setGeometry(50, self.padding, container_widget.width() - 50, self.hour_height * 24)
         self.update_timeline()
-        self.redraw_events_with_current_data()
+        
+        # --- ▼▼▼ 리사이즈 최적화 코드 변경 ▼▼▼ ---
+        # 리사이징 중이 아닐 때만 이벤트를 다시 그립니다.
+        if not self.is_resizing:
+            self.redraw_events_with_current_data()
+        # --- ▲▲▲ 여기까지 변경 ▲▲▲ ---
 
     def go_to_previous_week(self):
         self.current_date -= datetime.timedelta(days=7)

@@ -31,15 +31,29 @@ class MonthViewWidget(QWidget):
         self.current_date = datetime.date.today()
         self.date_to_cell_map = {}
         self.event_widgets = []
-        self.resize_timer = QTimer(self)
-        self.resize_timer.setSingleShot(True)
-        self.resize_timer.setInterval(50)
-        self.resize_timer.timeout.connect(self.redraw_events_with_current_data)
+        
+        # --- ▼▼▼ 리사이즈 최적화 코드 변경 ▼▼▼ ---
+        self.is_resizing = False 
+        # self.resize_timer는 더 이상 필요 없으므로 삭제
+        # --- ▲▲▲ 여기까지 변경 ▲▲▲ ---
         
         self.data_manager.data_updated.connect(self.on_data_updated)
         
         self.initUI()
         self.refresh()
+
+    # --- ▼▼▼ 리사이즈 최적화 코드 추가 ▼▼▼ ---
+    def set_resizing(self, is_resizing):
+        """리사이즈 상태를 설정하고, 상태에 따라 이벤트 위젯을 숨기거나 다시 그립니다."""
+        self.is_resizing = is_resizing
+        if self.is_resizing:
+            # 리사이즈 시작 시, 모든 이벤트 위젯을 숨깁니다.
+            for widget in self.event_widgets:
+                widget.hide()
+        else:
+            # 리사이즈 종료 시, 이벤트를 다시 그립니다.
+            self.redraw_events_with_current_data()
+    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def on_data_updated(self, year, month):
         if year == self.current_date.year and month == self.current_date.month:
@@ -307,7 +321,11 @@ class MonthViewWidget(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.resize_timer.start() 
+        # 리사이징 중에는 타이머를 사용하지 않고, 모든 이벤트 위젯의 위치를 즉시 재계산합니다.
+        # 단, is_resizing 플래그가 True이면 위젯들은 숨겨진 상태이므로, 계산만 하고 화면에 표시는 안됩니다.
+        # 리사이징이 끝나면 set_resizing(False)가 호출되면서 위젯들이 보이게 됩니다.
+        if not self.is_resizing:
+            self.redraw_events_with_current_data() 
 
     def go_to_previous_month(self):
         self.current_date = self.current_date.replace(day=1) - datetime.timedelta(days=1)

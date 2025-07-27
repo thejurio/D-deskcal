@@ -2,7 +2,7 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction
 
 from settings_manager import load_settings, save_settings
@@ -57,17 +57,40 @@ DARK_THEME_STYLESHEET = """
     QToolTip { background-color: #424242; color: #FFFFFF; border: none; border-radius: 5px; padding: 5px; opacity: 230; }
 """
 
+# --- ▼▼▼ 리사이즈 상태 감지를 위한 커스텀 QSizeGrip 추가 ▼▼▼ ---
+class CustomSizeGrip(QSizeGrip):
+    grip_pressed = pyqtSignal()
+    grip_released = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.grip_pressed.emit()
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.grip_released.emit()
+# --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
+
 class MainWidget(QWidget):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
         self.data_manager = DataManager(settings)
+        self.is_resizing = False # 크기 조절 상태 플래그
+        self.is_moving = False # 이동 상태 플래그
+        self.border_width = 5 # 리사이즈 감지 영역
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle('Glassy Calendar')
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # --- ▼▼▼ 마우스 트래킹 활성화 ▼▼▼ ---
+        self.setMouseTracking(True) 
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
         geometry = self.settings.get("geometry", DEFAULT_WINDOW_GEOMETRY)
         self.setGeometry(*geometry)
         
@@ -76,9 +99,10 @@ class MainWidget(QWidget):
 
         self.background_widget = QWidget()
         self.background_widget.setObjectName("main_background")
+        # --- ▼▼▼ 마우스 트래킹 활성화 ▼▼▼ ---
+        self.background_widget.setMouseTracking(True)
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
         
-        # 배경 위젯의 자체 투명도는 제거하고, 창 전체 투명도를 사용합니다.
-        # background-color의 alpha 값을 제거합니다.
         self.background_widget.setStyleSheet("""
             QWidget#main_background {
                 background-color: rgb(30, 30, 30);
@@ -86,7 +110,6 @@ class MainWidget(QWidget):
             }
         """)
         
-        # 시작 시 저장된 창 전체 투명도 적용
         self.setWindowOpacity(self.settings.get("window_opacity", 0.95))
         
         content_layout_wrapper = QVBoxLayout(self.background_widget)
@@ -98,7 +121,11 @@ class MainWidget(QWidget):
 
         bottom_bar_layout = QHBoxLayout()
         bottom_bar_layout.addStretch(1)
-        size_grip = QSizeGrip(self.background_widget)
+        
+        size_grip = CustomSizeGrip(self.background_widget)
+        size_grip.grip_pressed.connect(self.start_resize)
+        size_grip.grip_released.connect(self.end_resize)
+
         bottom_bar_layout.addWidget(size_grip, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
         content_layout_wrapper.addLayout(bottom_bar_layout)
         
@@ -141,8 +168,21 @@ class MainWidget(QWidget):
         month_button.setChecked(True)
         self.oldPos = None
 
+    def start_resize(self):
+        """크기 조절 시작 시 호출됩니다."""
+        if not self.is_resizing:
+            self.is_resizing = True
+            self.month_view.set_resizing(True)
+            self.week_view.set_resizing(True)
+
+    def end_resize(self):
+        """크기 조절 종료 시 호출됩니다."""
+        if self.is_resizing:
+            self.is_resizing = False
+            self.month_view.set_resizing(False)
+            self.week_view.set_resizing(False)
+
     def set_window_opacity(self, opacity):
-        """창의 전체 투명도를 설정합니다."""
         self.setWindowOpacity(opacity)
 
     def go_to_today(self):
@@ -152,13 +192,15 @@ class MainWidget(QWidget):
         self.refresh_current_view()
 
     def start(self):
+        from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self.initial_load)
 
     def initial_load(self):
         self.data_manager.load_initial_month()
     
     def on_data_updated(self, year, month):
-        self.refresh_current_view()
+        if not self.is_resizing:
+            self.refresh_current_view()
 
     def change_view(self, index, checked_button=None, other_buttons=None):
         self.stacked_widget.setCurrentIndex(index)
@@ -180,24 +222,21 @@ class MainWidget(QWidget):
         with self.data_manager.user_action_priority():
             original_opacity = self.settings.get("window_opacity", 0.95)
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self)
-            # 실시간 미리보기 신호 연결
             settings_dialog.transparency_changed.connect(self.set_window_opacity)
             
             result = settings_dialog.exec()
             
-            if result: # 저장 버튼 클릭
-                print("설정이 변경되었습니다. UI 및 동기화 설정을 업데이트합니다.")
+            if result:
                 self.data_manager.update_sync_timer()
-                self.set_window_opacity(self.settings.get("window_opacity", 0.95)) # 저장된 값으로 최종 적용
-                self.refresh_current_view() # 필터링된 캘린더 다시 적용
-            else: # 취소 버튼 클릭 또는 그냥 닫았을 때
-                self.set_window_opacity(original_opacity) # 원래 값으로 복구
+                self.set_window_opacity(self.settings.get("window_opacity", 0.95))
+                self.refresh_current_view()
+            else:
+                self.set_window_opacity(original_opacity)
 
     def open_event_editor(self, data):
         with self.data_manager.user_action_priority():
             all_calendars = self.data_manager.get_all_calendars()
             if not all_calendars:
-                print("편집할 캘린더가 없습니다. 설정을 확인해주세요.")
                 return
 
             editor = None
@@ -231,15 +270,10 @@ class MainWidget(QWidget):
         menu.addAction(exitAction)
 
     def contextMenuEvent(self, event):
-        # 이 이벤트는 MonthViewWidget에서 처리되지 않은 경우 (예: 뷰 외부의 빈 공간 클릭)에만 호출됩니다.
         menu = QMenu(self)
-        
-        # --- ▼▼▼ 투명도 적용 코드 추가 ▼▼▼ ---
         main_opacity = self.settings.get("window_opacity", 0.95)
         menu_opacity = main_opacity + (1 - main_opacity) * 0.85
         menu.setWindowOpacity(menu_opacity)
-        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
-
         self.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
         
@@ -251,12 +285,47 @@ class MainWidget(QWidget):
         event.accept()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton: self.oldPos = event.globalPosition().toPoint()
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position()
+            
+            # 클릭 위치가 가장자리인지 확인하여 리사이즈 모드 결정
+            in_left = pos.x() < self.border_width
+            in_right = pos.x() > self.width() - self.border_width
+            in_top = pos.y() < self.border_width
+            in_bottom = pos.y() > self.height() - self.border_width
+
+            if in_left or in_right or in_top or in_bottom:
+                self.is_resizing = True
+                self.start_resize()
+            else:
+                self.is_moving = True
+            
+            self.oldPos = event.globalPosition().toPoint()
+
     def mouseMoveEvent(self, event):
-        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
+        if event.buttons() == Qt.MouseButton.LeftButton:
             delta = event.globalPosition().toPoint() - self.oldPos
-            self.move(self.x() + delta.x(), self.y() + delta.y()); self.oldPos = event.globalPosition().toPoint()
-    def mouseReleaseEvent(self, event): self.oldPos = None
+            if self.is_moving:
+                self.move(self.x() + delta.x(), self.y() + delta.y())
+            self.oldPos = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.is_resizing:
+                self.end_resize()
+            self.is_moving = False
+            self.is_resizing = False
+            self.oldPos = None
+            self.unsetCursor() # 커서 모양 원래대로
+
+if __name__ == '__main__':
+    settings = load_settings()
+    app = QApplication(sys.argv)
+    app.setStyleSheet(DARK_THEME_STYLESHEET)
+    widget = MainWidget(settings)
+    widget.show()
+    widget.start()
+    sys.exit(app.exec())
 
 if __name__ == '__main__':
     settings = load_settings()
