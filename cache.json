@@ -2658,5 +2658,968 @@
             "color": "#e95f72",
             "emoji": ""
         }
+    ],
+    "2025-11": [
+        {
+            "kind": "calendar#event",
+            "etag": "\"3484700685565374\"",
+            "id": "9pdo1d4ae0er78k2ka8061ooj8_20251101",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=OXBkbzFkNGFlMGVyNzhrMmthODA2MW9vajhfMjAyNTExMDEgdGhlanVyaW9AbQ",
+            "created": "2025-03-19T02:12:22.000Z",
+            "updated": "2025-03-19T02:12:22.782Z",
+            "summary": "모지랭이님의 생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-11-01"
+            },
+            "end": {
+                "date": "2025-11-02"
+            },
+            "recurringEventId": "9pdo1d4ae0er78k2ka8061ooj8",
+            "originalStartTime": {
+                "date": "2025-11-01"
+            },
+            "transparency": "transparent",
+            "visibility": "private",
+            "iCalUID": "9pdo1d4ae0er78k2ka8061ooj8@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "birthdayProperties": {
+                "contact": "people/c4998235154219141700",
+                "type": "birthday"
+            },
+            "eventType": "birthday",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3479865009636000\"",
+            "id": "llsb60b0jjj8rptb4vr56tr8uk_20251101",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=bGxzYjYwYjBqamo4cnB0YjR2cjU2dHI4dWtfMjAyNTExMDEgdGhlanVyaW9AbQ",
+            "created": "2024-12-06T12:50:39.000Z",
+            "updated": "2025-02-19T02:35:04.818Z",
+            "summary": "모지랭이님의 생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-11-01"
+            },
+            "end": {
+                "date": "2025-11-02"
+            },
+            "recurringEventId": "llsb60b0jjj8rptb4vr56tr8uk",
+            "originalStartTime": {
+                "date": "2025-11-01"
+            },
+            "transparency": "transparent",
+            "visibility": "private",
+            "iCalUID": "llsb60b0jjj8rptb4vr56tr8uk@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "birthdayProperties": {
+                "contact": "people/c7840219527823903973",
+                "type": "birthday"
+            },
+            "eventType": "birthday",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3501977490526270\"",
+            "id": "_890k6c9m8kp3ib9j60pk2b9k60okcb9o6cs3gb9n6d23ic1p6924achj68",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=Xzg5MGs2YzltOGtwM2liOWo2MHBrMmI5azYwb2tjYjlvNmNzM2diOW42ZDIzaWMxcDY5MjRhY2hqNjggdGhlanVyaW9AbQ",
+            "created": "2025-06-27T01:45:45.000Z",
+            "updated": "2025-06-27T01:45:45.263Z",
+            "summary": "전일초 찾학컨 보",
+            "location": "6년 교실",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "dateTime": "2025-11-12T16:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "end": {
+                "dateTime": "2025-11-12T17:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "iCalUID": "BAC16E29-303A-401F-8388-73D9092DE232",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"2813533008792000\"",
+            "id": "pv21leec09f136f443e1d7gcpo_20251128",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=cHYyMWxlZWMwOWYxMzZmNDQzZTFkN2djcG9fMjAyNTExMjggdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:28:24.000Z",
+            "updated": "2014-07-31T00:28:24.396Z",
+            "summary": "엄마생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-11-28"
+            },
+            "end": {
+                "date": "2025-11-29"
+            },
+            "recurringEventId": "pv21leec09f136f443e1d7gcpo",
+            "originalStartTime": {
+                "date": "2025-11-28"
+            },
+            "iCalUID": "pv21leec09f136f443e1d7gcpo@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    },
+                    {
+                        "method": "email",
+                        "minutes": 430
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        }
+    ],
+    "2025-12": [
+        {
+            "kind": "calendar#event",
+            "etag": "\"3501977522122174\"",
+            "id": "_75348d9g6h0jaba684q32b9k88s4cba28l24ab9h6krjcda270sjgcpn60",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=Xzc1MzQ4ZDlnNmgwamFiYTY4NHEzMmI5azg4czRjYmEyOGwyNGFiOWg2a3JqY2RhMjcwc2pnY3BuNjAgdGhlanVyaW9AbQ",
+            "created": "2025-06-27T01:46:00.000Z",
+            "updated": "2025-06-27T01:46:01.061Z",
+            "summary": "전일초 찾학컨 보",
+            "location": "6년 교실",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "dateTime": "2025-12-09T16:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "end": {
+                "dateTime": "2025-12-09T17:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "iCalUID": "9FD504A5-FA41-4B8F-BEDE-15765B898370",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"2813533899390000\"",
+            "id": "9cmdcfuefj6r0p8k6rjdhb0i60_20251218",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=OWNtZGNmdWVmajZyMHA4azZyamRoYjBpNjBfMjAyNTEyMTggdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:35:49.000Z",
+            "updated": "2014-07-31T00:35:49.695Z",
+            "summary": "현웅이형생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-12-18"
+            },
+            "end": {
+                "date": "2025-12-19"
+            },
+            "recurringEventId": "9cmdcfuefj6r0p8k6rjdhb0i60",
+            "originalStartTime": {
+                "date": "2025-12-18"
+            },
+            "iCalUID": "9cmdcfuefj6r0p8k6rjdhb0i60@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    },
+                    {
+                        "method": "email",
+                        "minutes": 430
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812975058000\"",
+            "id": "20251224_tctk7bat4m9e6no460hkbeiitg",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTEyMjRfdGN0azdiYXQ0bTllNm5vNDYwaGtiZWlpdGcga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:47.000Z",
+            "updated": "2024-05-22T19:34:47.529Z",
+            "summary": "크리스마스 이브",
+            "description": "기념일\n기념일을 숨기려면 Google Calendar 설정 > 대한민국의 휴일 캘린더로 이동하세요.",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-12-24"
+            },
+            "end": {
+                "date": "2025-12-25"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20251224_tctk7bat4m9e6no460hkbeiitg@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812955132000\"",
+            "id": "20251225_0766s1aoodjdk4kne22gifd170",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTEyMjVfMDc2NnMxYW9vZGpkazRrbmUyMmdpZmQxNzAga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:37.000Z",
+            "updated": "2024-05-22T19:34:37.566Z",
+            "summary": "크리스마스",
+            "description": "공휴일",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-12-25"
+            },
+            "end": {
+                "date": "2025-12-26"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20251225_0766s1aoodjdk4kne22gifd170@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812926356000\"",
+            "id": "20251231_1oua2tk9qvnhf3gp3eroog0qig",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTEyMzFfMW91YTJ0azlxdm5oZjNncDNlcm9vZzBxaWcga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:23.000Z",
+            "updated": "2024-05-22T19:34:23.178Z",
+            "summary": "섣달 그믐날",
+            "description": "기념일\n기념일을 숨기려면 Google Calendar 설정 > 대한민국의 휴일 캘린더로 이동하세요.",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-12-31"
+            },
+            "end": {
+                "date": "2026-01-01"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20251231_1oua2tk9qvnhf3gp3eroog0qig@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812931894000\"",
+            "id": "20260101_s9ju2ocfsgkeuhtth2o695fl0o",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNjAxMDFfczlqdTJvY2ZzZ2tldWh0dGgybzY5NWZsMG8ga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:25.000Z",
+            "updated": "2024-05-22T19:34:25.947Z",
+            "summary": "새해첫날",
+            "description": "공휴일",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2026-01-01"
+            },
+            "end": {
+                "date": "2026-01-02"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20260101_s9ju2ocfsgkeuhtth2o695fl0o@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        }
+    ],
+    "2026-1": [
+        {
+            "kind": "calendar#event",
+            "etag": "\"2913151989207000\"",
+            "id": "fmkefbecggt728ierdgg971o10_20260111",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=Zm1rZWZiZWNnZ3Q3MjhpZXJkZ2c5NzFvMTBfMjAyNjAxMTEgdGhlanVyaW9AbQ",
+            "created": "2016-02-27T12:26:34.000Z",
+            "updated": "2016-02-27T12:26:34.665Z",
+            "summary": "오현이생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2026-01-11"
+            },
+            "end": {
+                "date": "2026-01-12"
+            },
+            "recurringEventId": "fmkefbecggt728ierdgg971o10",
+            "originalStartTime": {
+                "date": "2026-01-11"
+            },
+            "iCalUID": "fmkefbecggt728ierdgg971o10@google.com",
+            "sequence": 0,
+            "extendedProperties": {
+                "shared": {
+                    "CalendarSyncAdapter#originalTimezone": "UTC"
+                }
+            },
+            "reminders": {
+                "useDefault": false
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3348003860079000\"",
+            "id": "iinsrtphau5f68n66t72s2ebbg_20260118",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=aWluc3J0cGhhdTVmNjhuNjZ0NzJzMmViYmdfMjAyNjAxMTggdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:33:24.000Z",
+            "updated": "2023-01-18T00:32:10.080Z",
+            "summary": "이승재생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2026-01-18"
+            },
+            "end": {
+                "date": "2026-01-19"
+            },
+            "recurringEventId": "iinsrtphau5f68n66t72s2ebbg",
+            "originalStartTime": {
+                "date": "2026-01-18"
+            },
+            "visibility": "public",
+            "iCalUID": "iinsrtphau5f68n66t72s2ebbg@google.com",
+            "sequence": 1,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812931894000\"",
+            "id": "20260101_s9ju2ocfsgkeuhtth2o695fl0o",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNjAxMDFfczlqdTJvY2ZzZ2tldWh0dGgybzY5NWZsMG8ga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:25.000Z",
+            "updated": "2024-05-22T19:34:25.947Z",
+            "summary": "새해첫날",
+            "description": "공휴일",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2026-01-01"
+            },
+            "end": {
+                "date": "2026-01-02"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20260101_s9ju2ocfsgkeuhtth2o695fl0o@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        }
+    ],
+    "2025-3": [
+        {
+            "kind": "calendar#event",
+            "etag": "\"2814577891313000\"",
+            "id": "47cliiv5tiijdaikr1ufe4tcak_20250301",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=NDdjbGlpdjV0aWlqZGFpa3IxdWZlNHRjYWtfMjAyNTAzMDEgdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:24:53.000Z",
+            "updated": "2014-08-12T02:46:37.392Z",
+            "summary": "아빠",
+            "description": " {sacrifice_e}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-01"
+            },
+            "end": {
+                "date": "2025-03-02"
+            },
+            "recurringEventId": "47cliiv5tiijdaikr1ufe4tcak",
+            "originalStartTime": {
+                "date": "2025-03-01"
+            },
+            "iCalUID": "47cliiv5tiijdaikr1ufe4tcak@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 9360
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3472669735540000\"",
+            "id": "_6t0jahi16or4aba36l1jeb9k8krkcb9o8gs4cb9j8p33ichg8gskadpm8g",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=XzZ0MGphaGkxNm9yNGFiYTM2bDFqZWI5azhrcmtjYjlvOGdzNGNiOWo4cDMzaWNoZzhnc2thZHBtOGcgdGhlanVyaW9AbQ",
+            "created": "2025-01-08T11:14:27.000Z",
+            "updated": "2025-01-08T11:14:27.770Z",
+            "summary": "하나팩스탈퇴",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-08"
+            },
+            "end": {
+                "date": "2025-03-09"
+            },
+            "iCalUID": "7A5FA66E-C5C7-4E7F-8D8F-3FF920D9E76D",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    },
+                    {
+                        "method": "email",
+                        "minutes": 430
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"2813533151328000\"",
+            "id": "emtvk38aeviviv4vefqotqfjt0_20250314",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=ZW10dmszOGFldml2aXY0dmVmcW90cWZqdDBfMjAyNTAzMTQgdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:28:25.000Z",
+            "updated": "2014-07-31T00:29:35.705Z",
+            "summary": "누나생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-14"
+            },
+            "end": {
+                "date": "2025-03-15"
+            },
+            "recurringEventId": "emtvk38aeviviv4vefqotqfjt0",
+            "originalStartTime": {
+                "date": "2025-03-14"
+            },
+            "iCalUID": "emtvk38aeviviv4vefqotqfjt0@google.com",
+            "sequence": 1,
+            "reminders": {
+                "useDefault": false
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"2979474053364000\"",
+            "id": "3qqi2un667lbu0rppkumefm1gg_20250318",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=M3FxaTJ1bjY2N2xidTBycHBrdW1lZm0xZ2dfMjAyNTAzMTggdGhlanVyaW9AbQ",
+            "created": "2014-07-31T00:31:07.000Z",
+            "updated": "2017-03-17T07:50:26.682Z",
+            "summary": "이의재생일",
+            "description": "{birthday_e_b}",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-18"
+            },
+            "end": {
+                "date": "2025-03-19"
+            },
+            "recurringEventId": "3qqi2un667lbu0rppkumefm1gg",
+            "originalStartTime": {
+                "date": "2025-03-18"
+            },
+            "iCalUID": "3qqi2un667lbu0rppkumefm1gg@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 30
+                    },
+                    {
+                        "method": "email",
+                        "minutes": 430
+                    }
+                ]
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3152370945746000\"",
+            "id": "_8koj0h9k61138ba261246b9k6op3iba16l14ab9m892jgdpm6sp3chi584_20250320",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=Xzhrb2owaDlrNjExMzhiYTI2MTI0NmI5azZvcDNpYmExNmwxNGFiOW04OTJqZ2RwbTZzcDNjaGk1ODRfMjAyNTAzMjAgdGhlanVyaW9AbQ",
+            "created": "2016-09-05T09:29:55.000Z",
+            "updated": "2023-03-20T09:05:50.687Z",
+            "summary": "혜원이생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "displayName": "진두성",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-20"
+            },
+            "end": {
+                "date": "2025-03-21"
+            },
+            "recurringEventId": "_8koj0h9k61138ba261246b9k6op3iba16l14ab9m892jgdpm6sp3chi584",
+            "originalStartTime": {
+                "date": "2025-03-20"
+            },
+            "visibility": "public",
+            "iCalUID": "E10E40B4-B0DC-4629-A5BE-6BE876726FEA",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3479865009636000\"",
+            "id": "bq5blt2bhb9a786hl0hclsr5n0_20250320",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=YnE1Ymx0MmJoYjlhNzg2aGwwaGNsc3I1bjBfMjAyNTAzMjAgdGhlanVyaW9AbQ",
+            "created": "2024-12-06T12:50:39.000Z",
+            "updated": "2025-02-19T02:35:04.818Z",
+            "summary": "장혜원님의 생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-20"
+            },
+            "end": {
+                "date": "2025-03-21"
+            },
+            "recurringEventId": "bq5blt2bhb9a786hl0hclsr5n0",
+            "originalStartTime": {
+                "date": "2025-03-20"
+            },
+            "transparency": "transparent",
+            "visibility": "private",
+            "iCalUID": "bq5blt2bhb9a786hl0hclsr5n0@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "birthdayProperties": {
+                "contact": "people/c4839253720510783540",
+                "type": "birthday"
+            },
+            "eventType": "birthday",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3484700720239518\"",
+            "id": "ogtiom7oaudvvrv28e7rr1ti3g_20250320",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=b2d0aW9tN29hdWR2dnJ2MjhlN3JyMXRpM2dfMjAyNTAzMjAgdGhlanVyaW9AbQ",
+            "created": "2025-03-19T02:12:39.000Z",
+            "updated": "2025-03-19T02:12:40.119Z",
+            "summary": "장혜원님의 생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-20"
+            },
+            "end": {
+                "date": "2025-03-21"
+            },
+            "recurringEventId": "ogtiom7oaudvvrv28e7rr1ti3g",
+            "originalStartTime": {
+                "date": "2025-03-20"
+            },
+            "transparency": "transparent",
+            "visibility": "private",
+            "iCalUID": "ogtiom7oaudvvrv28e7rr1ti3g@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "birthdayProperties": {
+                "contact": "people/c1799356673978854539",
+                "type": "birthday"
+            },
+            "eventType": "birthday",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3484700753742782\"",
+            "id": "0ori7tgkq1hgo7a8r719dsfl0g_20250326",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MG9yaTd0Z2txMWhnbzdhOHI3MTlkc2ZsMGdfMjAyNTAzMjYgdGhlanVyaW9AbQ",
+            "created": "2025-03-19T02:12:56.000Z",
+            "updated": "2025-03-19T02:12:56.871Z",
+            "summary": "#김초원님의 생일",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-26"
+            },
+            "end": {
+                "date": "2025-03-27"
+            },
+            "recurringEventId": "0ori7tgkq1hgo7a8r719dsfl0g",
+            "originalStartTime": {
+                "date": "2025-03-26"
+            },
+            "transparency": "transparent",
+            "visibility": "private",
+            "iCalUID": "0ori7tgkq1hgo7a8r719dsfl0g@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": false
+            },
+            "birthdayProperties": {
+                "contact": "people/c550722684368831044",
+                "type": "birthday"
+            },
+            "eventType": "birthday",
+            "calendarId": "thejurio@gmail.com",
+            "color": "#a0aee5",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3432812931894000\"",
+            "id": "20250301_kpna1ffd5n0c6jibqo60v74pt4",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTAzMDFfa3BuYTFmZmQ1bjBjNmppYnFvNjB2NzRwdDQga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-05-22T19:34:25.000Z",
+            "updated": "2024-05-22T19:34:25.947Z",
+            "summary": "삼일절",
+            "description": "공휴일",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-01"
+            },
+            "end": {
+                "date": "2025-03-02"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20250301_kpna1ffd5n0c6jibqo60v74pt4@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3470072843240000\"",
+            "id": "20250303_ljd2fj7mdtsuhp582qcfuv4800",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MjAyNTAzMDNfbGpkMmZqN21kdHN1aHA1ODJxY2Z1djQ4MDAga28uc291dGhfa29yZWEjaG9saWRheUB2",
+            "created": "2024-12-24T10:33:41.000Z",
+            "updated": "2024-12-24T10:33:41.620Z",
+            "summary": "쉬는 날 삼일절",
+            "description": "공휴일",
+            "creator": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "organizer": {
+                "email": "ko.south_korea#holiday@group.v.calendar.google.com",
+                "displayName": "대한민국의 휴일",
+                "self": true
+            },
+            "start": {
+                "date": "2025-03-03"
+            },
+            "end": {
+                "date": "2025-03-04"
+            },
+            "transparency": "transparent",
+            "visibility": "public",
+            "iCalUID": "20250303_ljd2fj7mdtsuhp582qcfuv4800@google.com",
+            "sequence": 0,
+            "eventType": "default",
+            "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
+            "color": "#e95f72",
+            "emoji": ""
+        }
     ]
 }

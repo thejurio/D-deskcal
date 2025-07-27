@@ -2,24 +2,59 @@ import datetime
 import calendar
 import json
 import os
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+import time
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker
 
 from providers.google_provider import GoogleCalendarProvider
 from providers.local_provider import LocalCalendarProvider
 
-class PreCacheWorker(QObject):
+# --- ▼▼▼ 1. PreCacheWorker를 CachingManager로 교체하고 기능을 확장합니다. ▼▼▼ ---
+class CachingManager(QObject):
     finished = pyqtSignal()
+
     def __init__(self, data_manager):
         super().__init__()
         self.data_manager = data_manager
+        self._is_running = True
+        self._queue = []
+        self._mutex = QMutex()
+
+    def add_to_queue(self, tasks):
+        """작업 큐에 새로운 월(튜플) 목록을 추가합니다."""
+        with QMutexLocker(self._mutex):
+            for task in tasks:
+                if task not in self._queue:
+                    self._queue.append(task)
+    
+    def stop(self):
+        """작업 루프를 안전하게 종료시킵니다."""
+        self._is_running = False
+
     def run(self):
-        print("백그라운드 프리캐싱 스레드를 시작합니다...")
-        today = datetime.date.today()
-        for i in list(range(-3, 0)) + list(range(1, 4)):
-            target_date = today + datetime.timedelta(days=i * 30)
-            self.data_manager.get_events(target_date.year, target_date.month)
-        print("백그라운드 프리캐싱 완료.")
+        """큐에 작업이 있으면 계속해서 처리하는 메인 루프입니다."""
+        print("백그라운드 캐싱 매니저 스레드가 시작되었습니다.")
+        while self._is_running:
+            task = None
+            with QMutexLocker(self._mutex):
+                if self._queue:
+                    task = self._queue.pop(0)
+            
+            if task:
+                year, month = task
+                print(f"백그라운드 캐싱: {year}년 {month}월")
+                # 캐시에 이미 데이터가 있는지 다시 한번 확인
+                if (year, month) not in self.data_manager.event_cache:
+                    self.data_manager.get_events(year, month)
+                    # API에 부담을 주지 않기 위해 작업 사이에 짧은 텀을 둡니다.
+                    time.sleep(0.5) 
+            else:
+                # 큐가 비어있으면 잠시 대기합니다.
+                time.sleep(1)
+        
+        print("백그라운드 캐싱 매니저 스레드가 종료되었습니다.")
         self.finished.emit()
+# --- ▲▲▲ 여기까지 CachingManager 변경 ▲▲▲ ---
+
 
 class DataManager(QObject):
     data_updated = pyqtSignal()
@@ -27,61 +62,61 @@ class DataManager(QObject):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
-        self.cache_file = "cache.json" # 캐시 파일 이름 정의
+        self.cache_file = "cache.json"
         self.event_cache = {}
-        
-        # --- ▼▼▼ 여기가 수정된 핵심입니다 (캐시 불러오기) ▼▼▼ ---
-        self.load_cache_from_file() # 프로그램 시작 시 캐시 파일 불러오기
+        self.load_cache_from_file()
         
         self.providers = []
-        self.thread = None
-        self.worker = None
+        # --- ▼▼▼ 2. CachingManager를 생성하고 스레드를 시작시키는 로직으로 변경합니다. ▼▼▼ ---
+        self.caching_thread = QThread()
+        self.caching_manager = CachingManager(self)
+        self.caching_manager.moveToThread(self.caching_thread)
+
+        self.caching_thread.started.connect(self.caching_manager.run)
+        self.caching_manager.finished.connect(self.caching_thread.quit)
+        self.caching_manager.finished.connect(self.caching_manager.deleteLater)
+        self.caching_thread.finished.connect(self.caching_thread.deleteLater)
         
+        self.caching_thread.start()
+        # --- ▲▲▲ 여기까지 스레드 시작 로직 변경 ▲▲▲ ---
+
         try:
             google_provider = GoogleCalendarProvider(settings)
             if google_provider.service: self.providers.append(google_provider)
-            else: print("Google Provider 초기화 실패: 구글 API에 연결할 수 없습니다.")
-        except Exception as e:
-            print(f"Google Provider 생성 중 오류 발생: {e}")
+        except Exception as e: print(f"Google Provider 생성 중 오류 발생: {e}")
             
         try:
             local_provider = LocalCalendarProvider(settings)
             self.providers.append(local_provider)
-        except Exception as e:
-            print(f"Local Provider 생성 중 오류 발생: {e}")
+        except Exception as e: print(f"Local Provider 생성 중 오류 발생: {e}")
 
-    # --- ▼▼▼ 2개의 새로운 메서드를 추가합니다. (캐시 저장/불러오기) ▼▼▼ ---
+    def stop_caching_thread(self):
+        """프로그램 종료 시 캐싱 스레드를 안전하게 종료시킵니다."""
+        if self.caching_thread and self.caching_thread.isRunning():
+            self.caching_manager.stop()
+            self.caching_thread.quit()
+            self.caching_thread.wait() # 스레드가 완전히 끝날 때까지 대기
+
+    # ... (load_cache_from_file, save_cache_to_file, _fetch_events_from_providers, get_events, sync_month 메서드는 기존과 동일) ...
     def load_cache_from_file(self):
-        """프로그램 시작 시 파일에서 캐시를 불러옵니다."""
-        if not os.path.exists(self.cache_file):
-            print("캐시 파일이 존재하지 않습니다.")
-            return
-        
+        if not os.path.exists(self.cache_file): return
         try:
             with open(self.cache_file, 'r', encoding='utf-8') as f:
-                # JSON의 문자열 키(예: "2025-07")를 다시 파이썬 튜플 키(예: (2025, 7))로 변환합니다.
                 loaded_cache = json.load(f)
                 self.event_cache = {tuple(map(int, k.split('-'))): v for k, v in loaded_cache.items()}
-                print(f"'{self.cache_file}'에서 캐시를 성공적으로 불러왔습니다.")
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"캐시 파일('.cache.json')을 읽는 중 오류 발생: {e}")
-            self.event_cache = {} # 문제가 있는 경우 캐시를 초기화합니다.
+        except Exception as e:
+            print(f"캐시 파일 읽기 오류: {e}")
+            self.event_cache = {}
 
     def save_cache_to_file(self):
-        """프로그램 종료 시 현재 캐시를 파일에 저장합니다."""
         try:
             with open(self.cache_file, 'w', encoding='utf-8') as f:
-                # 파이썬 튜플 키는 JSON에 저장할 수 없으므로 "년도-월" 형태의 문자열로 변환합니다.
                 cache_to_save = {f"{k[0]}-{k[1]}": v for k, v in self.event_cache.items()}
                 json.dump(cache_to_save, f, ensure_ascii=False, indent=4)
-                print(f"현재 캐시를 '{self.cache_file}'에 성공적으로 저장했습니다.")
         except Exception as e:
-            print(f"캐시를 파일에 저장하는 중 오류 발생: {e}")
-            
-    # --- ▲▲▲ 여기까지 새로운 메서드 추가 ▲▲▲ ---
+            print(f"캐시 파일 저장 오류: {e}")
 
     def _fetch_events_from_providers(self, year, month):
-        # ... (이하 다른 메서드들은 기존과 동일) ...
         all_events = []
         _, num_days = calendar.monthrange(year, month)
         start_date, end_date = datetime.date(year, month, 1), datetime.date(year, month, num_days)
@@ -89,7 +124,7 @@ class DataManager(QObject):
             try:
                 all_events.extend(provider.get_events(start_date, end_date))
             except Exception as e:
-                print(f"'{type(provider).__name__}'에서 이벤트를 가져오는 중 오류 발생: {e}")
+                print(f"'{type(provider).__name__}' 이벤트 조회 오류: {e}")
         return all_events
 
     def get_events(self, year, month):
@@ -101,33 +136,40 @@ class DataManager(QObject):
         return events
 
     def sync_month(self, year, month, emit_signal=True):
-        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {year}년 {month}월 데이터를 강제 동기화합니다.")
         events = self._fetch_events_from_providers(year, month)
         self.event_cache[(year, month)] = events
         if emit_signal: self.data_updated.emit()
 
+
+    # --- ▼▼▼ 3. load_initial_month와 start_background_precaching 메서드를 수정합니다. ▼▼▼ ---
     def load_initial_month(self):
         print("현재 달 데이터를 우선 로딩합니다...")
         today = datetime.date.today()
-        # 캐시가 이미 있으면 즉시 UI에 표시하고, 백그라운드에서 업데이트 확인
-        if (today.year, today.month) in self.event_cache:
-            self.data_updated.emit()
-            print("기존 캐시로 현재 달을 표시합니다.")
-            self.sync_month(today.year, today.month, emit_signal=True) # 백그라운드에서 조용히 업데이트
-        else:
-            self.sync_month(today.year, today.month, emit_signal=True)
+        # 캐시에 데이터가 없으면 즉시 로드
+        if (today.year, today.month) not in self.event_cache:
+            self.get_events(today.year, today.month)
+        
+        # 캐시된 데이터로 UI 즉시 업데이트
+        self.data_updated.emit()
         print("현재 달 로딩 완료.")
 
-    def start_background_precaching(self):
-        self.thread = QThread()
-        self.worker = PreCacheWorker(self)
-        self.worker.moveToThread(self.thread)
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.start()
-    
+    def start_progressive_precaching(self):
+        """점진적 프리캐싱 작업을 캐싱 매니저의 큐에 추가합니다."""
+        print("점진적 프리캐싱 작업을 큐에 추가합니다.")
+        today = datetime.date.today()
+        tasks_to_add = []
+        for i in range(1, 4): # n±1, n±2, n±3 순서
+            # n+i
+            future_date = today + datetime.timedelta(days=i * 30)
+            tasks_to_add.append((future_date.year, future_date.month))
+            # n-i
+            past_date = today - datetime.timedelta(days=i * 30)
+            tasks_to_add.append((past_date.year, past_date.month))
+        
+        self.caching_manager.add_to_queue(tasks_to_add)
+    # --- ▲▲▲ 여기까지 메서드 수정 ▲▲▲ ---
+
+    # ... (get_all_calendars, add_event, update_event 메서드는 기존과 동일) ...
     def get_all_calendars(self):
         all_calendars = []
         for provider in self.providers:
