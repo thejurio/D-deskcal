@@ -42,9 +42,11 @@ class CachingManager(QObject):
             if task:
                 year, month = task
                 print(f"백그라운드 캐싱: {year}년 {month}월")
-                # 캐시에 이미 데이터가 있는지 다시 한번 확인
+                # 캐시에 이미 데이터가 있는지 다시 한번 확인 후, 없으면 네트워크 요청
                 if (year, month) not in self.data_manager.event_cache:
-                    self.data_manager.get_events(year, month)
+                    events = self.data_manager._fetch_events_from_providers(year, month)
+                    self.data_manager.event_cache[(year, month)] = events
+                    self.data_manager.data_updated.emit() # 데이터 준비 완료 신호 전송
                     # API에 부담을 주지 않기 위해 작업 사이에 짧은 텀을 둡니다.
                     time.sleep(0.5) 
             else:
@@ -128,29 +130,37 @@ class DataManager(QObject):
         return all_events
 
     def get_events(self, year, month):
+        """
+        UI에서 호출하는 기본 이벤트 요청 메서드.
+        캐시가 있으면 즉시 반환, 없으면 빈 리스트를 반환하고 백그라운드 로딩을 요청.
+        """
         cache_key = (year, month)
         if cache_key in self.event_cache:
             return self.event_cache[cache_key]
-        events = self._fetch_events_from_providers(year, month)
-        self.event_cache[cache_key] = events
-        return events
+        
+        # 캐시에 없으면, 백그라운드 로딩을 요청하고 일단 빈 리스트를 반환
+        self.caching_manager.add_to_queue([(year, month)])
+        return []
 
     def sync_month(self, year, month, emit_signal=True):
         events = self._fetch_events_from_providers(year, month)
         self.event_cache[(year, month)] = events
         if emit_signal: self.data_updated.emit()
 
-
-    # --- ▼▼▼ 3. load_initial_month와 start_background_precaching 메서드를 수정합니다. ▼▼▼ ---
     def load_initial_month(self):
+        """
+        앱 시작 시 현재 달 데이터를 로딩하는 메서드.
+        캐시에 없으면 백그라운드 로딩을 요청하고, 있으면 UI 업데이트 신호를 보냄.
+        """
         print("현재 달 데이터를 우선 로딩합니다...")
         today = datetime.date.today()
-        # 캐시에 데이터가 없으면 즉시 로드
-        if (today.year, today.month) not in self.event_cache:
-            self.get_events(today.year, today.month)
         
-        # 캐시된 데이터로 UI 즉시 업데이트
-        self.data_updated.emit()
+        # get_events를 호출하여 캐시 확인 및 로딩 요청
+        events = self.get_events(today.year, today.month)
+        
+        # 만약 캐시에 이미 데이터가 있었다면(events가 비어있지 않다면), 즉시 UI 업데이트
+        if events:
+            self.data_updated.emit()
         print("현재 달 로딩 완료.")
 
     def start_progressive_precaching(self):

@@ -48,6 +48,10 @@ class MonthViewWidget(QWidget):
         self.resize_timer.setSingleShot(True)
         self.resize_timer.setInterval(50)
         self.resize_timer.timeout.connect(self.redraw_events_with_current_data)
+        
+        # DataManager의 신호를 받으면 refresh 메서드를 호출하여 화면을 다시 그리도록 연결
+        self.data_manager.data_updated.connect(self.refresh)
+        
         self.initUI()
 
     def initUI(self):
