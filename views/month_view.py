@@ -2,7 +2,7 @@ import datetime
 import calendar
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QCursor
 
 from custom_dialogs import CustomMessageBox, NewDateSelectionDialog, MoreEventsDialog
 from .widgets import EventLabelWidget
@@ -90,7 +90,7 @@ class MonthViewWidget(QWidget):
         main_layout.addLayout(self.calendar_grid)
 
     def open_date_selection_dialog(self):
-        dialog = NewDateSelectionDialog(self.current_date, self, settings=self.main_widget.settings)
+        dialog = NewDateSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
         if dialog.exec():
             year, month = dialog.get_selected_date()
             self.current_date = self.current_date.replace(year=year, month=month, day=1)
@@ -100,7 +100,7 @@ class MonthViewWidget(QWidget):
     def on_edit_event_requested(self, event_data): self.edit_event_requested.emit(event_data)
 
     def show_more_events_popup(self, date_obj, events):
-        dialog = MoreEventsDialog(date_obj, events, self, settings=self.main_widget.settings)
+        dialog = MoreEventsDialog(date_obj, events, self, settings=self.main_widget.settings, pos=QCursor.pos())
         dialog.edit_requested.connect(self.on_edit_event_requested)
         dialog.delete_requested.connect(self.confirm_delete_event)
         dialog.exec()
@@ -376,7 +376,8 @@ class MonthViewWidget(QWidget):
             self,
             title='삭제 확인',
             text=f"'{summary}' 일정을 정말 삭제하시겠습니까?",
-            settings=self.main_widget.settings
+            settings=self.main_widget.settings,
+            pos=QCursor.pos()
         )
         if msg_box.exec():
             self.main_widget.data_manager.delete_event(event_data)

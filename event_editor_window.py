@@ -12,8 +12,8 @@ class EventEditorWindow(BaseDialog):
     DeleteRole = 2
 
     # __init__ 생성자에 'calendars' 파라미터를 추가합니다.
-    def __init__(self, mode='new', data=None, calendars=None, settings=None, parent=None):
-        super().__init__(parent=parent, settings=settings)
+    def __init__(self, mode='new', data=None, calendars=None, settings=None, parent=None, pos=None):
+        super().__init__(parent=parent, settings=settings, pos=pos)
         self.mode = mode
         self.calendars = calendars if calendars else []
         # self.settings는 BaseDialog에서 이미 처리됨

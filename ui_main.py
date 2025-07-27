@@ -3,7 +3,7 @@ import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QCursor
 
 from settings_manager import load_settings, save_settings
 from config import DEFAULT_WINDOW_GEOMETRY
@@ -221,7 +221,7 @@ class MainWidget(QWidget):
     def open_settings_window(self):
         with self.data_manager.user_action_priority():
             original_opacity = self.settings.get("window_opacity", 0.95)
-            settings_dialog = SettingsWindow(self.data_manager, self.settings, self)
+            settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=QCursor.pos())
             settings_dialog.transparency_changed.connect(self.set_window_opacity)
             
             result = settings_dialog.exec()
@@ -240,10 +240,11 @@ class MainWidget(QWidget):
                 return
 
             editor = None
+            cursor_pos = QCursor.pos() # 커서 위치 저장
             if isinstance(data, (datetime.date, datetime.datetime)):
-                editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self)
+                editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos)
             elif isinstance(data, dict):
-                editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self)
+                editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos)
             
             if editor:
                 result = editor.exec()

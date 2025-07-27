@@ -1,7 +1,7 @@
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QAction
 
 class BaseDialog(QDialog):
@@ -9,16 +9,52 @@ class BaseDialog(QDialog):
     모든 커스텀 다이얼로그의 기반이 되는 클래스.
     - 프레임리스 윈도우, 드래그 이동
     - 메인 윈도우와 연동된 투명도 적용
+    - 지능형 팝업 위치 조정
     """
-    def __init__(self, parent=None, settings=None):
+    def __init__(self, parent=None, settings=None, pos: QPoint = None):
         super().__init__(parent)
         self.settings = settings
+        self.click_pos = pos
         self.oldPos = None
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
         self.apply_opacity()
+
+    def showEvent(self, event):
+        """다이얼로그가 표시되기 직전에 호출되어 위치를 조정합니다."""
+        # 먼저 부모의 showEvent를 호출하여 다이얼로그의 지오메트리를 확정합니다.
+        super().showEvent(event)
+
+        if self.click_pos and self.parent():
+            parent_rect = self.parent().geometry()
+            dialog_size = self.frameGeometry().size()
+
+            # 기본 위치: 클릭 지점
+            x, y = self.click_pos.x(), self.click_pos.y()
+
+            # 오른쪽 경계 확인
+            if x + dialog_size.width() > parent_rect.right():
+                x = self.click_pos.x() - dialog_size.width()
+            
+            # 아래쪽 경계 확인
+            if y + dialog_size.height() > parent_rect.bottom():
+                y = self.click_pos.y() - dialog_size.height()
+
+            # 왼쪽/위쪽 경계 확인
+            if x < parent_rect.left():
+                x = parent_rect.left()
+            if y < parent_rect.top():
+                y = parent_rect.top()
+            
+            self.move(x, y)
+        
+        elif self.parent():
+            # 클릭 위치 정보가 없으면 부모의 중앙에 배치
+            parent_center = self.parent().geometry().center()
+            dialog_rect = self.frameGeometry()
+            self.move(parent_center - dialog_rect.center())
 
     def apply_opacity(self):
         if self.settings:
@@ -41,8 +77,8 @@ class BaseDialog(QDialog):
         self.oldPos = None
 
 class CustomMessageBox(BaseDialog):
-    def __init__(self, parent=None, title="알림", text="메시지 내용", settings=None):
-        super().__init__(parent, settings)
+    def __init__(self, parent=None, title="알림", text="메시지 내용", settings=None, pos=None):
+        super().__init__(parent, settings, pos)
         self.setWindowTitle(title)
         self.setModal(True)
         self.setMinimumWidth(350)
@@ -72,8 +108,8 @@ class CustomMessageBox(BaseDialog):
         content_layout.addLayout(button_layout)
 
 class NewDateSelectionDialog(BaseDialog):
-    def __init__(self, current_date, parent=None, settings=None):
-        super().__init__(parent, settings)
+    def __init__(self, current_date, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
         self.current_display_year = current_date.year
         self.selected_year = current_date.year
         self.selected_month = current_date.month
@@ -185,8 +221,8 @@ class NewDateSelectionDialog(BaseDialog):
 class MoreEventsDialog(BaseDialog):
     edit_requested = pyqtSignal(dict)
     delete_requested = pyqtSignal(dict)
-    def __init__(self, date_obj, events, parent=None, settings=None):
-        super().__init__(parent, settings)
+    def __init__(self, date_obj, events, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
         self.setWindowTitle(f"{date_obj.strftime('%Y-%m-%d')} 일정")
         self.setMinimumWidth(300)
         main_layout = QVBoxLayout(self)

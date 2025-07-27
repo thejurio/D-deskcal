@@ -18,8 +18,8 @@ class SettingsWindow(BaseDialog):
     transparency_changed = pyqtSignal(float) # 실시간 미리보기를 위한 신호 추가
 
     # --- ▼▼▼ __init__ 메서드의 파라미터가 변경되었습니다. ▼▼▼ ---
-    def __init__(self, data_manager, settings, parent=None):
-        super().__init__(parent=parent, settings=settings)
+    def __init__(self, data_manager, settings, parent=None, pos=None):
+        super().__init__(parent=parent, settings=settings, pos=pos)
         self.data_manager = data_manager # service 대신 data_manager를 저장합니다.
         # self.settings는 BaseDialog에서 처리
         

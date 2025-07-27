@@ -222,7 +222,7 @@ class WeekViewWidget(QWidget):
 
     def confirm_delete_event(self, event_data):
         summary = event_data.get('summary', '(제목 없음)')
-        msg_box = CustomMessageBox(self, title='삭제 확인', text=f"'{summary}' 일정을 정말 삭제하시겠습니까?", settings=self.main_widget.settings)
+        msg_box = CustomMessageBox(self, title='삭제 확인', text=f"'{summary}' 일정을 정말 삭제하시겠습니까?", settings=self.main_widget.settings, pos=QCursor.pos())
         if msg_box.exec():
             self.data_manager.delete_event(event_data)
 
