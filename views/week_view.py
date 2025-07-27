@@ -236,7 +236,16 @@ class WeekViewWidget(QWidget):
 
     def confirm_delete_event(self, event_data):
         summary = event_data.get('summary', '(제목 없음)')
-        msg_box = CustomMessageBox(self, title='삭제 확인', text=f"'{summary}' 일정을 정말 삭제하시겠습니까?", settings=self.main_widget.settings, pos=QCursor.pos())
+        
+        # --- ▼▼▼ [개선] 반복 일정 삭제 시 경고 메시지 강화 ▼▼▼ ---
+        is_recurring = 'recurrence' in event_data
+        if is_recurring:
+            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
+        else:
+            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+        # --- ▲▲▲ 여기까지 개선 ▲▲▲ ---
+
+        msg_box = CustomMessageBox(self, title='삭제 확인', text=text, settings=self.main_widget.settings, pos=QCursor.pos())
         if msg_box.exec():
             self.data_manager.delete_event(event_data)
 
@@ -292,7 +301,12 @@ class WeekViewWidget(QWidget):
                     x = col_index * day_column_width + i * width
 
                     event_widget = EventLabelWidget(event, parent_widget)
-                    event_widget.setText(event.get('summary', '(제목 없음)'))
+                    
+                    summary = event.get('summary', '(제목 없음)')
+                    if 'recurrence' in event:
+                        summary = f"🔄 {summary}"
+                    event_widget.setText(summary)
+
                     event_widget.edit_requested.connect(self.edit_event_requested)
                     event_widget.setStyleSheet(f"background-color: {event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;")
                     event_widget.setWordWrap(True)
@@ -393,7 +407,12 @@ class WeekViewWidget(QWidget):
             
             if span > 0:
                 event_label = EventLabelWidget(event, self.all_day_widget)
-                event_label.setText(event['summary'])
+                
+                summary = event.get('summary', '')
+                if 'recurrence' in event:
+                    summary = f"🔄 {summary}"
+                event_label.setText(summary)
+
                 event_label.edit_requested.connect(self.edit_event_requested)
                 event_label.setStyleSheet(f"background-color: {event.get('color', '#555555')}; border-radius: 3px; padding: 1px 3px;")
                 

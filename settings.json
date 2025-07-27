@@ -1,7 +1,7 @@
 {
     "geometry": [
-        547,
-        35,
+        704,
+        26,
         830,
         762
     ],
@@ -28,7 +28,7 @@
         "local_calendar": ""
     },
     "sync_interval_minutes": 5,
-    "last_selected_calendar_id": "thejurio@gmail.com",
+    "last_selected_calendar_id": "local_calendar",
     "window_opacity": 0.9,
     "start_day_of_week": 6
 }

@@ -1,6 +1,8 @@
 import sqlite3
 import json
 import datetime
+from dateutil.rrule import rrulestr
+
 from .base_provider import BaseCalendarProvider
 from config import (DB_FILE, LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_LOCAL_CALENDAR_COLOR, DEFAULT_LOCAL_CALENDAR_EMOJI)
@@ -9,14 +11,31 @@ class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, db_connection=None):
         self.settings = settings
         self._connection = db_connection
-        if not self._connection:
-            self._init_db_table()
+        # DB 연결을 먼저 확인하고 마이그레이션을 수행합니다.
+        self._check_and_migrate_db()
 
     def _get_connection(self):
         """DB 연결을 반환하거나, 없을 경우 새로 생성합니다."""
         if self._connection:
             return self._connection
         return sqlite3.connect(DB_FILE)
+
+    def _check_and_migrate_db(self):
+        """DB 스키마를 확인하고 필요 시 'rrule' 컬럼을 추가합니다."""
+        try:
+            # 테이블이 없는 경우를 대비해 먼저 init을 호출
+            self._init_db_table() 
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(events)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if 'rrule' not in columns:
+                    print("데이터베이스 스키마 마이그레이션: 'rrule' 컬럼을 추가합니다.")
+                    cursor.execute("ALTER TABLE events ADD COLUMN rrule TEXT")
+                    conn.commit()
+        except sqlite3.Error as e:
+            print(f"DB 마이그레이션 중 오류 발생: {e}")
+
 
     def _init_db_table(self):
         """데이터베이스 테이블을 생성합니다. (없을 경우에만)"""
@@ -28,6 +47,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
                         id TEXT PRIMARY KEY,
                         start_date TEXT NOT NULL,
                         end_date TEXT NOT NULL,
+                        rrule TEXT,
                         event_json TEXT NOT NULL
                     )
                 """)
@@ -38,26 +58,77 @@ class LocalCalendarProvider(BaseCalendarProvider):
     # providers/local_provider.py 파일입니다.
 
     def get_events(self, start_date, end_date):
-        """특정 기간 사이의 로컬 이벤트를 반환합니다."""
+        """특정 기간 사이의 로컬 이벤트를 반환합니다. (반복 일정 포함)"""
+        final_events = []
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                # 1. 기간 내의 일반 이벤트 + 모든 반복 이벤트 가져오기
+                # 반복 이벤트는 시작일과 상관없이 모두 가져와서 규칙을 확인해야 함
                 cursor.execute("""
-                    SELECT event_json FROM events
-                    WHERE start_date <= ? AND end_date >= ?
+                    SELECT event_json, rrule FROM events
+                    WHERE (rrule IS NULL AND start_date <= ? AND end_date >= ?) OR rrule IS NOT NULL
                 """, (end_date.isoformat(), start_date.isoformat()))
 
-                events = [json.loads(row[0]) for row in cursor.fetchall()]
+                for event_json, rrule_str in cursor.fetchall():
+                    event_template = json.loads(event_json)
+                    
+                    if rrule_str:
+                        # 2. 반복 이벤트 처리
+                        try:
+                            start_str = event_template['start'].get('dateTime', event_template['start'].get('date'))
+                            end_str = event_template['end'].get('dateTime', event_template['end'].get('date'))
+                            
+                            is_all_day = 'date' in event_template['start']
 
+                            if is_all_day:
+                                start_dt_orig = datetime.datetime.fromisoformat(start_str)
+                                end_dt_orig = datetime.datetime.fromisoformat(end_str)
+                            else:
+                                start_dt_orig = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                                end_dt_orig = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                            
+                            duration = end_dt_orig - start_dt_orig
+
+                            # rrulestr에 dtstart를 반드시 datetime 객체로 전달해야 함
+                            rule = rrulestr(f"RRULE:{rrule_str}", dtstart=start_dt_orig)
+                            
+                            # 3. 기간 내의 반복 인스턴스 생성
+                            view_start_dt = datetime.datetime.combine(start_date, datetime.time.min)
+                            view_end_dt = datetime.datetime.combine(end_date, datetime.time.max)
+
+                            for occurrence_start in rule.between(view_start_dt, view_end_dt, inc=True):
+                                instance_event = json.loads(event_json) # 원본 복사
+                                occurrence_end = occurrence_start + duration
+                                
+                                if 'dateTime' in instance_event['start']:
+                                    instance_event['start'] = {'dateTime': occurrence_start.isoformat(), 'timeZone': 'Asia/Seoul'}
+                                    instance_event['end'] = {'dateTime': occurrence_end.isoformat(), 'timeZone': 'Asia/Seoul'}
+                                else: # 종일 일정
+                                    instance_event['start'] = {'date': occurrence_start.strftime('%Y-%m-%d')}
+                                    instance_event['end'] = {'date': occurrence_end.strftime('%Y-%m-%d')}
+                                
+                                final_events.append(instance_event)
+
+                        except Exception as e:
+                            print(f"반복 규칙 처리 중 오류 발생: {e}, 규칙: '{rrule_str}', 이벤트: {event_template.get('summary')}")
+                            # 오류가 발생한 반복 일정은 건너뛰고, 원본 이벤트만 추가 (선택적)
+                            # final_events.append(event_template) 
+                            continue
+                    else:
+                        # 일반 이벤트는 그냥 추가
+                        final_events.append(event_template)
+
+                # 공통 속성(색상, 이모지) 추가
                 calendar_colors = self.settings.get("calendar_colors", {})
                 calendar_emojis = self.settings.get("calendar_emojis", {})
-                
-                for event in events:
+                for event in final_events:
                     event['calendarId'] = LOCAL_CALENDAR_ID
                     event['color'] = calendar_colors.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_COLOR)
                     event['emoji'] = calendar_emojis.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_EMOJI)
                 
-                return events
+                return final_events
+
         except sqlite3.Error as e:
             print(f"로컬 이벤트 조회 중 오류 발생: {e}")
             return []
@@ -73,6 +144,13 @@ class LocalCalendarProvider(BaseCalendarProvider):
             start_date = body.get('start', {}).get('date') or body.get('start', {}).get('dateTime', '')[:10]
             end_date = body.get('end', {}).get('date') or body.get('end', {}).get('dateTime', '')[:10]
             
+            # --- ▼▼▼ RRULE 데이터 추출 ▼▼▼ ---
+            rrule_str = None
+            if 'recurrence' in body and body['recurrence']:
+                # Google API는 ["RRULE:..."] 형식이므로, 첫 번째 항목을 사용하고 접두사를 제거합니다.
+                rrule_str = body['recurrence'][0].replace('RRULE:', '')
+            # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
             if not all([event_id, start_date, end_date]):
                 return None
 
@@ -82,9 +160,9 @@ class LocalCalendarProvider(BaseCalendarProvider):
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT OR REPLACE INTO events (id, start_date, end_date, event_json)
-                    VALUES (?, ?, ?, ?)
-                """, (event_id, start_date, end_date, json.dumps(body)))
+                    INSERT OR REPLACE INTO events (id, start_date, end_date, rrule, event_json)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (event_id, start_date, end_date, rrule_str, json.dumps(body)))
                 conn.commit()
             
             return body

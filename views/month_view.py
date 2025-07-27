@@ -16,9 +16,11 @@ class DayCellWidget(QWidget):
         self.layout.setContentsMargins(3, 3, 3, 3)
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
     def mouseDoubleClickEvent(self, event):
+        # super()를 먼저 호출하여 기본 이벤트를 처리한 후, 커스텀 시그널을 발생시킵니다.
+        # 이렇게 하면 시그널 처리 도중 위젯이 삭제되더라도 런타임 에러가 발생하지 않습니다.
+        super().mouseDoubleClickEvent(event)
         if event.button() == Qt.MouseButton.LeftButton:
             self.add_event_requested.emit(self.date_obj)
-        super().mouseDoubleClickEvent(event)
 
 class MonthViewWidget(QWidget):
     add_event_requested = pyqtSignal(datetime.date)
@@ -266,7 +268,12 @@ class MonthViewWidget(QWidget):
 
                     event_widget = EventLabelWidget(event, self)
                     event_widget.edit_requested.connect(self.on_edit_event_requested)
-                    event_widget.setText(event.get('summary', ''))
+                    
+                    summary = event.get('summary', '')
+                    # 반복 이벤트인 경우 아이콘 추가
+                    if 'recurrence' in event:
+                        summary = f"🔄 {summary}"
+                    event_widget.setText(summary)
                     
                     start_info = event.get('start', {})
                     tooltip_text = f"<b>{event.get('summary', '')}</b>"
@@ -372,10 +379,19 @@ class MonthViewWidget(QWidget):
 
     def confirm_delete_event(self, event_data):
         summary = event_data.get('summary', '(제목 없음)')
+        
+        # --- ▼▼▼ [개선] 반복 일정 삭제 시 경고 메시지 강화 ▼▼▼ ---
+        is_recurring = 'recurrence' in event_data
+        if is_recurring:
+            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
+        else:
+            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+        # --- ▲▲▲ 여기까지 개선 ▲▲▲ ---
+
         msg_box = CustomMessageBox(
             self,
             title='삭제 확인',
-            text=f"'{summary}' 일정을 정말 삭제하시겠습니까?",
+            text=text,
             settings=self.main_widget.settings,
             pos=QCursor.pos()
         )

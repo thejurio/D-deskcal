@@ -2,7 +2,7 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QAction, QCursor
 
 from settings_manager import load_settings, save_settings
@@ -250,9 +250,20 @@ class MainWidget(QWidget):
                 result = editor.exec()
                 if result == QDialog.DialogCode.Accepted:
                     event_data = editor.get_event_data()
-                    if editor.mode == 'new': self.data_manager.add_event(event_data)
-                    else: self.data_manager.update_event(event_data)
+                    
+                    is_recurring = 'recurrence' in event_data.get('body', {})
+
+                    if editor.mode == 'new': 
+                        self.data_manager.add_event(event_data)
+                    else: 
+                        self.data_manager.update_event(event_data)
+                    
                     self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
+
+                    # 반복 일정이면 즉시 동기화를 요청하여 나머지 일정을 빨리 가져옴
+                    if is_recurring:
+                        QTimer.singleShot(500, self.data_manager.request_full_sync)
+
                 elif result == EventEditorWindow.DeleteRole:
                     event_to_delete = editor.get_event_data()
                     self.data_manager.delete_event(event_to_delete)
