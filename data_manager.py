@@ -8,11 +8,13 @@ from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTi
 
 from providers.google_provider import GoogleCalendarProvider
 from providers.local_provider import LocalCalendarProvider
+from config import (CACHE_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL, 
+                    GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME,
+                    DEFAULT_EVENT_COLOR)
 
 class CachingManager(QObject):
     finished = pyqtSignal()
-    MAX_CACHE_SIZE = 7
-
+    # MAX_CACHE_SIZE는 config에서 가져오도록 수정
     def __init__(self, data_manager):
         super().__init__()
         self.data_manager = data_manager
@@ -117,7 +119,7 @@ class CachingManager(QObject):
 
     def _manage_cache_size(self):
         with QMutexLocker(self._mutex):
-            while len(self.data_manager.event_cache) > self.MAX_CACHE_SIZE:
+            while len(self.data_manager.event_cache) > MAX_CACHE_SIZE:
                 if self._last_viewed_month is None: break
                 farthest_month = max(self.data_manager.event_cache.keys(), 
                                      key=lambda t: abs((t[0] - self._last_viewed_month[0]) * 12 + (t[1] - self._last_viewed_month[1])))
@@ -151,7 +153,6 @@ class DataManager(QObject):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
-        self.cache_file = "cache.json"
         self.event_cache = {}
         self.load_cache_from_file()
         self.last_requested_month = None
@@ -178,7 +179,7 @@ class DataManager(QObject):
         except Exception as e: print(f"Local Provider 생성 중 오류 발생: {e}")
 
     def update_sync_timer(self):
-        interval_minutes = self.settings.get("sync_interval_minutes", 5)
+        interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
         if interval_minutes > 0:
             self.sync_timer.start(interval_minutes * 60 * 1000)
             print(f"자동 동기화 타이머가 설정되었습니다. 주기: {interval_minutes}분")
@@ -204,15 +205,15 @@ class DataManager(QObject):
             self.caching_manager.resume_sync()
 
     def load_cache_from_file(self):
-        if not os.path.exists(self.cache_file): return
+        if not os.path.exists(CACHE_FILE): return
         try:
-            with open(self.cache_file, 'r', encoding='utf-8') as f:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 self.event_cache = {tuple(map(int, k.split('-'))): v for k, v in json.load(f).items()}
         except Exception as e: print(f"캐시 파일 읽기 오류: {e}")
 
     def save_cache_to_file(self):
         try:
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
                 json.dump({f"{k[0]}-{k[1]}": v for k, v in self.event_cache.items()}, f, ensure_ascii=False, indent=4)
         except Exception as e: print(f"캐시 파일 저장 오류: {e}")
 
@@ -261,7 +262,7 @@ class DataManager(QObject):
                     if cal_id:
                         all_calendars = self.get_all_calendars()
                         cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
-                        default_color = cal_info.get('backgroundColor') if cal_info else '#555555'
+                        default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
                         
                         new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
                         new_event['emoji'] = self.settings.get("calendar_emojis", {}).get(cal_id, '')
@@ -292,7 +293,7 @@ class DataManager(QObject):
                     if cal_id:
                         all_calendars = self.get_all_calendars()
                         cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
-                        default_color = cal_info.get('backgroundColor') if cal_info else '#555555'
+                        default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
 
                         updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
                         updated_event['emoji'] = self.settings.get("calendar_emojis", {}).get(cal_id, '')

@@ -9,6 +9,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from providers.base_provider import BaseCalendarProvider
+from config import (TOKEN_FILE, CREDENTIALS_FILE, GOOGLE_CALENDAR_PROVIDER_NAME, 
+                    DEFAULT_EVENT_COLOR)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -30,17 +32,17 @@ class GoogleCalendarProvider(BaseCalendarProvider):
     def _authenticate(self):
         """Google Calendar API와 통신하기 위한 서비스 객체를 생성하고 반환합니다."""
         creds = None
-        if os.path.exists("token.json"):
-            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+        if os.path.exists(TOKEN_FILE):
+            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
         
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+                flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
                 creds = flow.run_local_server(port=0)
             
-            with open("token.json", "w") as token:
+            with open(TOKEN_FILE, "w") as token:
                 token.write(creds.to_json())
         
         return build("calendar", "v3", credentials=creds)
@@ -80,9 +82,9 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 events = events_result.get("items", [])
                 
                 for event in events:
-                    event['provider'] = 'GoogleCalendarProvider' # Provider 정보 추가
+                    event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME # Provider 정보 추가
                     event['calendarId'] = cal_id
-                    default_color = calendar_color_map.get(cal_id, '#555555')
+                    default_color = calendar_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
                     event['color'] = custom_colors.get(cal_id, default_color)
                     event['emoji'] = custom_emojis.get(cal_id, '')
                 
@@ -186,6 +188,6 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 'id': calendar['id'],
                 'summary': calendar['summary'],
                 'backgroundColor': calendar['backgroundColor'],
-                'provider': 'GoogleCalendarProvider'
+                'provider': GOOGLE_CALENDAR_PROVIDER_NAME
             })
         return standardized_calendars

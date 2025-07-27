@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
 
 from settings_manager import load_settings, save_settings
+from config import DEFAULT_WINDOW_GEOMETRY
 
 from data_manager import DataManager
 from views.month_view import MonthViewWidget
@@ -189,7 +190,7 @@ class MainWidget(QWidget):
         self.setWindowTitle('Glassy Calendar')
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        geometry = self.settings.get("geometry", [200, 200, 500, 450])
+        geometry = self.settings.get("geometry", DEFAULT_WINDOW_GEOMETRY)
         self.setGeometry(*geometry)
         
         main_layout = QVBoxLayout(self)

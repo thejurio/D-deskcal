@@ -707,6 +707,42 @@
             },
             "eventType": "default",
             "provider": "GoogleCalendarProvider"
+        },
+        {
+            "kind": "calendar#event",
+            "etag": "\"3507194706823326\"",
+            "id": "1prk6bs7mora8266t5j4g24n0k",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=MXByazZiczdtb3JhODI2NnQ1ajRnMjRuMGsgdGhlanVyaW9AbQ",
+            "created": "2025-07-27T06:22:33.000Z",
+            "updated": "2025-07-27T06:22:33.411Z",
+            "summary": "12",
+            "creator": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "organizer": {
+                "email": "thejurio@gmail.com",
+                "self": true
+            },
+            "start": {
+                "dateTime": "2025-07-02T15:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "end": {
+                "dateTime": "2025-07-02T16:00:00+09:00",
+                "timeZone": "Asia/Seoul"
+            },
+            "iCalUID": "1prk6bs7mora8266t5j4g24n0k@google.com",
+            "sequence": 0,
+            "reminders": {
+                "useDefault": true
+            },
+            "eventType": "default",
+            "calendarId": "thejurio@gmail.com",
+            "provider": "GoogleCalendarProvider",
+            "color": "#a0aee5",
+            "emoji": ""
         }
     ],
     "2025-8": [

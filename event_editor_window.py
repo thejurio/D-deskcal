@@ -3,6 +3,7 @@ import uuid
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox, QWidget)
 from PyQt6.QtCore import QDateTime, Qt
+from config import GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME
 
 class EventEditorWindow(QDialog):
     # __init__ 생성자에 'calendars' 파라미터를 추가합니다.
@@ -184,7 +185,8 @@ class EventEditorWindow(QDialog):
         # 수정 모드일 경우, 기존 이벤트 ID를 포함시킵니다.
         if self.mode == 'edit':
             event_body['id'] = self.event_data.get('id')
-        else: # 로컬 캘린더의 새 이벤트는 자체 ID가 필요합니다.
+        # 로컬 캘린더의 새 이벤트는 자체 ID가 필요합니다.
+        elif self.calendar_combo.currentData()['provider'] == LOCAL_CALENDAR_PROVIDER_NAME:
             event_body['id'] = str(uuid.uuid4())
 
 

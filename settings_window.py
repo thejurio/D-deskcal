@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton,
                              QColorDialog, QComboBox)
 from PyQt6.QtGui import QColor, QPixmap, QIcon
 from PyQt6.QtCore import Qt
+from config import DEFAULT_SYNC_INTERVAL
 
 # --- 미리 정의된 상수들은 그대로 둡니다. ---
 PASTEL_COLORS = {
@@ -85,7 +86,7 @@ class SettingsWindow(QDialog):
             self.sync_interval_combo.addItem(text, minutes)
         
         # 현재 설정값 불러오기
-        current_interval = self.settings.get("sync_interval_minutes", 5) # 기본값 5분
+        current_interval = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL) # 기본값 5분
         current_text = self.sync_options.get(current_interval, "5분")
         self.sync_interval_combo.setCurrentText(current_text)
 

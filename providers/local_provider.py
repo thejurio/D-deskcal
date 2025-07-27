@@ -2,8 +2,8 @@ import sqlite3
 import json
 import datetime
 from .base_provider import BaseCalendarProvider
-
-DB_FILE = "calendar.db"
+from config import (DB_FILE, LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
+                    DEFAULT_LOCAL_CALENDAR_COLOR, DEFAULT_LOCAL_CALENDAR_EMOJI)
 
 class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings):
@@ -49,11 +49,11 @@ class LocalCalendarProvider(BaseCalendarProvider):
                 calendar_emojis = self.settings.get("calendar_emojis", {})
                 
                 for event in events:
-                    event['calendarId'] = 'local_calendar'
+                    event['calendarId'] = LOCAL_CALENDAR_ID
                     # 'local_calendar' ID를 키로 사용하여 설정된 색상과 이모티콘을 가져옵니다.
                     # 만약 설정된 값이 없으면, 기본값을 사용합니다.
-                    event['color'] = calendar_colors.get('local_calendar', "#4CAF50")
-                    event['emoji'] = calendar_emojis.get('local_calendar', '💻')
+                    event['color'] = calendar_colors.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_COLOR)
+                    event['emoji'] = calendar_emojis.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_EMOJI)
                 # --- ▲▲▲ 여기까지가 수정된 핵심입니다 ▲▲▲ ---
                 
                 return events
@@ -77,8 +77,8 @@ class LocalCalendarProvider(BaseCalendarProvider):
             if not all([event_id, start_date, end_date]):
                 return None
 
-            body['provider'] = 'LocalCalendarProvider'
-            body['calendarId'] = 'local_calendar'
+            body['provider'] = LOCAL_CALENDAR_PROVIDER_NAME
+            body['calendarId'] = LOCAL_CALENDAR_ID
 
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
@@ -126,9 +126,9 @@ class LocalCalendarProvider(BaseCalendarProvider):
     def get_calendars(self):
         """'로컬 캘린더' 자체에 대한 정보를 표준 형식으로 반환합니다."""
         return [{
-            'id': 'local_calendar',  # 로컬 캘린더를 위한 고유 ID
+            'id': LOCAL_CALENDAR_ID,  # 로컬 캘린더를 위한 고유 ID
             'summary': '로컬 캘린더',
             # 설정에 저장된 색상 또는 기본 색상을 사용합니다.
-            'backgroundColor': self.settings.get("local_calendar_color", "#4CAF50"),
-            'provider': 'LocalCalendarProvider'
+            'backgroundColor': self.settings.get("local_calendar_color", DEFAULT_LOCAL_CALENDAR_COLOR),
+            'provider': LOCAL_CALENDAR_PROVIDER_NAME
         }]

@@ -1,7 +1,6 @@
 import json
 import os
-
-SETTINGS_FILE = "settings.json"
+from config import SETTINGS_FILE
 
 def load_settings():
     """설정 파일(settings.json)을 읽어와서 딕셔너리로 반환합니다."""
