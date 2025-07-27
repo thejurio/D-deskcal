@@ -44,37 +44,45 @@ class WeekViewWidget(QWidget):
             self.redraw_events_with_current_data()
     # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
+    def _get_datetime_from_pos(self, pos):
+        """주어진 QPoint 위치를 datetime.datetime 객체로 변환합니다. 유효하지 않은 위치일 경우 None을 반환합니다."""
+        if not self.scroll_area.geometry().contains(pos):
+            return None
+        
+        pos_in_viewport = self.scroll_area.widget().mapFrom(self, pos)
+        pos_in_event_container = self.event_container.mapFromParent(pos_in_viewport)
+
+        time_label_width = 50
+        if pos_in_viewport.x() < time_label_width:
+            return None
+
+        days_width = self.event_container.width()
+        if days_width <= 0:
+            return None
+        
+        day_column_width = days_width / 7
+        day_index = int(pos_in_event_container.x() // day_column_width)
+        if not (0 <= day_index < 7):
+            return None
+
+        hour = int(pos_in_event_container.y() // self.hour_height)
+        minute = int((pos_in_event_container.y() % self.hour_height) / self.hour_height * 60)
+        minute = round(minute / 15) * 15
+        if minute == 60:
+            minute = 0
+            hour += 1
+        if not (0 <= hour < 25):
+            return None
+
+        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
+        target_date = start_of_week + datetime.timedelta(days=day_index)
+        return datetime.datetime(target_date.year, target_date.month, target_date.day, hour, minute)
+
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            pos = event.pos()
-            if not self.scroll_area.geometry().contains(pos): return
-            
-            pos_in_viewport = self.scroll_area.widget().mapFrom(self, pos)
-            pos_in_event_container = self.event_container.mapFromParent(pos_in_viewport)
-
-            time_label_width = 50
-            
-            if pos_in_viewport.x() < time_label_width: return
-
-            days_width = self.event_container.width()
-            if days_width <= 0: return
-            
-            day_column_width = days_width / 7
-            day_index = int(pos_in_event_container.x() // day_column_width)
-            if not (0 <= day_index < 7): return
-
-            hour = int(pos_in_event_container.y() // self.hour_height)
-            minute = int((pos_in_event_container.y() % self.hour_height) / self.hour_height * 60)
-            minute = round(minute / 15) * 15
-            if minute == 60:
-                minute = 0
-                hour += 1
-            if not (0 <= hour < 25): return
-
-            start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
-            target_date = start_of_week + datetime.timedelta(days=day_index)
-            target_datetime = datetime.datetime(target_date.year, target_date.month, target_date.day, hour, minute)
-            self.add_event_requested.emit(target_datetime)
+            target_datetime = self._get_datetime_from_pos(event.pos())
+            if target_datetime:
+                self.add_event_requested.emit(target_datetime)
 
     def initUI(self):
         main_layout = QVBoxLayout(self)
@@ -217,6 +225,12 @@ class WeekViewWidget(QWidget):
             delete_action = QAction("삭제", self)
             delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
             menu.addAction(delete_action)
+        else:
+            target_datetime = self._get_datetime_from_pos(pos)
+            if target_datetime:
+                add_action = QAction("일정 추가", self)
+                add_action.triggered.connect(lambda: self.add_event_requested.emit(target_datetime))
+                menu.addAction(add_action)
         self.main_widget.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
 
