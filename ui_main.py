@@ -264,12 +264,14 @@ class MainWidget(QWidget):
         content_layout.addWidget(self.stacked_widget)
 
         self.month_view = MonthViewWidget(self)
-        self.week_view = WeekViewWidget(self) # ListViewWidget -> WeekViewWidget
+        self.week_view = WeekViewWidget(self)
         self.month_view.add_event_requested.connect(self.open_event_editor)
         self.month_view.edit_event_requested.connect(self.open_event_editor)
+        self.week_view.add_event_requested.connect(self.open_event_editor)
+        self.week_view.edit_event_requested.connect(self.open_event_editor) # week_view의 수정 시그널 연결
 
         self.stacked_widget.addWidget(self.month_view)
-        self.stacked_widget.addWidget(self.week_view) # ListViewWidget -> WeekViewWidget
+        self.stacked_widget.addWidget(self.week_view)
         
         month_button.clicked.connect(lambda: self.change_view(0, month_button, [week_button]))
         week_button.clicked.connect(lambda: self.change_view(1, week_button, [month_button]))
@@ -280,9 +282,11 @@ class MainWidget(QWidget):
     def go_to_today(self):
         """오늘 날짜가 포함된 뷰로 이동합니다."""
         today = datetime.date.today()
+        # 각 뷰의 기준 날짜를 오늘로 설정
         self.month_view.current_date = today
-        self.month_view.refresh()
-        self.refresh_current_view() # 목록 뷰도 새로고침되도록 추가
+        self.week_view.current_date = today
+        # 현재 활성화된 뷰를 새로고침
+        self.refresh_current_view()
 
     def start(self):
         QTimer.singleShot(0, self.initial_load)
@@ -290,20 +294,13 @@ class MainWidget(QWidget):
     def initial_load(self):
         """현재 달을 기준으로 초기 캐싱 계획을 수립합니다."""
         self.data_manager.load_initial_month()
-    def initial_load(self):
-        """현재 달을 기준으로 초기 캐싱 계획을 수립합니다."""
-        self.data_manager.load_initial_month()
-
+    
     def on_data_updated(self, year, month):
         """
-        데이터 변경 신호를 받아 현재 활성화된 뷰에 새로고침이 필요한지 확인합니다.
-        MonthView는 자체적으로 신호를 처리하므로, 여기서는 다른 뷰(WeekView)를 위해 처리합니다.
+        데이터 변경 신호를 받아 현재 활성화된 뷰를 새로고침합니다.
         """
-        # MonthView가 보고 있는 월의 데이터가 변경되었고, 현재 WeekView가 활성화 상태일 때
-        if (year == self.month_view.current_date.year and 
-            month == self.month_view.current_date.month and
-            self.stacked_widget.currentWidget() == self.week_view):
-            self.week_view.refresh()
+        print(f"데이터 변경 감지 ({year}-{month}), 현재 뷰 새로고침 중...")
+        self.refresh_current_view()
 
     def change_view(self, index, checked_button=None, other_buttons=None):
         self.stacked_widget.setCurrentIndex(index)
@@ -312,6 +309,11 @@ class MainWidget(QWidget):
             if other_buttons:
                 for button in other_buttons:
                     button.setChecked(False)
+        
+        # 뷰가 변경될 때, 월간 뷰의 날짜를 주간 뷰에 반영
+        if self.stacked_widget.currentWidget() == self.week_view:
+            self.week_view.current_date = self.month_view.current_date
+        
         self.refresh_current_view()
 
     def refresh_current_view(self):
@@ -341,7 +343,7 @@ class MainWidget(QWidget):
                 print("편집할 캘린더가 없습니다. 설정을 확인해주세요.")
                 return
 
-            if isinstance(data, datetime.date):
+            if isinstance(data, (datetime.date, datetime.datetime)): # datetime.datetime 타입도 처리하도록 수정
                 editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self)
                 if editor.exec():
                     new_event_data = editor.get_event_data()

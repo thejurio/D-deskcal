@@ -1,3 +1,4 @@
+# data_manager.py
 import datetime
 import calendar
 import json
@@ -14,7 +15,6 @@ from config import (CACHE_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL,
 
 class CachingManager(QObject):
     finished = pyqtSignal()
-    # MAX_CACHE_SIZE는 config에서 가져오도록 수정
     def __init__(self, data_manager):
         super().__init__()
         self.data_manager = data_manager
@@ -86,7 +86,7 @@ class CachingManager(QObject):
                 print(f"백그라운드 캐싱 수행: {year}년 {month}월")
                 events = self.data_manager._fetch_events_from_providers(year, month)
                 if events is not None:
-                    self.data_manager._update_caches(year, month, events) # _update_caches 호출
+                    self.data_manager.event_cache[(year, month)] = events
                     self.data_manager.data_updated.emit(year, month)
                     self._manage_cache_size()
                 time.sleep(0.5)
@@ -111,7 +111,7 @@ class CachingManager(QObject):
             print(f"동기화 중: {year}년 {month}월")
             events = self.data_manager._fetch_events_from_providers(year, month)
             if events is not None:
-                self.data_manager._update_caches(year, month, events) # _update_caches 호출
+                self.data_manager.event_cache[(year, month)] = events
                 self.data_manager.data_updated.emit(year, month)
             time.sleep(0.2)
         if self._is_running:
@@ -128,10 +128,6 @@ class CachingManager(QObject):
             
             protected_months = {current_month, prev_month, next_month}
             
-            # 주간 캐시 보호 로직 추가
-            current_week_key = (today.year, today.isocalendar()[1])
-
-            # 월간 캐시 정리
             while len(self.data_manager.event_cache) > MAX_CACHE_SIZE:
                 if self._last_viewed_month is None: break
                 
@@ -143,22 +139,6 @@ class CachingManager(QObject):
                 farthest_month = max(candidates, key=candidates.get)
                 print(f"월간 캐시 용량 초과. 가장 먼 항목 제거: {farthest_month}")
                 del self.data_manager.event_cache[farthest_month]
-
-            # 주간 캐시 정리 (월간 캐시에 없는 주간 데이터는 삭제)
-            existing_months = self.data_manager.event_cache.keys()
-            weeks_to_delete = []
-            for year, week_num in self.data_manager.week_event_cache.keys():
-                if (year, week_num) == current_week_key: continue # 이번 주는 보호
-
-                # 해당 주가 어떤 월에 속하는지 확인
-                # (대략적인 계산, isocalendar의 주 시작은 월요일 기준)
-                d = datetime.date.fromisocalendar(year, week_num, 1)
-                if (d.year, d.month) not in existing_months:
-                    weeks_to_delete.append((year, week_num))
-            
-            for week_key in weeks_to_delete:
-                print(f"오래된 주간 캐시 제거: {week_key}")
-                del self.data_manager.week_event_cache[week_key]
 
     def pause_sync(self):
         self._activity_lock.lock()
@@ -185,8 +165,7 @@ class DataManager(QObject):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
-        self.event_cache = {} # 월별 캐시: {(year, month): [events]}
-        self.week_event_cache = {} # 주차별 캐시: {(year, week_number): [events]}
+        self.event_cache = {} # 월별 캐시만 유지: {(year, month): [events]}
         self.load_cache_from_file()
         self.last_requested_month = None
         self.providers = []
@@ -242,50 +221,19 @@ class DataManager(QObject):
         try:
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+                # 이제 월간 캐시만 로드합니다.
                 self.event_cache = {tuple(map(int, k.split('-'))): v for k, v in data.get('monthly', {}).items()}
-                self.week_event_cache = {tuple(map(int, k.split('-'))): v for k, v in data.get('weekly', {}).items()}
         except Exception as e: print(f"캐시 파일 읽기 오류: {e}")
 
     def save_cache_to_file(self):
         try:
             with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                # 이제 월간 캐시만 저장합니다.
                 data_to_save = {
-                    'monthly': {f"{k[0]}-{k[1]}": v for k, v in self.event_cache.items()},
-                    'weekly': {f"{k[0]}-{k[1]}": v for k, v in self.week_event_cache.items()}
+                    'monthly': {f"{k[0]}-{k[1]}": v for k, v in self.event_cache.items()}
                 }
                 json.dump(data_to_save, f, ensure_ascii=False, indent=4)
         except Exception as e: print(f"캐시 파일 저장 오류: {e}")
-
-    def _update_caches(self, year, month, events):
-        """월별 이벤트 목록을 사용하여 월간 및 주간 캐시를 모두 업데이트합니다."""
-        self.event_cache[(year, month)] = events
-        
-        # 이 달의 모든 날짜에 대해 주차를 계산하고 이벤트를 분류합니다.
-        _, num_days = calendar.monthrange(year, month)
-        for day_num in range(1, num_days + 1):
-            current_date = datetime.date(year, month, day_num)
-            week_number = current_date.isocalendar()[1]
-            week_key = (year, week_number)
-            
-            # 해당 주차의 첫 날을 계산합니다.
-            first_day_of_week = current_date - datetime.timedelta(days=current_date.weekday())
-            
-            # 해당 주에 속하는 이벤트들을 필터링합니다.
-            week_events = []
-            for event in events:
-                start_str = event['start'].get('date') or event['start'].get('dateTime')[:10]
-                event_date = datetime.date.fromisoformat(start_str)
-                if first_day_of_week <= event_date < first_day_of_week + datetime.timedelta(days=7):
-                    week_events.append(event)
-            
-            # 기존 주간 캐시에 추가 (중복 제거)
-            if week_key not in self.week_event_cache:
-                self.week_event_cache[week_key] = []
-            
-            existing_ids = {e['id'] for e in self.week_event_cache[week_key]}
-            for event in week_events:
-                if event['id'] not in existing_ids:
-                    self.week_event_cache[week_key].append(event)
 
     def _fetch_events_from_providers(self, year, month):
         all_events = []
@@ -297,9 +245,6 @@ class DataManager(QObject):
                 if events is not None: all_events.extend(events)
             except Exception as e:
                 print(f"'{type(provider).__name__}' 이벤트 조회 오류: {e}")
-        
-        # 가져온 데이터를 기반으로 캐시 업데이트
-        self._update_caches(year, month, all_events)
         return all_events
 
     def get_events(self, year, month):
@@ -315,9 +260,48 @@ class DataManager(QObject):
 
         return self.event_cache.get(cache_key, [])
 
-    def get_week_events(self, year, week_number):
-        """특정 연도의 특정 주차에 해당하는 이벤트 목록을 반환합니다."""
-        return self.week_event_cache.get((year, week_number), [])
+    def get_events_for_period(self, start_date, end_date):
+        """주어진 기간(start_date, end_date 포함)에 걸친 모든 이벤트를 반환합니다."""
+        all_events = []
+        
+        # 기간에 포함되는 모든 월을 찾습니다.
+        months_to_check = set()
+        current_date = start_date
+        while current_date <= end_date:
+            months_to_check.add((current_date.year, current_date.month))
+            # 다음 달로 이동
+            if current_date.month == 12:
+                current_date = current_date.replace(year=current_date.year + 1, month=1, day=1)
+            else:
+                current_date = current_date.replace(month=current_date.month + 1, day=1)
+
+        # 각 월의 이벤트를 가져와서 기간에 포함되는지 확인합니다.
+        for year, month in months_to_check:
+            monthly_events = self.get_events(year, month)
+            for event in monthly_events:
+                try:
+                    start_info = event.get('start', {})
+                    end_info = event.get('end', {})
+                    
+                    start_str = start_info.get('date') or start_info.get('dateTime', '')[:10]
+                    # Google Calendar 종일 일정의 end.date는 실제 종료일 + 1일이므로 -1일 해줍니다.
+                    end_str = end_info.get('date') or end_info.get('dateTime', '')[:10]
+                    
+                    event_start_date = datetime.date.fromisoformat(start_str)
+                    event_end_date = datetime.date.fromisoformat(end_str)
+                    if 'date' in end_info:
+                        event_end_date -= datetime.timedelta(days=1)
+
+                    # 이벤트 기간이 주어진 기간과 겹치는지 확인
+                    if not (event_end_date < start_date or event_start_date > end_date):
+                        all_events.append(event)
+                except (ValueError, TypeError) as e:
+                    print(f"이벤트 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
+                    continue
+        
+        # 중복 제거 (다른 월에서 동일 이벤트가 포함될 수 있음)
+        unique_events = {e['id']: e for e in all_events}.values()
+        return list(unique_events)
 
     def get_all_calendars(self):
         all_calendars = []

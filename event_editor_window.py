@@ -13,7 +13,8 @@ class EventEditorWindow(QDialog):
         self.calendars = calendars if calendars else []
         self.settings = settings if settings else {} # settings를 저장합니다.
         self.event_data = data if isinstance(data, dict) else {}
-        self.date_info = data if isinstance(data, datetime.date) else None
+        # data가 datetime.date 또는 datetime.datetime 객체일 수 있으므로 date_info로 저장
+        self.date_info = data if isinstance(data, (datetime.date, datetime.datetime)) else None
         self.oldPos = None # 창 드래그를 위한 변수 초기화
 
         self.setWindowTitle("일정 추가" if self.mode == 'new' else "일정 수정")
@@ -153,10 +154,18 @@ class EventEditorWindow(QDialog):
                 end_dt = end_dt.addDays(-1)
             self.end_time_edit.setDateTime(end_dt)
 
-        else: # 'new' mode
-            now = datetime.datetime.now()
-            start_dt = datetime.datetime(self.date_info.year, self.date_info.month, self.date_info.day, now.hour, 0)
+        elif self.mode == 'new' and self.date_info: # 'new' mode이고 date_info가 있을 때
+            if isinstance(self.date_info, datetime.datetime):
+                # datetime 객체면 시간 정보까지 사용
+                start_dt = self.date_info
+            else: # date 객체면 현재 시간 사용
+                now = datetime.datetime.now()
+                start_dt = datetime.datetime.combine(self.date_info, now.time())
+            
+            # 분을 0분으로 초기화
+            start_dt = start_dt.replace(minute=0, second=0, microsecond=0)
             end_dt = start_dt + datetime.timedelta(hours=1)
+            
             self.start_time_edit.setDateTime(QDateTime(start_dt))
             self.end_time_edit.setDateTime(QDateTime(end_dt))
 
