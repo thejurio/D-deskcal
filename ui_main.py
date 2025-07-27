@@ -168,6 +168,13 @@ DARK_THEME_STYLESHEET = """
     QCalendarWidget QWidget {
         alternate-background-color: #424242;
     }
+    /* 메시지 박스 */
+    QMessageBox {
+        background-color: #3C3C3C;
+    }
+    QMessageBox QLabel {
+        color: #FFFFFF;
+    }
 """
 
 class MainWidget(QWidget):

@@ -443,50 +443,6 @@
         },
         {
             "kind": "calendar#event",
-            "etag": "\"3507173906216094\"",
-            "id": "p55f3eqvtqkt97ngj39nk5rl1c",
-            "status": "confirmed",
-            "htmlLink": "https://www.google.com/calendar/event?eid=cDU1ZjNlcXZ0cWt0OTduZ2ozOW5rNXJsMWMgdGhlanVyaW9AbQ",
-            "created": "2025-07-26T08:40:19.000Z",
-            "updated": "2025-07-27T03:29:13.108Z",
-            "summary": "테스트-변경",
-            "creator": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "organizer": {
-                "email": "thejurio@gmail.com",
-                "self": true
-            },
-            "start": {
-                "date": "2025-07-18"
-            },
-            "end": {
-                "date": "2025-07-19"
-            },
-            "iCalUID": "p55f3eqvtqkt97ngj39nk5rl1c@google.com",
-            "sequence": 0,
-            "reminders": {
-                "useDefault": false,
-                "overrides": [
-                    {
-                        "method": "email",
-                        "minutes": 10
-                    },
-                    {
-                        "method": "popup",
-                        "minutes": 30
-                    }
-                ]
-            },
-            "eventType": "default",
-            "provider": "GoogleCalendarProvider",
-            "calendarId": "thejurio@gmail.com",
-            "color": "#a0aee5",
-            "emoji": ""
-        },
-        {
-            "kind": "calendar#event",
             "etag": "\"3503736585525150\"",
             "id": "_6p332gho6oqjgb9g8h23eb9k8gpj2ba18os36ba36l34ah9m8h0jicpm88",
             "status": "confirmed",
@@ -717,23 +673,6 @@
             "provider": "GoogleCalendarProvider",
             "calendarId": "ko.south_korea#holiday@group.v.calendar.google.com",
             "color": "#e95f72",
-            "emoji": ""
-        },
-        {
-            "summary": "로컬 테스트",
-            "description": "",
-            "start": {
-                "dateTime": "2025-07-10T14:00:00",
-                "timeZone": "Asia/Seoul"
-            },
-            "end": {
-                "dateTime": "2025-07-10T15:00:00",
-                "timeZone": "Asia/Seoul"
-            },
-            "id": "0065adec-e0c4-4748-a837-2fe15e59cba8",
-            "provider": "LocalCalendarProvider",
-            "calendarId": "local_calendar",
-            "color": "#4CAF50",
             "emoji": ""
         },
         {

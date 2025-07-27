@@ -1,8 +1,10 @@
 import datetime
 import calendar
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QMessageBox
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
+
+from custom_dialogs import CustomMessageBox, DateSelectionDialog
 
 # EventLabelWidget, DayCellWidget 클래스는 변경사항 없습니다.
 class EventLabelWidget(QLabel):
@@ -67,23 +69,39 @@ class MonthViewWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
-        self.month_label = QLabel()
+        
+        # month_label을 QPushButton으로 변경
+        self.month_button = QPushButton()
+        self.month_button.clicked.connect(self.open_date_selection_dialog)
+        
         nav_button_style = "QPushButton { color: white; background-color: transparent; border: none; font-size: 20px; } QPushButton:hover { color: #aaaaaa; }"
+        month_button_style = "QPushButton { color: white; background-color: transparent; border: none; font-size: 16px; font-weight: bold; } QPushButton:hover { color: #aaaaaa; }"
+        
         prev_button.setStyleSheet(nav_button_style)
         next_button.setStyleSheet(nav_button_style)
-        self.month_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold;")
-        self.month_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.month_button.setStyleSheet(month_button_style)
+        
         prev_button.clicked.connect(self.go_to_previous_month)
         next_button.clicked.connect(self.go_to_next_month)
+        
         nav_layout.addWidget(prev_button)
         nav_layout.addStretch(1)
-        nav_layout.addWidget(self.month_label)
+        nav_layout.addWidget(self.month_button)
         nav_layout.addStretch(1)
         nav_layout.addWidget(next_button)
         main_layout.addLayout(nav_layout)
+        
         self.calendar_grid = QGridLayout()
         self.calendar_grid.setSpacing(0)
         main_layout.addLayout(self.calendar_grid)
+
+    def open_date_selection_dialog(self):
+        """날짜 선택 다이얼로그를 엽니다."""
+        dialog = DateSelectionDialog(self.current_date, self)
+        if dialog.exec():
+            year, month = dialog.get_selected_date()
+            self.current_date = self.current_date.replace(year=year, month=month, day=1)
+            self.refresh()
 
     def on_add_event_requested(self, date_obj): self.add_event_requested.emit(date_obj)
     def on_edit_event_requested(self, event_data): self.edit_event_requested.emit(event_data)
@@ -95,7 +113,7 @@ class MonthViewWidget(QWidget):
             child = self.calendar_grid.takeAt(0)
             if child.widget(): child.widget().deleteLater()
         self.date_to_cell_map.clear()
-        self.month_label.setText(f"{year}년 {month}월")
+        self.month_button.setText(f"{year}년 {month}월")
         days_of_week = ["일", "월", "화", "수", "목", "금", "토"]
         for i, day in enumerate(days_of_week):
             label = QLabel(day)
@@ -275,13 +293,13 @@ class MonthViewWidget(QWidget):
     def confirm_delete_event(self, event_data):
         """삭제 확인 대화 상자를 표시하고 사용자의 선택에 따라 이벤트를 삭제합니다."""
         summary = event_data.get('summary', '(제목 없음)')
-        reply = QMessageBox.question(
+        
+        msg_box = CustomMessageBox(
             self,
-            '삭제 확인',
-            f"'{summary}' 일정을 정말 삭제하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+            title='삭제 확인',
+            text=f"'{summary}' 일정을 정말 삭제하시겠습니까?"
         )
-
-        if reply == QMessageBox.StandardButton.Yes:
+        
+        # exec()는 사용자가 "확인"을 누르면 True, "취소"를 누르면 False를 반환합니다.
+        if msg_box.exec():
             self.main_widget.data_manager.delete_event(event_data)
