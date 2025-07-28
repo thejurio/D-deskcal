@@ -166,19 +166,23 @@ class CachingManager(QObject):
 
 class DataManager(QObject):
     data_updated = pyqtSignal(int, int)
-    # 캘린더 목록이 변경되었음을 알리는 신호 추가
     calendar_list_changed = pyqtSignal()
+    event_completion_changed = pyqtSignal() # 완료 상태 변경 시그널 추가
 
     def __init__(self, settings, start_timer=True, load_cache=True):
         super().__init__()
         self.settings = settings
-        self.auth_manager = AuthManager() # AuthManager 인스턴스 생성
+        self.auth_manager = AuthManager()
         self.auth_manager.auth_state_changed.connect(self.on_auth_state_changed)
 
         self.event_cache = {}
+        self.completed_event_ids = set() # 완료된 이벤트 ID를 저장할 집합
+
         if load_cache:
             self._init_cache_db()
             self._load_cache_from_db()
+            self._init_completed_events_db()
+            self._load_completed_event_ids()
         
         self.last_requested_month = None
         self.providers = []
@@ -196,8 +200,92 @@ class DataManager(QObject):
             self.sync_timer.timeout.connect(self.request_full_sync)
             self.update_sync_timer()
         
-        # 초기 Provider 로드
         self.setup_providers()
+
+    def _init_completed_events_db(self):
+        """완료된 이벤트 ID 저장을 위한 DB 테이블을 생성합니다."""
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS completed_events (
+                        event_id TEXT PRIMARY KEY
+                    )
+                """)
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"완료 이벤트 DB 테이블 초기화 중 오류 발생: {e}")
+
+    def _load_completed_event_ids(self):
+        """DB에서 완료된 이벤트 ID 목록을 로드하여 집합에 저장합니다."""
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT event_id FROM completed_events")
+                self.completed_event_ids = {row[0] for row in cursor.fetchall()}
+            print(f"DB에서 {len(self.completed_event_ids)}개의 완료된 이벤트 상태를 로드했습니다.")
+        except sqlite3.Error as e:
+            print(f"DB에서 완료 이벤트 로드 중 오류 발생: {e}")
+
+    def is_event_completed(self, event_id):
+        """주어진 이벤트 ID가 완료되었는지 확인합니다."""
+        return event_id in self.completed_event_ids
+
+    def mark_event_as_completed(self, event_id):
+        """이벤트를 완료 상태로 표시하고 DB에 저장합니다."""
+        if event_id in self.completed_event_ids:
+            return
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT OR IGNORE INTO completed_events (event_id) VALUES (?)", (event_id,))
+                conn.commit()
+            self.completed_event_ids.add(event_id)
+            self.event_completion_changed.emit() # UI 즉시 갱신
+            print(f"이벤트 {event_id}를 완료 처리했습니다.")
+        except sqlite3.Error as e:
+            print(f"이벤트 완료 처리 중 DB 오류 발생: {e}")
+
+    def unmark_event_as_completed(self, event_id):
+        """이벤트의 완료 상태를 해제하고 DB에서 삭제합니다."""
+        if event_id not in self.completed_event_ids:
+            return
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM completed_events WHERE event_id = ?", (event_id,))
+                conn.commit()
+            self.completed_event_ids.discard(event_id)
+            self.event_completion_changed.emit() # UI 즉시 갱신
+            print(f"이벤트 {event_id}를 진행 중으로 변경했습니다.")
+        except sqlite3.Error as e:
+            print(f"이벤트 진행 중 처리 중 DB 오류 발생: {e}")
+
+    def update_cached_events_colors(self):
+        """현재 캐시된 모든 이벤트의 색상을 최신 설정에 따라 업데이트합니다."""
+        print("캐시된 이벤트의 색상을 업데이트합니다...")
+        all_calendars = self.get_all_calendars()
+        if not all_calendars:
+            return
+
+        custom_colors = self.settings.get("calendar_colors", {})
+        # Provider에서 기본 색상을 가져오기 위한 맵 생성
+        default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
+
+        for month_key, events in self.event_cache.items():
+            for event in events:
+                cal_id = event.get('calendarId')
+                if cal_id:
+                    default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
+                    event['color'] = custom_colors.get(cal_id, default_color)
+            
+            # DB 캐시도 업데이트
+            self._save_month_to_cache_db(month_key[0], month_key[1], events)
+
+        # 모든 뷰가 새로고침되도록 현재 보고 있는 달의 data_updated 시그널을 보냅니다.
+        if self.last_requested_month:
+            self.data_updated.emit(self.last_requested_month[0], self.last_requested_month[1])
+        print("색상 업데이트 완료.")
 
     def _init_cache_db(self):
         """캐시 저장을 위한 DB 테이블을 생성합니다."""
@@ -411,6 +499,7 @@ class DataManager(QObject):
                     if 'provider' not in new_event:
                         new_event['provider'] = provider_name
 
+                    # --- ▼▼▼ [추가] 색상 적용 로직 중앙화 ▼▼▼ ---
                     cal_id = new_event.get('calendarId')
                     if cal_id:
                         all_calendars = self.get_all_calendars()
@@ -418,7 +507,8 @@ class DataManager(QObject):
                         default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
                         
                         new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                        new_event['emoji'] = self.settings.get("calendar_emojis", {}).get(cal_id, '')
+                        # 이모지는 여기서 처리하지 않음 (필요 시 추가)
+                    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
                     start_str = new_event['start'].get('date') or new_event['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
@@ -442,6 +532,7 @@ class DataManager(QObject):
                     if 'provider' not in updated_event:
                         updated_event['provider'] = provider_name
 
+                    # --- ▼▼▼ [추가] 색상 적용 로직 중앙화 ▼▼▼ ---
                     cal_id = updated_event.get('calendarId')
                     if cal_id:
                         all_calendars = self.get_all_calendars()
@@ -449,7 +540,8 @@ class DataManager(QObject):
                         default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
 
                         updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                        updated_event['emoji'] = self.settings.get("calendar_emojis", {}).get(cal_id, '')
+                        # 이모지는 여기서 처리하지 않음 (필요 시 추가)
+                    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
                     start_str = updated_event['start'].get('date') or updated_event['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
@@ -475,6 +567,10 @@ class DataManager(QObject):
                 if provider.delete_event(event_data):
                     event_body = event_data.get('body', event_data)
                     event_id_to_delete = event_body.get('id')
+                    
+                    # 완료 목록에서도 삭제
+                    self.unmark_event_as_completed(event_id_to_delete)
+
                     start_str = event_body['start'].get('date') or event_body['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)

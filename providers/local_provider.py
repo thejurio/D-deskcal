@@ -102,6 +102,13 @@ class LocalCalendarProvider(BaseCalendarProvider):
                                 instance_event = json.loads(event_json) # 원본 복사
                                 occurrence_end = occurrence_start + duration
                                 
+                                # --- ▼▼▼ [수정] 반복 인스턴스에 고유 ID 부여 ▼▼▼ ---
+                                original_id = instance_event['id']
+                                occurrence_id_str = occurrence_start.strftime('%Y%m%dT%H%M%S')
+                                instance_event['id'] = f"{original_id}_{occurrence_id_str}"
+                                instance_event['originalId'] = original_id # 원본 ID도 저장
+                                # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
+
                                 if 'dateTime' in instance_event['start']:
                                     instance_event['start'] = {'dateTime': occurrence_start.isoformat(), 'timeZone': 'Asia/Seoul'}
                                     instance_event['end'] = {'dateTime': occurrence_end.isoformat(), 'timeZone': 'Asia/Seoul'}

@@ -72,9 +72,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 for event in events:
                     event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME # Provider 정보 추가
                     event['calendarId'] = cal_id
-                    default_color = calendar_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
-                    event['color'] = custom_colors.get(cal_id, default_color)
-                    event['emoji'] = custom_emojis.get(cal_id, '')
+                    # 색상과 이모지 적용 로직은 DataManager로 중앙화되었으므로 여기서는 제거
                 
                 all_events.extend(events)
             except HttpError as e:
@@ -209,9 +207,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 for event in events:
                     event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME
                     event['calendarId'] = cal_id
-                    default_color = calendar_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
-                    event['color'] = custom_colors.get(cal_id, default_color)
-                    event['emoji'] = custom_emojis.get(cal_id, '')
+                    # 색상과 이모지 적용 로직은 DataManager로 중앙화되었으므로 여기서는 제거
                 
                 all_found_events.extend(events)
             except HttpError as e:

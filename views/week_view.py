@@ -1,11 +1,10 @@
 # views/week_view.py
 import datetime
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QPushButton, QMenu
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QPushButton, QMenu, QGraphicsOpacityEffect
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QCursor
 
 from .widgets import EventLabelWidget, TimeScaleWidget
-
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
 
@@ -24,6 +23,8 @@ class WeekViewWidget(BaseViewWidget):
         self.timeline_timer.setInterval(60 * 1000)
         self.timeline_timer.timeout.connect(self.update_timeline)
         self.timeline_timer.start()
+        
+        self.data_manager.event_completion_changed.connect(self.redraw_events_with_current_data)
 
     def set_resizing(self, is_resizing):
         """BaseViewWidget의 메서드를 오버라이드하여 all_day_event_widgets도 처리합니다."""
@@ -211,9 +212,22 @@ class WeekViewWidget(BaseViewWidget):
         menu_opacity = main_opacity + (1 - main_opacity) * 0.85
         menu.setWindowOpacity(menu_opacity)
         if target_event:
+            event_id = target_event.get('id')
+            is_completed = self.data_manager.is_event_completed(event_id)
+
             edit_action = QAction("수정", self)
             edit_action.triggered.connect(lambda: self.edit_event_requested.emit(target_event))
             menu.addAction(edit_action)
+
+            if is_completed:
+                reopen_action = QAction("진행", self)
+                reopen_action.triggered.connect(lambda: self.data_manager.unmark_event_as_completed(event_id))
+                menu.addAction(reopen_action)
+            else:
+                complete_action = QAction("완료", self)
+                complete_action.triggered.connect(lambda: self.data_manager.mark_event_as_completed(event_id))
+                menu.addAction(complete_action)
+
             delete_action = QAction("삭제", self)
             delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
             menu.addAction(delete_action)
@@ -246,13 +260,31 @@ class WeekViewWidget(BaseViewWidget):
 
             event_widget = EventLabelWidget(event, parent_widget)
             
-            summary = event.get('summary', '(제목 없음)')
+            summary = event.get('summary', '')
             if 'recurrence' in event:
                 summary = f"🔄 {summary}"
             event_widget.setText(summary)
 
             event_widget.edit_requested.connect(self.edit_event_requested)
-            event_widget.setStyleSheet(f"background-color: {event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;")
+            
+            finished = self.data_manager.is_event_completed(event.get('id'))
+            style_sheet = f"background-color: {event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;"
+            
+            current_effect = event_widget.graphicsEffect()
+
+            if finished:
+                style_sheet += "text-decoration: line-through;"
+                if not isinstance(current_effect, QGraphicsOpacityEffect):
+                    opacity_effect = QGraphicsOpacityEffect()
+                    opacity_effect.setOpacity(0.5)
+                    event_widget.setGraphicsEffect(opacity_effect)
+            else:
+                if isinstance(current_effect, QGraphicsOpacityEffect):
+                    event_widget.setGraphicsEffect(None)
+
+            event_widget.setStyleSheet(style_sheet)
+            event_widget.update()
+
             event_widget.setWordWrap(True)
             event_widget.setAlignment(Qt.AlignmentFlag.AlignTop)
             event_widget.setGeometry(x, y, width, height)
@@ -335,7 +367,24 @@ class WeekViewWidget(BaseViewWidget):
             event_label.setText(summary)
 
             event_label.edit_requested.connect(self.edit_event_requested)
-            event_label.setStyleSheet(f"background-color: {event.get('color', '#555555')}; border-radius: 3px; padding: 1px 3px;")
+            
+            finished = self.data_manager.is_event_completed(event.get('id'))
+            style_sheet = f"background-color: {event.get('color', '#555555')}; border-radius: 3px; padding: 1px 3px;"
+            
+            current_effect = event_label.graphicsEffect()
+
+            if finished:
+                style_sheet += "text-decoration: line-through;"
+                if not isinstance(current_effect, QGraphicsOpacityEffect):
+                    opacity_effect = QGraphicsOpacityEffect()
+                    opacity_effect.setOpacity(0.5)
+                    event_label.setGraphicsEffect(opacity_effect)
+            else:
+                if isinstance(current_effect, QGraphicsOpacityEffect):
+                    event_label.setGraphicsEffect(None)
+
+            event_label.setStyleSheet(style_sheet)
+            event_label.update()
             
             self.all_day_layout.addWidget(event_label, lane, start_col, 1, span)
             self.all_day_event_widgets.append(event_label)

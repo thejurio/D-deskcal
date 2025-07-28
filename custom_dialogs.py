@@ -1,6 +1,6 @@
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu)
+                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QAction
 
@@ -221,60 +221,102 @@ class NewDateSelectionDialog(BaseDialog):
 class MoreEventsDialog(BaseDialog):
     edit_requested = pyqtSignal(dict)
     delete_requested = pyqtSignal(dict)
-    def __init__(self, date_obj, events, parent=None, settings=None, pos=None):
+    def __init__(self, date_obj, events, parent=None, settings=None, pos=None, data_manager=None):
         super().__init__(parent, settings, pos)
+        self.date_obj = date_obj
+        self.events = events
+        self.data_manager = data_manager
+        
         self.setWindowTitle(f"{date_obj.strftime('%Y-%m-%d')} 일정")
         self.setMinimumWidth(300)
+        
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         background_widget = QWidget()
         background_widget.setObjectName("dialog_background")
         main_layout.addWidget(background_widget)
-        content_layout = QVBoxLayout(background_widget)
+        
+        self.content_layout = QVBoxLayout(background_widget)
         title_label = QLabel(f"{date_obj.strftime('%Y년 %m월 %d일')}")
         title_label.setStyleSheet("font-weight: bold; font-size: 11pt; padding: 5px;")
-        content_layout.addWidget(title_label)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setStyleSheet("background-color: transparent; border: none;")
-        event_list_widget = QWidget()
-        event_list_layout = QVBoxLayout(event_list_widget)
-        event_list_layout.setContentsMargins(5, 0, 5, 5)
-        event_list_layout.setSpacing(5)
-        sorted_events = sorted(events, key=lambda e: (e['start'].get('dateTime', e['start'].get('date'))))
-        for event in sorted_events:
-            event_button = QPushButton(event.get('summary', '(제목 없음)'))
-            event_button.setStyleSheet(f"background-color: {event.get('color', '#555555')}; text-align: left; padding-left: 10px;")
-            event_button.clicked.connect(lambda _, e=event: self.edit_requested.emit(e))
-            event_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            event_button.customContextMenuRequested.connect(lambda pos, e=event: self.show_context_menu(pos, e))
-            event_list_layout.addWidget(event_button)
-        event_list_layout.addStretch(1)
-        scroll_area.setWidget(event_list_widget)
-        content_layout.addWidget(scroll_area)
+        self.content_layout.addWidget(title_label)
+        
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setStyleSheet("background-color: transparent; border: none;")
+        self.content_layout.addWidget(self.scroll_area)
+        
+        self.rebuild_event_list()
+
         close_button_layout = QHBoxLayout()
         close_button_layout.addStretch(1)
         close_button = QPushButton("닫기")
         close_button.clicked.connect(self.reject)
         close_button_layout.addWidget(close_button)
-        content_layout.addLayout(close_button_layout)
+        self.content_layout.addLayout(close_button_layout)
+        
         self.edit_requested.connect(self.accept)
         self.delete_requested.connect(self.accept)
+        
+        if self.data_manager:
+            self.data_manager.event_completion_changed.connect(self.rebuild_event_list)
+
+    def rebuild_event_list(self):
+        event_list_widget = QWidget()
+        event_list_layout = QVBoxLayout(event_list_widget)
+        event_list_layout.setContentsMargins(5, 0, 5, 5)
+        event_list_layout.setSpacing(5)
+        
+        sorted_events = sorted(self.events, key=lambda e: (e['start'].get('dateTime', e['start'].get('date'))))
+        for event in sorted_events:
+            event_button = QPushButton(event.get('summary', '(제목 없음)'))
+            
+            if self.data_manager:
+                finished = self.data_manager.is_event_completed(event.get('id'))
+                style_sheet = f"background-color: {event.get('color', '#555555')}; text-align: left; padding-left: 10px;"
+                if finished:
+                    style_sheet += "text-decoration: line-through;"
+                    opacity_effect = QGraphicsOpacityEffect()
+                    opacity_effect.setOpacity(0.5)
+                    event_button.setGraphicsEffect(opacity_effect)
+                else:
+                    event_button.setGraphicsEffect(None)
+                event_button.setStyleSheet(style_sheet)
+
+            event_button.clicked.connect(lambda _, e=event: self.edit_requested.emit(e))
+            event_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            event_button.customContextMenuRequested.connect(lambda pos, e=event: self.show_context_menu(pos, e))
+            event_list_layout.addWidget(event_button)
+            
+        event_list_layout.addStretch(1)
+        self.scroll_area.setWidget(event_list_widget)
+
     def show_context_menu(self, pos, event_data):
         menu = QMenu(self)
-
-        # --- ▼▼▼ 투명도 적용 코드 추가 ▼▼▼ ---
         if self.settings:
             main_opacity = self.settings.get("window_opacity", 0.95)
             menu_opacity = main_opacity + (1 - main_opacity) * 0.85
             menu.setWindowOpacity(menu_opacity)
-        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
         edit_action = QAction("수정", self)
         edit_action.triggered.connect(lambda: self.edit_requested.emit(event_data))
         menu.addAction(edit_action)
+
+        if self.data_manager:
+            event_id = event_data.get('id')
+            is_completed = self.data_manager.is_event_completed(event_id)
+            if is_completed:
+                reopen_action = QAction("진행", self)
+                reopen_action.triggered.connect(lambda: self.data_manager.unmark_event_as_completed(event_id))
+                menu.addAction(reopen_action)
+            else:
+                complete_action = QAction("완료", self)
+                complete_action.triggered.connect(lambda: self.data_manager.mark_event_as_completed(event_id))
+                menu.addAction(complete_action)
+
         delete_action = QAction("삭제", self)
         delete_action.triggered.connect(lambda: self.delete_requested.emit(event_data))
         menu.addAction(delete_action)
+        
         sender_button = self.sender()
         menu.exec(sender_button.mapToGlobal(pos))

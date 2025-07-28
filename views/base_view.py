@@ -48,12 +48,18 @@ class BaseViewWidget(QWidget):
     def confirm_delete_event(self, event_data):
         """이벤트 삭제 확인 대화상자를 표시하고, 확인 시 이벤트를 삭제합니다."""
         summary = event_data.get('summary', '(제목 없음)')
+        event_id = event_data.get('id', '')
         
-        is_recurring = 'recurrence' in event_data
-        if is_recurring:
+        # --- ▼▼▼ [수정] ID 형식을 분석하여 경고 메시지 분기 ▼▼▼ ---
+        is_recurring_instance = '_' in event_id and event_data.get('provider') == 'LocalCalendarProvider'
+        is_recurring_master = 'recurrence' in event_data
+
+        text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+        if is_recurring_master:
             text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
-        else:
-            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+        elif is_recurring_instance:
+            text = f"'{summary}'은(는) 반복 일정의 일부입니다.\n현재 버전에서는 이 항목만 따로 삭제할 수 없습니다.\n\n전체 반복 일정을 삭제하시겠습니까?"
+        # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
 
         msg_box = CustomMessageBox(
             self,
@@ -63,4 +69,11 @@ class BaseViewWidget(QWidget):
             pos=QCursor.pos()
         )
         if msg_box.exec():
+            # --- ▼▼▼ [수정] 반복 인스턴스일 경우 원본 ID로 삭제 요청 ▼▼▼ ---
+            if is_recurring_instance:
+                original_id = event_data.get('originalId', event_id.split('_')[0])
+                # DataManager가 원본 이벤트를 찾아서 삭제할 수 있도록 ID를 수정
+                event_data['body']['id'] = original_id
+                event_data['id'] = original_id
+            # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
             self.data_manager.delete_event(event_data)

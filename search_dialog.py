@@ -1,7 +1,7 @@
 # search_dialog.py
 import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
-                             QPushButton, QListWidget, QListWidgetItem, QLabel)
+                             QPushButton, QListWidget, QListWidgetItem, QLabel, QGraphicsOpacityEffect)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QIcon
 
@@ -9,9 +9,10 @@ from custom_dialogs import BaseDialog
 
 class SearchResultWidget(QWidget):
     """검색 결과의 각 항목을 표시하는 커스텀 위젯"""
-    def __init__(self, event_data):
+    def __init__(self, event_data, data_manager):
         super().__init__()
         self.event_data = event_data
+        self.data_manager = data_manager
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -35,9 +36,19 @@ class SearchResultWidget(QWidget):
         summary_label = QLabel(event_data.get('summary', '(제목 없음)'))
         summary_label.setStyleSheet("font-weight: bold;")
 
+        # --- ▼▼▼ 완료된 일정 스타일 적용 (DB 기반) ▼▼▼ ---
+        if self.data_manager:
+            finished = self.data_manager.is_event_completed(event_data.get('id'))
+            if finished:
+                summary_label.setStyleSheet("font-weight: bold; text-decoration: line-through;")
+                opacity_effect = QGraphicsOpacityEffect()
+                opacity_effect.setOpacity(0.5)
+                self.setGraphicsEffect(opacity_effect)
+        # --- ▲▲▲ 여기까지 적용 ▲▲▲ ---
+
         date_str = self.format_event_date(event_data)
         date_label = QLabel(date_str)
-        date_label.setStyleSheet("font-size: 9pt; color: #888888;") # 테마에 따라 조정 필요
+        date_label.setStyleSheet("font-size: 9pt; color: #888888;")
 
         info_layout.addWidget(summary_label)
         info_layout.addWidget(date_label)
@@ -68,6 +79,7 @@ class SearchDialog(BaseDialog):
         self.setMinimumSize(450, 500)
         
         self.initUI()
+        self.data_manager.event_completion_changed.connect(self.perform_search)
 
     def initUI(self):
         main_layout = QVBoxLayout(self)
@@ -122,7 +134,7 @@ class SearchDialog(BaseDialog):
 
         for event in search_results:
             item = QListWidgetItem(self.results_list)
-            widget = SearchResultWidget(event)
+            widget = SearchResultWidget(event, self.data_manager)
             item.setSizeHint(widget.sizeHint())
             self.results_list.addItem(item)
             self.results_list.setItemWidget(item, widget)

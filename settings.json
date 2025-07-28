@@ -1,7 +1,7 @@
 {
     "geometry": [
-        560,
-        21,
+        490,
+        -11,
         869,
         778
     ],
@@ -15,12 +15,13 @@
     ],
     "calendar_colors": {
         "local_calendar": "#4CAF50",
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#ffadad",
-        "family01556510902891015712@group.calendar.google.com": "#ffd6a5",
-        "thejurio@gmail.com": "#a0aee5",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#9bf6ff",
+        "family01556510902891015712@group.calendar.google.com": "#ffadad",
+        "thejurio@gmail.com": "#caffbf",
         "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
     },
     "sync_interval_minutes": 5,
-    "window_opacity": 0.67,
-    "theme": "light"
+    "window_opacity": 1.0,
+    "theme": "light",
+    "last_selected_calendar_id": "thejurio@gmail.com"
 }

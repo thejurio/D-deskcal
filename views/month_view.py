@@ -1,6 +1,6 @@
 import datetime
 import calendar
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QGraphicsOpacityEffect
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QCursor
 
@@ -28,6 +28,8 @@ class MonthViewWidget(BaseViewWidget):
         self.date_to_cell_map = {}
         self.initUI()
         self.refresh()
+        self.data_manager.event_completion_changed.connect(self.redraw_events_with_current_data)
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def on_data_updated(self, year, month):
         if year == self.current_date.year and month == self.current_date.month:
@@ -70,7 +72,7 @@ class MonthViewWidget(BaseViewWidget):
     def on_edit_event_requested(self, event_data): self.edit_event_requested.emit(event_data)
 
     def show_more_events_popup(self, date_obj, events):
-        dialog = MoreEventsDialog(date_obj, events, self, settings=self.main_widget.settings, pos=QCursor.pos())
+        dialog = MoreEventsDialog(date_obj, events, self, settings=self.main_widget.settings, pos=QCursor.pos(), data_manager=self.data_manager)
         dialog.edit_requested.connect(self.on_edit_event_requested)
         dialog.delete_requested.connect(self.confirm_delete_event)
         dialog.exec()
@@ -258,10 +260,32 @@ class MonthViewWidget(BaseViewWidget):
 
                 event_widget.setGeometry(x, y, width, height)
                 event_color = event.get('color', '#555555')
-                event_widget.setStyleSheet(f"background-color: {event_color}; color: white; {border_radius_style} padding-left: 5px; font-size: 9pt;")
+                
+                # --- ▼▼▼ 완료된 일정 스타일 적용 (DB 기반) ▼▼▼ ---
+                finished = self.data_manager.is_event_completed(event.get('id'))
+                style_sheet = f"background-color: {event_color}; color: white; {border_radius_style} padding-left: 5px; font-size: 9pt;"
+                
+                current_effect = event_widget.graphicsEffect()
+
+                if finished:
+                    style_sheet += "text-decoration: line-through;"
+                    if not isinstance(current_effect, QGraphicsOpacityEffect):
+                        opacity_effect = QGraphicsOpacityEffect()
+                        opacity_effect.setOpacity(0.5)
+                        event_widget.setGraphicsEffect(opacity_effect)
+                else:
+                    if isinstance(current_effect, QGraphicsOpacityEffect):
+                        event_widget.setGraphicsEffect(None)
+
+                event_widget.setStyleSheet(style_sheet)
+                event_widget.update() # 위젯의 시각적 상태를 즉시 갱신
+                # --- ▲▲▲ 여기까지 적용 ▲▲▲ ---
+
                 event_widget.setAlignment(Qt.AlignmentFlag.AlignVCenter)
                 event_widget.show()
                 self.event_widgets.append(event_widget)
+
+                event_widget.setStyleSheet(style_sheet)
 
         # 3. "더보기" 버튼 그리기
         drawn_more_buttons = set()
@@ -316,27 +340,48 @@ class MonthViewWidget(BaseViewWidget):
         from PyQt6.QtGui import QAction
         from PyQt6.QtWidgets import QMenu
         pos = event.pos()
-        target_date = None
+        
         target_event = None
-        for event_widget in self.event_widgets:
-            if event_widget.geometry().contains(pos):
-                if isinstance(event_widget, EventLabelWidget):
-                    target_event = event_widget.event_data
+        # childAt()을 사용하여 정확한 위치의 위젯 찾기
+        widget = self.childAt(pos)
+        
+        # 부모-자식 관계를 따라 올라가며 EventLabelWidget 찾기
+        while widget is not None:
+            if isinstance(widget, EventLabelWidget):
+                target_event = widget.event_data
                 break
+            widget = widget.parent()
+
+        target_date = None
         if not target_event:
             for date, cell_info in self.date_to_cell_map.items():
                 cell_rect = self.calendar_grid.cellRect(cell_info['row'], cell_info['col'])
                 if cell_rect.contains(pos):
                     target_date = date
                     break
+        
         menu = QMenu(self)
         main_opacity = self.main_widget.settings.get("window_opacity", 0.95)
         menu_opacity = main_opacity + (1 - main_opacity) * 0.85
         menu.setWindowOpacity(menu_opacity)
+        
         if target_event:
+            event_id = target_event.get('id')
+            is_completed = self.data_manager.is_event_completed(event_id)
+
             edit_action = QAction("수정", self)
             edit_action.triggered.connect(lambda: self.edit_event_requested.emit(target_event))
             menu.addAction(edit_action)
+
+            if is_completed:
+                reopen_action = QAction("진행", self)
+                reopen_action.triggered.connect(lambda: self.data_manager.unmark_event_as_completed(event_id))
+                menu.addAction(reopen_action)
+            else:
+                complete_action = QAction("완료", self)
+                complete_action.triggered.connect(lambda: self.data_manager.mark_event_as_completed(event_id))
+                menu.addAction(complete_action)
+
             delete_action = QAction("삭제", self)
             delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
             menu.addAction(delete_action)
@@ -344,6 +389,7 @@ class MonthViewWidget(BaseViewWidget):
             add_action = QAction("일정 추가", self)
             add_action.triggered.connect(lambda: self.add_event_requested.emit(target_date))
             menu.addAction(add_action)
+            
         self.main_widget.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
 

@@ -200,11 +200,13 @@ class MainWidget(QWidget):
             result = settings_dialog.exec()
             
             if result:
+                # --- ▼▼▼ [수정] 색상 즉시 반영 로직 호출 ▼▼▼ ---
+                self.data_manager.update_cached_events_colors()
+                # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
                 self.data_manager.update_sync_timer()
                 self.set_window_opacity(self.settings.get("window_opacity", 0.95))
-                # 저장된 테마를 다시 적용 (확정)
                 self.apply_theme(self.settings.get("theme", "dark"))
-                self.refresh_current_view()
+                # self.refresh_current_view() # update_cached_events_colors가 시그널을 보내므로 중복 호출 불필요
             else:
                 # 취소 시, 원래 테마와 투명도로 복구
                 self.set_window_opacity(original_opacity)
@@ -235,9 +237,9 @@ class MainWidget(QWidget):
             editor = None
             cursor_pos = QCursor.pos() # 커서 위치 저장
             if isinstance(data, (datetime.date, datetime.datetime)):
-                editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos)
+                editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
-                editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos)
+                editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             
             if editor:
                 result = editor.exec()

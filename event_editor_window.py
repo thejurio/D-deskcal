@@ -15,13 +15,15 @@ class EventEditorWindow(BaseDialog):
     DeleteRole = 2
 
     # __init__ 생성자에 'calendars' 파라미터를 추가합니다.
-    def __init__(self, mode='new', data=None, calendars=None, settings=None, parent=None, pos=None):
+    def __init__(self, mode='new', data=None, calendars=None, settings=None, parent=None, pos=None, data_manager=None):
         super().__init__(parent=parent, settings=settings, pos=pos)
         self.mode = mode
         self.calendars = calendars if calendars else []
         self.event_data = data if isinstance(data, dict) else {}
         self.date_info = data if isinstance(data, (datetime.date, datetime.datetime)) else None
         self.custom_rrule = None # 직접 설정한 RRULE 저장
+        self.data_manager = data_manager # DataManager 인스턴스 저장
+        self.initial_completed_state = False # 초기 완료 상태 저장
         
         self.setWindowTitle("일정 추가" if self.mode == 'new' else "일정 수정")
         self.setMinimumWidth(400)
@@ -91,6 +93,11 @@ class EventEditorWindow(BaseDialog):
         time_options_layout.addWidget(self.all_day_checkbox)
         time_options_layout.addStretch(1)
         
+        # --- ▼▼▼ [추가] 완료 체크박스 ▼▼▼ ---
+        self.completed_checkbox = QCheckBox("완료")
+        time_options_layout.addWidget(self.completed_checkbox)
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
         layout.addLayout(time_options_layout)
         layout.addWidget(self.recurrence_widget)
 
@@ -117,17 +124,33 @@ class EventEditorWindow(BaseDialog):
 
     def accept(self):
         """'저장' 버튼 클릭 시 동작을 오버라이드하여 반복 일정 수정 시 경고를 표시합니다."""
-        # --- ▼▼▼ [개선] 반복 일정 수정 시 경고 메시지 추가 ▼▼▼ ---
-        if self.mode == 'edit' and 'recurrence' in self.event_data:
+        # --- ▼▼▼ [수정] 반복 일정 및 인스턴스 수정 시 경고 메시지 강화 ▼▼▼ ---
+        event_id = self.event_data.get('id', '')
+        is_recurring_instance = '_' in event_id and self.event_data.get('provider') == 'LocalCalendarProvider'
+        is_recurring_master = 'recurrence' in self.event_data
+
+        if self.mode == 'edit' and (is_recurring_master or is_recurring_instance):
+            text = f"'{self.summary_edit.text()}'은(는) 반복 일정입니다.\n이 일정을 수정하면 모든 관련 반복 일정이 수정됩니다.\n\n계속하시겠습니까?"
             msg_box = CustomMessageBox(
                 self,
                 title='수정 확인',
-                text=f"'{self.summary_edit.text()}'은(는) 반복 일정입니다.\n이 일정을 수정하면 모든 관련 반복 일정이 수정됩니다.\n\n계속하시겠습니까?",
+                text=text,
                 settings=self.settings
             )
             if not msg_box.exec():
                 return # 사용자가 '취소'를 누르면 저장하지 않고 함수 종료
-        # --- ▲▲▲ 여기까지 개선 ▲▲▲ ---
+        # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
+        
+        # --- ▼▼▼ [추가] 완료 상태 변경 처리 ▼▼▼ ---
+        if self.mode == 'edit' and self.data_manager:
+            new_completed_state = self.completed_checkbox.isChecked()
+            if event_id and new_completed_state != self.initial_completed_state:
+                if new_completed_state:
+                    self.data_manager.mark_event_as_completed(event_id)
+                else:
+                    self.data_manager.unmark_event_as_completed(event_id)
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
         super().accept() # QDialog의 기본 accept 동작 실행 (창 닫고 Accepted 반환)
 
     def open_recurrence_dialog(self):
@@ -256,8 +279,14 @@ class EventEditorWindow(BaseDialog):
     def populate_data(self):
         """기존 데이터를 UI에 채웁니다."""
         if self.mode == 'edit' and self.event_data:
+            event_id = self.event_data.get('id')
+            if event_id and self.data_manager:
+                self.initial_completed_state = self.data_manager.is_event_completed(event_id)
+                self.completed_checkbox.setChecked(self.initial_completed_state)
+            
             target_cal_id = self.event_data.get('calendarId')
         else:
+            self.completed_checkbox.setVisible(False) # 새 일정에는 보이지 않음
             target_cal_id = self.settings.get('last_selected_calendar_id')
 
         if target_cal_id:
@@ -333,7 +362,14 @@ class EventEditorWindow(BaseDialog):
             event_body['end'] = {'dateTime': end_dt.isoformat(), 'timeZone': 'Asia/Seoul'}
 
         if self.mode == 'edit':
-            event_body['id'] = self.event_data.get('id')
+            # --- ▼▼▼ [수정] 반복 인스턴스일 경우 원본 ID 사용 ▼▼▼ ---
+            event_id = self.event_data.get('id', '')
+            is_recurring_instance = '_' in event_id and self.event_data.get('provider') == 'LocalCalendarProvider'
+            if is_recurring_instance:
+                event_body['id'] = self.event_data.get('originalId', event_id.split('_')[0])
+            else:
+                event_body['id'] = event_id
+            # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
         elif self.calendar_combo.currentData()['provider'] == LOCAL_CALENDAR_PROVIDER_NAME:
             event_body['id'] = str(uuid.uuid4())
 
