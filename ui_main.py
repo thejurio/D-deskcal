@@ -13,6 +13,7 @@ from views.month_view import MonthViewWidget
 from views.week_view import WeekViewWidget
 from settings_window import SettingsWindow
 from event_editor_window import EventEditorWindow
+from search_dialog import SearchDialog
 
 def load_stylesheet(file_path):
     """지정된 경로의 스타일시트 파일을 읽어서 문자열로 반환합니다."""
@@ -105,6 +106,12 @@ class MainWidget(QWidget):
         today_button.setObjectName("today_button")
         today_button.clicked.connect(self.go_to_today)
 
+        search_button = QPushButton("🔍") # 검색 아이콘
+        search_button.setObjectName("search_button")
+        search_button.setFixedWidth(30)
+        search_button.clicked.connect(self.open_search_dialog)
+
+        view_mode_layout.addWidget(search_button)
         view_mode_layout.addStretch(1)
         view_mode_layout.addWidget(month_button)
         view_mode_layout.addWidget(week_button)
@@ -203,6 +210,14 @@ class MainWidget(QWidget):
                 self.set_window_opacity(original_opacity)
                 self.apply_theme(original_theme)
 
+    def open_search_dialog(self):
+        """검색 다이얼로그를 엽니다."""
+        with self.data_manager.user_action_priority():
+            dialog = SearchDialog(self.data_manager, self, self.settings, pos=QCursor.pos())
+            # 검색 결과에서 이벤트를 수정하도록 요청하면, 이벤트 편집기를 엽니다.
+            dialog.edit_event_requested.connect(self.open_event_editor)
+            dialog.exec()
+
     def apply_theme(self, theme_name):
         """애플리케이션 전체에 테마를 적용합니다."""
         try:
@@ -270,7 +285,6 @@ class MainWidget(QWidget):
     def closeEvent(self, event):
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
         save_settings(self.settings)
-        self.data_manager.save_cache_to_file()
         self.data_manager.stop_caching_thread()
         event.accept()
 
@@ -293,7 +307,7 @@ class MainWidget(QWidget):
             self.oldPos = event.globalPosition().toPoint()
 
     def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton:
+        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
             delta = event.globalPosition().toPoint() - self.oldPos
             if self.is_moving:
                 self.move(self.x() + delta.x(), self.y() + delta.y())

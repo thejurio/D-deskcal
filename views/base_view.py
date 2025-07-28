@@ -1,7 +1,10 @@
 # views/base_view.py
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QCursor
 import datetime
+
+from custom_dialogs import CustomMessageBox
 
 class BaseViewWidget(QWidget):
     add_event_requested = pyqtSignal(object) # date 또는 datetime을 모두 받을 수 있도록 object 사용
@@ -41,3 +44,23 @@ class BaseViewWidget(QWidget):
         """뷰의 전체 UI를 새로고칩니다. (날짜, 이벤트 등)"""
         # 이 메서드도 자식 클래스에서 재정의해야 합니다.
         raise NotImplementedError("This method must be implemented by subclasses.")
+
+    def confirm_delete_event(self, event_data):
+        """이벤트 삭제 확인 대화상자를 표시하고, 확인 시 이벤트를 삭제합니다."""
+        summary = event_data.get('summary', '(제목 없음)')
+        
+        is_recurring = 'recurrence' in event_data
+        if is_recurring:
+            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
+        else:
+            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+
+        msg_box = CustomMessageBox(
+            self,
+            title='삭제 확인',
+            text=text,
+            settings=self.main_widget.settings,
+            pos=QCursor.pos()
+        )
+        if msg_box.exec():
+            self.data_manager.delete_event(event_data)

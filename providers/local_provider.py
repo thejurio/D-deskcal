@@ -205,3 +205,38 @@ class LocalCalendarProvider(BaseCalendarProvider):
             'backgroundColor': self.settings.get("local_calendar_color", DEFAULT_LOCAL_CALENDAR_COLOR),
             'provider': LOCAL_CALENDAR_PROVIDER_NAME
         }]
+
+    def search_events(self, query):
+        """로컬 DB에서 제목 또는 설명에 query가 포함된 이벤트를 검색합니다."""
+        if not query:
+            return []
+        
+        search_term = f"%{query}%"
+        found_events = []
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                # json_extract를 사용하고 싶지만, 모든 sqlite 버전에 내장되어 있지 않으므로 LIKE를 사용합니다.
+                cursor.execute("""
+                    SELECT event_json FROM events
+                    WHERE event_json LIKE ? OR event_json LIKE ?
+                """, (f'%summary":"%{search_term}%', f'%description":"%{search_term}%'))
+
+                for row in cursor.fetchall():
+                    event = json.loads(row[0])
+                    # 반복 이벤트는 현재 구현에서는 검색 결과에 원본만 포함합니다.
+                    # (모든 인스턴스를 생성하여 검색하는 것은 매우 비효율적일 수 있음)
+                    found_events.append(event)
+
+            # 공통 속성 추가
+            calendar_colors = self.settings.get("calendar_colors", {})
+            calendar_emojis = self.settings.get("calendar_emojis", {})
+            for event in found_events:
+                event['calendarId'] = LOCAL_CALENDAR_ID
+                event['color'] = calendar_colors.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_COLOR)
+                event['emoji'] = calendar_emojis.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_EMOJI)
+            
+            return found_events
+        except sqlite3.Error as e:
+            print(f"로컬 이벤트 검색 중 오류 발생: {e}")
+            return []

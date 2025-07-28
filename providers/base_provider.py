@@ -38,3 +38,11 @@ class BaseCalendarProvider(ABC):
         반환값: 성공 여부(bool)
         """
         pass
+
+    @abstractmethod
+    def search_events(self, query):
+        """
+        주어진 쿼리(검색어)와 일치하는 모든 이벤트를 반환해야 합니다.
+        반환값: [ {이벤트 딕셔너리}, ... ]
+        """
+        pass

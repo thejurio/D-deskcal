@@ -179,3 +179,43 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 'provider': GOOGLE_CALENDAR_PROVIDER_NAME
             })
         return standardized_calendars
+
+    def search_events(self, query):
+        """Google 서버에 직접 쿼리하여 모든 캘린더에서 이벤트를 검색합니다."""
+        if not query:
+            return []
+
+        service = self._get_service_for_current_thread()
+        if not service:
+            return []
+
+        calendar_list = self.get_calendar_list()
+        custom_colors = self.settings.get("calendar_colors", {})
+        custom_emojis = self.settings.get("calendar_emojis", {})
+        calendar_color_map = {cal['id']: cal['backgroundColor'] for cal in calendar_list}
+
+        all_found_events = []
+        for calendar in calendar_list:
+            cal_id = calendar['id']
+            try:
+                events_result = service.events().list(
+                    calendarId=cal_id,
+                    q=query,
+                    singleEvents=True,
+                    orderBy="startTime"
+                ).execute()
+                
+                events = events_result.get("items", [])
+                for event in events:
+                    event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME
+                    event['calendarId'] = cal_id
+                    default_color = calendar_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
+                    event['color'] = custom_colors.get(cal_id, default_color)
+                    event['emoji'] = custom_emojis.get(cal_id, '')
+                
+                all_found_events.extend(events)
+            except HttpError as e:
+                print(f"캘린더({cal_id}) 검색 중 오류 발생: {e}")
+                continue
+        
+        return all_found_events

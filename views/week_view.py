@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QCursor
 
 from .widgets import EventLabelWidget, TimeScaleWidget
-from custom_dialogs import CustomMessageBox
+
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
 
@@ -226,20 +226,7 @@ class WeekViewWidget(BaseViewWidget):
         self.main_widget.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
 
-    def confirm_delete_event(self, event_data):
-        summary = event_data.get('summary', '(제목 없음)')
-        
-        # --- ▼▼▼ [개선] 반복 일정 삭제 시 경고 메시지 강화 ▼▼▼ ---
-        is_recurring = 'recurrence' in event_data
-        if is_recurring:
-            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
-        else:
-            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
-        # --- ▲▲▲ 여기까지 개선 ▲▲▲ ---
-
-        msg_box = CustomMessageBox(self, title='삭제 확인', text=text, settings=self.main_widget.settings, pos=QCursor.pos())
-        if msg_box.exec():
-            self.data_manager.delete_event(event_data)
+    
 
     def clear_events(self):
         for widget in self.event_widgets: widget.deleteLater()
@@ -283,6 +270,7 @@ class WeekViewWidget(BaseViewWidget):
         current_theme = self.main_widget.settings.get("theme", "dark")
         is_dark = current_theme == "dark"
         colors = {
+            "weekday": "#D0D0D0" if is_dark else "#222222",
             "saturday": "#8080FF" if is_dark else "#0000DD",
             "sunday": "#FF8080" if is_dark else "#DD0000",
             "today": "#FFFF77" if is_dark else "#A0522D"
@@ -294,7 +282,7 @@ class WeekViewWidget(BaseViewWidget):
             label_text = f"{days_of_week[i]} ({day_date.day})"
             self.day_labels[i].setText(label_text)
             
-            font_color = self.palette().color(self.foregroundRole()).name() # 기본 텍스트 색상
+            font_color = colors['weekday']
             if day_date == today: font_color = colors['today']
             elif i == 0: font_color = colors['sunday']
             elif i == 6: font_color = colors['saturday']

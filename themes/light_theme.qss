@@ -8,6 +8,12 @@ QWidget {
     font-size: 10pt;
 }
 
+QWidget#main_background {
+    background-color: #FAFAFA; /* 팝업창과 동일한 하얀색 계열 */
+    border-radius: 10px;
+    border: 1px solid #D0D0D0;
+}
+
 QWidget#dialog_background {
     background-color: #FAFAFA; /* 다이얼로그 배경은 더 밝게 */
     border-radius: 10px;
@@ -130,16 +136,15 @@ QMenu::item:selected {
     color: #FFFFFF;
 }
 
-QCheckBox::indicator:unchecked {
-    border: 1px solid #B0B0B0;
-    background-color: #FFFFFF;
-    border-radius: 3px;
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
 }
-
+QCheckBox::indicator:unchecked {
+    image: url(icons/checkbox_unchecked.svg);
+}
 QCheckBox::indicator:checked {
-    background-color: #0078D7;
-    border: 1px solid #005A9E;
-    border-radius: 3px;
+    image: url(icons/checkbox_checked.svg);
 }
 
 QDateTimeEdit {

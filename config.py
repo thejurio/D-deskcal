@@ -2,7 +2,6 @@
 
 # --- File Paths ---
 DB_FILE = "calendar.db"
-CACHE_FILE = "cache.json"
 SETTINGS_FILE = "settings.json"
 TOKEN_FILE = "token.json"
 CREDENTIALS_FILE = "credentials.json"

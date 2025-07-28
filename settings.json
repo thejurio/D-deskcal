@@ -1,21 +1,26 @@
 {
     "geometry": [
-        548,
-        15,
+        560,
+        21,
         869,
         778
     ],
     "use_local_calendar": true,
     "selected_calendars": [
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
+        "family01556510902891015712@group.calendar.google.com",
+        "thejurio@gmail.com",
+        "ko.south_korea#holiday@group.v.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
-        "local_calendar": "#4CAF50"
-    },
-    "calendar_emojis": {
-        "local_calendar": ""
+        "local_calendar": "#4CAF50",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#ffadad",
+        "family01556510902891015712@group.calendar.google.com": "#ffd6a5",
+        "thejurio@gmail.com": "#a0aee5",
+        "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
     },
     "sync_interval_minutes": 5,
-    "window_opacity": 0.95,
+    "window_opacity": 0.67,
     "theme": "light"
 }

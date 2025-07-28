@@ -4,13 +4,14 @@ import calendar
 import json
 import os
 import time
+import sqlite3
 from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition
 
 from auth_manager import AuthManager # AuthManager 임포트
 from providers.google_provider import GoogleCalendarProvider
 from providers.local_provider import LocalCalendarProvider
-from config import (CACHE_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL, 
+from config import (DB_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL, 
                     GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_EVENT_COLOR)
 # ... (CachingManager 클래스는 변경 없음) ...
@@ -88,6 +89,7 @@ class CachingManager(QObject):
                 events = self.data_manager._fetch_events_from_providers(year, month)
                 if events is not None:
                     self.data_manager.event_cache[(year, month)] = events
+                    self.data_manager._save_month_to_cache_db(year, month, events)
                     self.data_manager.data_updated.emit(year, month)
                     self._manage_cache_size()
                 time.sleep(0.5)
@@ -113,6 +115,7 @@ class CachingManager(QObject):
             events = self.data_manager._fetch_events_from_providers(year, month)
             if events is not None:
                 self.data_manager.event_cache[(year, month)] = events
+                self.data_manager._save_month_to_cache_db(year, month, events)
                 self.data_manager.data_updated.emit(year, month)
             time.sleep(0.2)
         if self._is_running:
@@ -140,6 +143,7 @@ class CachingManager(QObject):
                 farthest_month = max(candidates, key=candidates.get)
                 print(f"월간 캐시 용량 초과. 가장 먼 항목 제거: {farthest_month}")
                 del self.data_manager.event_cache[farthest_month]
+                self.data_manager._remove_month_from_cache_db(farthest_month[0], farthest_month[1])
 
     def pause_sync(self):
         self._activity_lock.lock()
@@ -173,7 +177,8 @@ class DataManager(QObject):
 
         self.event_cache = {}
         if load_cache:
-            self.load_cache_from_file()
+            self._init_cache_db()
+            self._load_cache_from_db()
         
         self.last_requested_month = None
         self.providers = []
@@ -193,6 +198,23 @@ class DataManager(QObject):
         
         # 초기 Provider 로드
         self.setup_providers()
+
+    def _init_cache_db(self):
+        """캐시 저장을 위한 DB 테이블을 생성합니다."""
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS event_cache (
+                        year INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        events_json TEXT NOT NULL,
+                        PRIMARY KEY (year, month)
+                    )
+                """)
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"캐시 DB 테이블 초기화 중 오류 발생: {e}")
 
     def setup_providers(self):
         """인증 상태에 따라 Provider 목록을 설정합니다."""
@@ -218,10 +240,14 @@ class DataManager(QObject):
         self.setup_providers()
         # 캘린더 목록이 바뀌었으므로 UI에 알려야 함
         self.calendar_list_changed.emit()
+        
+        # 메모리와 DB의 모든 캐시를 삭제
+        self.event_cache.clear()
+        self.clear_all_cache_db()
+
         # 현재 보고 있는 달의 데이터를 새로고침
         if self.last_requested_month:
             year, month = self.last_requested_month
-            self.event_cache.pop((year, month), None) # 기존 캐시 제거
             self.get_events(year, month) # 데이터 다시 요청
         self.request_full_sync() # 전체 동기화도 요청
 
@@ -252,24 +278,51 @@ class DataManager(QObject):
         finally:
             self.caching_manager.resume_sync()
 
-    def load_cache_from_file(self):
-        if not os.path.exists(CACHE_FILE): return
+    def _load_cache_from_db(self):
+        """DB에서 월간 이벤트 캐시를 로드합니다."""
         try:
-            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # 이제 월간 캐시만 로드합니다.
-                self.event_cache = {tuple(map(int, k.split('-'))): v for k, v in data.get('monthly', {}).items()}
-        except Exception as e: print(f"캐시 파일 읽기 오류: {e}")
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT year, month, events_json FROM event_cache")
+                for year, month, events_json in cursor.fetchall():
+                    self.event_cache[(year, month)] = json.loads(events_json)
+            print(f"DB에서 {len(self.event_cache)}개의 월간 캐시를 로드했습니다.")
+        except sqlite3.Error as e:
+            print(f"DB에서 캐시 로드 중 오류 발생: {e}")
 
-    def save_cache_to_file(self):
+    def _save_month_to_cache_db(self, year, month, events):
+        """특정 월의 이벤트 캐시를 DB에 저장(덮어쓰기)합니다."""
         try:
-            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-                # 이제 월간 캐시만 저장합니다.
-                data_to_save = {
-                    'monthly': {f"{k[0]}-{k[1]}": v for k, v in self.event_cache.items()}
-                }
-                json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-        except Exception as e: print(f"캐시 파일 저장 오류: {e}")
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO event_cache (year, month, events_json)
+                    VALUES (?, ?, ?)
+                """, (year, month, json.dumps(events)))
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"DB에 월간 캐시 저장 중 오류 발생: {e}")
+
+    def _remove_month_from_cache_db(self, year, month):
+        """특정 월의 캐시를 DB에서 삭제합니다."""
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM event_cache WHERE year = ? AND month = ?", (year, month))
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"DB에서 월간 캐시 삭제 중 오류 발생: {e}")
+
+    def clear_all_cache_db(self):
+        """DB의 모든 캐시를 삭제합니다."""
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM event_cache")
+                conn.commit()
+            print("DB의 모든 이벤트 캐시를 삭제했습니다.")
+        except sqlite3.Error as e:
+            print(f"DB 캐시 전체 삭제 중 오류 발생: {e}")
 
     def _fetch_events_from_providers(self, year, month):
         all_events = []
@@ -439,3 +492,25 @@ class DataManager(QObject):
         print("초기 데이터 로딩을 요청합니다...")
         today = datetime.date.today()
         self.get_events(today.year, today.month)
+
+    def search_events(self, query):
+        """모든 Provider에서 이벤트를 검색하고 결과를 통합하여 반환합니다."""
+        all_results = []
+        for provider in self.providers:
+            try:
+                results = provider.search_events(query)
+                if results:
+                    all_results.extend(results)
+            except Exception as e:
+                print(f"'{type(provider).__name__}' 이벤트 검색 오류: {e}")
+        
+        # ID를 기준으로 중복 제거 후, 시작 시간 순으로 정렬
+        unique_results = list({event['id']: event for event in all_results}.values())
+        
+        def get_start_time(event):
+            start = event.get('start', {})
+            return start.get('dateTime') or start.get('date')
+
+        unique_results.sort(key=get_start_time)
+        
+        return unique_results

@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayo
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QCursor
 
-from custom_dialogs import CustomMessageBox, NewDateSelectionDialog, MoreEventsDialog
+from custom_dialogs import NewDateSelectionDialog, MoreEventsDialog
 from .widgets import EventLabelWidget
 from .layout_calculator import MonthLayoutCalculator
 from .base_view import BaseViewWidget
@@ -83,7 +83,7 @@ class MonthViewWidget(BaseViewWidget):
         is_dark = current_theme == "dark"
 
         colors = {
-            "weekday": "#FFFFFF" if is_dark else "#222222",
+            "weekday": "#D0D0D0" if is_dark else "#222222", # 밝은 회색으로 변경
             "saturday": "#8080FF" if is_dark else "#0000DD",
             "sunday": "#FF8080" if is_dark else "#DD0000",
             "today_bg": "#444422" if is_dark else "#FFFFAA",
@@ -347,23 +347,4 @@ class MonthViewWidget(BaseViewWidget):
         self.main_widget.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
 
-    def confirm_delete_event(self, event_data):
-        summary = event_data.get('summary', '(제목 없음)')
-        
-        # --- ▼▼▼ [개선] 반복 일정 삭제 시 경고 메시지 강화 ▼▼▼ ---
-        is_recurring = 'recurrence' in event_data
-        if is_recurring:
-            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
-        else:
-            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
-        # --- ▲▲▲ 여기까지 개선 ▲▲▲ ---
-
-        msg_box = CustomMessageBox(
-            self,
-            title='삭제 확인',
-            text=text,
-            settings=self.main_widget.settings,
-            pos=QCursor.pos()
-        )
-        if msg_box.exec():
-            self.main_widget.data_manager.delete_event(event_data)
+    
