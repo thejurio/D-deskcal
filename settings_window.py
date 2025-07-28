@@ -57,8 +57,20 @@ class SettingsWindow(BaseDialog):
         self.local_calendar_checkbox = QCheckBox("로컬 캘린더 사용 (calendar.db)")
         self.local_calendar_checkbox.setChecked(self.use_local_calendar)
         self.layout.addWidget(self.local_calendar_checkbox)
-        self.layout.addWidget(QLabel("-" * 50)) # 구분선 추가
+        self.layout.addWidget(QLabel("-" * 50))
 
+        # --- ▼▼▼ [신규] Google 계정 연동 UI 추가 ▼▼▼ ---
+        self.layout.addWidget(QLabel("Google 계정 연동:"))
+        account_layout = QHBoxLayout()
+        self.account_status_label = QLabel("상태 확인 중...")
+        self.account_button = QPushButton("로그인")
+        account_layout.addWidget(self.account_status_label, 1)
+        account_layout.addWidget(self.account_button)
+        self.layout.addLayout(account_layout)
+        self.account_button.clicked.connect(self.handle_account_button_click)
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
+        self.layout.addWidget(QLabel("-" * 50))
         self.layout.addWidget(QLabel("표시할 캘린더, 색상, 이모티콘을 설정하세요:"))
 
         self.checkboxes = {}
@@ -125,14 +137,78 @@ class SettingsWindow(BaseDialog):
 
         self.layout.addWidget(QLabel("-" * 50))
 
+        self.calendar_list_widget = QWidget() # 캘린더 목록을 담을 위젯
+        self.calendar_list_layout = QVBoxLayout(self.calendar_list_widget)
+        self.calendar_list_layout.setContentsMargins(0,0,0,0)
+        self.layout.addWidget(self.calendar_list_widget)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        
+        self.save_button = QPushButton("저장")
+        self.save_button.clicked.connect(self.save_and_close)
+        button_layout.addWidget(self.save_button)
+
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+
+        content_layout.addLayout(button_layout)
+
+        # DataManager의 신호를 UI 새로고침에 연결
+        self.data_manager.calendar_list_changed.connect(self.rebuild_ui)
+        # 초기 UI 빌드
+        self.rebuild_ui()
+
+    def rebuild_ui(self):
+        """인증 상태 및 캘린더 목록에 따라 UI를 다시 빌드합니다."""
+        self.update_account_status()
+        self.populate_calendar_list()
+
+    def update_account_status(self):
+        """Google 계정 연동 상태를 UI에 업데이트합니다."""
+        if self.data_manager.auth_manager.is_logged_in():
+            email = self.data_manager.auth_manager.get_user_info()
+            if email:
+                self.account_status_label.setText(f"{email} (연결됨)")
+            else:
+                self.account_status_label.setText("연결됨 (정보 확인 불가)")
+            self.account_button.setText("로그아웃")
+        else:
+            self.account_status_label.setText("연결되지 않음")
+            self.account_button.setText("로그인")
+
+    def handle_account_button_click(self):
+        """로그인/로그아웃 버튼 클릭을 처리합니다."""
+        if self.data_manager.auth_manager.is_logged_in():
+            self.data_manager.auth_manager.logout()
+        else:
+            self.data_manager.auth_manager.login()
+        # auth_state_changed 신호가 DataManager를 통해 rebuild_ui를 호출할 것임
+
+    def populate_calendar_list(self):
+        """캘린더 목록 UI를 다시 만듭니다."""
+        # 기존 위젯들 삭제
+        while self.calendar_list_layout.count():
+            child = self.calendar_list_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        self.checkboxes = {}
+        self.color_combos = {}
+        self.emoji_combos = {}
+
         try:
             calendar_list = self.data_manager.get_all_calendars()
             
-            if not calendar_list and self.data_manager.providers:
-                 self.layout.addWidget(QLabel("Google 계정에 연결되었으나\n캘린더를 불러오지 못했습니다."))
-            elif not self.data_manager.providers:
-                 self.layout.addWidget(QLabel("Google 계정이 연결되지 않았습니다."))
+            if not calendar_list:
+                 self.calendar_list_layout.addWidget(QLabel("표시할 캘린더가 없습니다."))
             
+            # 로그인 안했을 때 selected_calendars에 구글 캘린더가 남아있는 경우 필터링
+            if not self.data_manager.auth_manager.is_logged_in():
+                local_cal_id = next((c['id'] for c in calendar_list if c['provider'] == 'LocalCalendarProvider'), None)
+                self.selected_calendars = [local_cal_id] if local_cal_id else []
+
             if not self.selected_calendars and calendar_list:
                 primary_cal_id = next((cal['id'] for cal in calendar_list if cal.get('primary')), None)
                 if primary_cal_id: self.selected_calendars = [primary_cal_id]
@@ -161,34 +237,20 @@ class SettingsWindow(BaseDialog):
                 row_layout.addWidget(color_combo)
                 row_layout.addWidget(name_label, 1)
                 row_layout.addWidget(emoji_combo)
-                row_layout.addWidget(checkbox)
-                self.layout.addLayout(row_layout)
+                self.calendar_list_layout.addLayout(row_layout)
 
         except Exception as e:
-            self.layout.addWidget(QLabel(f"캘린더 목록 로드 실패:\n{e}"))
-
-        button_layout = QHBoxLayout()
-        button_layout.addStretch(1)
-        
-        self.save_button = QPushButton("저장")
-        self.save_button.clicked.connect(self.save_and_close)
-        button_layout.addWidget(self.save_button)
-
-        self.cancel_button = QPushButton("취소")
-        self.cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(self.cancel_button)
-
-        content_layout.addLayout(button_layout)
+            label = QLabel(f"캘린더 목록 로드 실패:\n{e}")
+            label.setWordWrap(True)
+            self.calendar_list_layout.addWidget(label)
 
     def on_opacity_changed(self, value):
         """슬라이더 값이 변경될 때 호출됩니다."""
         main_opacity = value / 100.0
         self.opacity_label.setText(f"{value}%")
         
-        # 1. 메인 창의 실시간 미리보기를 위해 신호를 보냅니다.
         self.transparency_changed.emit(main_opacity)
         
-        # 2. 이 설정 창 자체도 "85% 더 진하게" 규칙을 따르도록 실시간으로 투명도를 조절합니다.
         dialog_opacity = main_opacity + (1 - main_opacity) * 0.85
         self.setWindowOpacity(dialog_opacity)
 

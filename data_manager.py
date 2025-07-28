@@ -7,12 +7,13 @@ import time
 from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition
 
+from auth_manager import AuthManager # AuthManager 임포트
 from providers.google_provider import GoogleCalendarProvider
 from providers.local_provider import LocalCalendarProvider
 from config import (CACHE_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL, 
                     GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_EVENT_COLOR)
-
+# ... (CachingManager 클래스는 변경 없음) ...
 class CachingManager(QObject):
     finished = pyqtSignal()
     def __init__(self, data_manager):
@@ -161,12 +162,19 @@ class CachingManager(QObject):
 
 class DataManager(QObject):
     data_updated = pyqtSignal(int, int)
+    # 캘린더 목록이 변경되었음을 알리는 신호 추가
+    calendar_list_changed = pyqtSignal()
 
-    def __init__(self, settings):
+    def __init__(self, settings, start_timer=True, load_cache=True):
         super().__init__()
         self.settings = settings
-        self.event_cache = {} # 월별 캐시만 유지: {(year, month): [events]}
-        self.load_cache_from_file()
+        self.auth_manager = AuthManager() # AuthManager 인스턴스 생성
+        self.auth_manager.auth_state_changed.connect(self.on_auth_state_changed)
+
+        self.event_cache = {}
+        if load_cache:
+            self.load_cache_from_file()
+        
         self.last_requested_month = None
         self.providers = []
         self.caching_thread = QThread()
@@ -174,21 +182,49 @@ class DataManager(QObject):
         self.caching_manager.moveToThread(self.caching_thread)
         self.caching_thread.started.connect(self.caching_manager.run)
         self.caching_thread.finished.connect(self.caching_thread.quit)
-        self.caching_thread.finished.connect(self.caching_manager.deleteLater)
+        self.caching_manager.finished.connect(self.caching_manager.deleteLater)
         self.caching_thread.finished.connect(self.caching_thread.deleteLater)
         self.caching_thread.start()
-        self.sync_timer = QTimer(self)
-        self.sync_timer.timeout.connect(self.request_full_sync)
-        self.update_sync_timer()
+        
+        if start_timer:
+            self.sync_timer = QTimer(self)
+            self.sync_timer.timeout.connect(self.request_full_sync)
+            self.update_sync_timer()
+        
+        # 초기 Provider 로드
+        self.setup_providers()
+
+    def setup_providers(self):
+        """인증 상태에 따라 Provider 목록을 설정합니다."""
+        self.providers = []
+        # Google Provider는 로그인 상태일 때만 추가
+        if self.auth_manager.is_logged_in():
+            try:
+                google_provider = GoogleCalendarProvider(self.settings, self.auth_manager)
+                self.providers.append(google_provider)
+            except Exception as e:
+                print(f"Google Provider 생성 중 오류 발생: {e}")
+        
+        # Local Provider는 항상 추가
         try:
-            self.google_provider = GoogleCalendarProvider(settings)
-            if self.google_provider._get_service_for_current_thread():
-                 self.providers.append(self.google_provider)
-        except Exception as e: print(f"Google Provider 생성 중 오류 발생: {e}")
-        try:
-            local_provider = LocalCalendarProvider(settings)
+            local_provider = LocalCalendarProvider(self.settings)
             self.providers.append(local_provider)
-        except Exception as e: print(f"Local Provider 생성 중 오류 발생: {e}")
+        except Exception as e:
+            print(f"Local Provider 생성 중 오류 발생: {e}")
+
+    def on_auth_state_changed(self):
+        """로그인/로그아웃 시 호출됩니다."""
+        print("인증 상태 변경 감지. Provider를 재설정하고 데이터를 새로고침합니다.")
+        self.setup_providers()
+        # 캘린더 목록이 바뀌었으므로 UI에 알려야 함
+        self.calendar_list_changed.emit()
+        # 현재 보고 있는 달의 데이터를 새로고침
+        if self.last_requested_month:
+            year, month = self.last_requested_month
+            self.event_cache.pop((year, month), None) # 기존 캐시 제거
+            self.get_events(year, month) # 데이터 다시 요청
+        self.request_full_sync() # 전체 동기화도 요청
+
 
     def update_sync_timer(self):
         interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
@@ -316,7 +352,7 @@ class DataManager(QObject):
     def add_event(self, event_data):
         provider_name = event_data.get('provider')
         for provider in self.providers:
-            if type(provider).__name__ == provider_name:
+            if provider.name == provider_name:
                 new_event = provider.add_event(event_data)
                 if new_event:
                     if 'provider' not in new_event:
@@ -347,7 +383,7 @@ class DataManager(QObject):
     def update_event(self, event_data):
         provider_name = event_data.get('provider')
         for provider in self.providers:
-            if type(provider).__name__ == provider_name:
+            if provider.name == provider_name:
                 updated_event = provider.update_event(event_data)
                 if updated_event:
                     if 'provider' not in updated_event:
@@ -382,7 +418,7 @@ class DataManager(QObject):
     def delete_event(self, event_data):
         provider_name = event_data.get('provider')
         for provider in self.providers:
-            if type(provider).__name__ == provider_name:
+            if provider.name == provider_name:
                 if provider.delete_event(event_data):
                     event_body = event_data.get('body', event_data)
                     event_id_to_delete = event_body.get('id')

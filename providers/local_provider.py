@@ -11,6 +11,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, db_connection=None):
         self.settings = settings
         self._connection = db_connection
+        self.name = LOCAL_CALENDAR_PROVIDER_NAME
         # DB 연결을 먼저 확인하고 마이그레이션을 수행합니다.
         self._check_and_migrate_db()
 

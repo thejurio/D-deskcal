@@ -2,21 +2,19 @@ import datetime
 import os.path
 import threading
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from providers.base_provider import BaseCalendarProvider
-from config import (TOKEN_FILE, CREDENTIALS_FILE, GOOGLE_CALENDAR_PROVIDER_NAME, 
-                    DEFAULT_EVENT_COLOR)
+from config import (GOOGLE_CALENDAR_PROVIDER_NAME, DEFAULT_EVENT_COLOR)
 
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+# 인증 관련 import는 AuthManager로 이동했으므로 삭제
 
 class GoogleCalendarProvider(BaseCalendarProvider):
-    def __init__(self, settings):
+    def __init__(self, settings, auth_manager):
         self.settings = settings
+        self.name = GOOGLE_CALENDAR_PROVIDER_NAME
+        self.auth_manager = auth_manager # AuthManager 인스턴스 저장
         self._services_lock = threading.Lock()
         self._services_by_thread = {}
         self._calendar_list_cache = None
@@ -25,27 +23,17 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         """현재 스레드에 맞는 독립적인 service 객체를 가져오거나 생성합니다."""
         thread_id = threading.get_ident()
         with self._services_lock:
+            # 인증 정보가 없으면 서비스 생성 불가
+            creds = self.auth_manager.get_credentials()
+            if not creds:
+                return None
+            
             if thread_id not in self._services_by_thread:
-                self._services_by_thread[thread_id] = self._authenticate()
+                self._services_by_thread[thread_id] = build("calendar", "v3", credentials=creds)
             return self._services_by_thread[thread_id]
 
-    def _authenticate(self):
-        """Google Calendar API와 통신하기 위한 서비스 객체를 생성하고 반환합니다."""
-        creds = None
-        if os.path.exists(TOKEN_FILE):
-            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-        
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-                creds = flow.run_local_server(port=0)
-            
-            with open(TOKEN_FILE, "w") as token:
-                token.write(creds.to_json())
-        
-        return build("calendar", "v3", credentials=creds)
+    # _authenticate 메서드는 AuthManager로 이동했으므로 삭제
+
 
     def get_calendar_list(self):
         """사용자의 캘린더 목록 전체를 반환합니다. (메모리 캐시 사용)"""
