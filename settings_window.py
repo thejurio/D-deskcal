@@ -15,7 +15,8 @@ EMOJI_LIST = ["없음", "💻", "😊", "🎂", "💪", "✈️", "🗓️", "�
 CUSTOM_COLOR_TEXT = "사용자 지정..."
 
 class SettingsWindow(BaseDialog):
-    transparency_changed = pyqtSignal(float) # 실시간 미리보기를 위한 신호 추가
+    transparency_changed = pyqtSignal(float)
+    theme_changed = pyqtSignal(str) # 테마 변경 신호 추가
 
     # --- ▼▼▼ __init__ 메서드의 파라미터가 변경되었습니다. ▼▼▼ ---
     def __init__(self, data_manager, settings, parent=None, pos=None):
@@ -112,7 +113,26 @@ class SettingsWindow(BaseDialog):
 
         start_day_layout.addWidget(self.start_day_combo)
         self.layout.addLayout(start_day_layout)
-        # --- 여기까지 시작 요일 설정 UI 추가 ---
+
+        # --- 테마 설정 UI 추가 ---
+        self.layout.addWidget(QLabel("-" * 50))
+        theme_layout = QHBoxLayout()
+        theme_layout.addWidget(QLabel("테마 설정:"))
+        self.theme_combo = QComboBox()
+        self.theme_options = {
+            "dark": "어두운 테마",
+            "light": "밝은 테마"
+        }
+        for value, text in self.theme_options.items():
+            self.theme_combo.addItem(text, value)
+        
+        current_theme = self.settings.get("theme", "dark")
+        self.theme_combo.setCurrentText(self.theme_options.get(current_theme, "어두운 테마"))
+        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+
+        theme_layout.addWidget(self.theme_combo)
+        self.layout.addLayout(theme_layout)
+        # --- 여기까지 테마 설정 UI 추가 ---
         
         # --- 투명도 설정 UI 추가 ---
         self.layout.addWidget(QLabel("-" * 50))
@@ -254,6 +274,11 @@ class SettingsWindow(BaseDialog):
         dialog_opacity = main_opacity + (1 - main_opacity) * 0.85
         self.setWindowOpacity(dialog_opacity)
 
+    def on_theme_changed(self, text):
+        """테마 콤보박스 값이 변경될 때 호출됩니다."""
+        selected_theme_name = self.theme_combo.currentData()
+        self.theme_changed.emit(selected_theme_name)
+
     # create_color_icon, create_color_combo, handle_color_change, save_and_close 메서드는 변경사항 없습니다.
     def create_color_icon(self, color_hex):
         pixmap = QPixmap(16, 16)
@@ -296,5 +321,8 @@ class SettingsWindow(BaseDialog):
 
         # 투명도 설정 저장
         self.settings["window_opacity"] = self.opacity_slider.value() / 100.0
+
+        # 테마 설정 저장
+        self.settings["theme"] = self.theme_combo.currentData()
 
         self.accept()

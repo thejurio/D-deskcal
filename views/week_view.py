@@ -6,23 +6,17 @@ from PyQt6.QtGui import QAction, QCursor
 
 from .widgets import EventLabelWidget, TimeScaleWidget
 from custom_dialogs import CustomMessageBox
+from .layout_calculator import WeekLayoutCalculator
+from .base_view import BaseViewWidget
 
-class WeekViewWidget(QWidget):
-    add_event_requested = pyqtSignal(datetime.datetime)
-    edit_event_requested = pyqtSignal(dict)
-
+class WeekViewWidget(BaseViewWidget):
     def __init__(self, main_widget):
-        super().__init__()
-        self.main_widget = main_widget
-        self.data_manager = main_widget.data_manager
-        self.current_date = datetime.date.today() 
+        super().__init__(main_widget)
         self.day_labels = []
         self.hour_height = 40
-        self.padding = 10 # TimeScaleWidget과 동일한 여백 값
-        
-        # --- ▼▼▼ 리사이즈 최적화 코드 추가 ▼▼▼ ---
-        self.is_resizing = False
-        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+        self.padding = 10
+        self.all_day_event_widgets = []
+        self.last_mouse_pos = None
 
         self.initUI()
 
@@ -31,18 +25,16 @@ class WeekViewWidget(QWidget):
         self.timeline_timer.timeout.connect(self.update_timeline)
         self.timeline_timer.start()
 
-    # --- ▼▼▼ 리사이즈 최적화 코드 추가 ▼▼▼ ---
     def set_resizing(self, is_resizing):
-        """리사이즈 상태를 설정하고, 상태에 따라 이벤트 위젯을 숨기거나 다시 그립니다."""
+        """BaseViewWidget의 메서드를 오버라이드하여 all_day_event_widgets도 처리합니다."""
         self.is_resizing = is_resizing
+        widgets_to_manage = self.event_widgets + self.all_day_event_widgets
         if self.is_resizing:
-            # 리사이즈 시작 시, 모든 이벤트 위젯을 숨깁니다.
-            for widget in self.event_widgets + self.all_day_event_widgets:
+            for widget in widgets_to_manage:
                 widget.hide()
         else:
-            # 리사이즈 종료 시, 이벤트를 다시 그립니다.
             self.redraw_events_with_current_data()
-    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
 
     def _get_datetime_from_pos(self, pos):
         """주어진 QPoint 위치를 datetime.datetime 객체로 변환합니다. 유효하지 않은 위치일 경우 None을 반환합니다."""
@@ -255,65 +247,30 @@ class WeekViewWidget(QWidget):
         for widget in self.all_day_event_widgets: widget.deleteLater()
         self.all_day_event_widgets.clear()
 
-    def draw_events(self, events, start_of_week):
+    def draw_events(self, time_events, start_of_week):
         parent_widget = self.event_container
         
-        events_by_day = {}
-        for event in events:
-            start_dt = datetime.datetime.fromisoformat(event['start']['dateTime']).replace(tzinfo=None)
-            end_dt = datetime.datetime.fromisoformat(event['end']['dateTime']).replace(tzinfo=None)
-            d = start_dt.date()
-            while d <= end_dt.date():
-                if start_of_week <= d <= start_of_week + datetime.timedelta(days=6):
-                    if d not in events_by_day: events_by_day[d] = []
-                    events_by_day[d].append(event)
-                d += datetime.timedelta(days=1)
+        calculator = WeekLayoutCalculator(time_events, [], start_of_week, self.hour_height)
+        positions = calculator.calculate_time_events(parent_widget.width())
 
-        for day_date, day_events in events_by_day.items():
-            day_events.sort(key=lambda e: datetime.datetime.fromisoformat(e['start']['dateTime']))
+        for pos_info in positions:
+            event = pos_info['event']
+            x, y, width, height = pos_info['rect']
+
+            event_widget = EventLabelWidget(event, parent_widget)
             
-            groups = []
-            for event in day_events:
-                placed = False
-                start_dt = datetime.datetime.fromisoformat(event['start']['dateTime'])
-                for group in groups:
-                    last_event_end_dt = datetime.datetime.fromisoformat(group[-1]['end']['dateTime'])
-                    if start_dt >= last_event_end_dt:
-                        group.append(event)
-                        placed = True
-                        break
-                if not placed:
-                    groups.append([event])
+            summary = event.get('summary', '(제목 없음)')
+            if 'recurrence' in event:
+                summary = f"🔄 {summary}"
+            event_widget.setText(summary)
 
-            day_column_width = parent_widget.width() / 7
-            col_index = (day_date - start_of_week).days
-
-            for group in groups:
-                num_columns = len(group)
-                for i, event in enumerate(group):
-                    start_dt = datetime.datetime.fromisoformat(event['start']['dateTime']).replace(tzinfo=None)
-                    end_dt = datetime.datetime.fromisoformat(event['end']['dateTime']).replace(tzinfo=None)
-                    
-                    y = start_dt.hour * self.hour_height + (start_dt.minute / 60) * self.hour_height
-                    height = ((end_dt - start_dt).total_seconds() / 3600) * self.hour_height
-                    
-                    width = day_column_width / num_columns
-                    x = col_index * day_column_width + i * width
-
-                    event_widget = EventLabelWidget(event, parent_widget)
-                    
-                    summary = event.get('summary', '(제목 없음)')
-                    if 'recurrence' in event:
-                        summary = f"🔄 {summary}"
-                    event_widget.setText(summary)
-
-                    event_widget.edit_requested.connect(self.edit_event_requested)
-                    event_widget.setStyleSheet(f"background-color: {event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;")
-                    event_widget.setWordWrap(True)
-                    event_widget.setAlignment(Qt.AlignmentFlag.AlignTop)
-                    event_widget.setGeometry(int(x + 1), int(y), int(width - 2), int(height))
-                    event_widget.show()
-                    self.event_widgets.append(event_widget)
+            event_widget.edit_requested.connect(self.edit_event_requested)
+            event_widget.setStyleSheet(f"background-color: {event.get('color', '#555555')}; color: white; border-radius: 4px; padding: 2px 4px; font-size: 8pt;")
+            event_widget.setWordWrap(True)
+            event_widget.setAlignment(Qt.AlignmentFlag.AlignTop)
+            event_widget.setGeometry(x, y, width, height)
+            event_widget.show()
+            self.event_widgets.append(event_widget)
 
     def refresh(self):
         today = datetime.date.today()
@@ -322,16 +279,25 @@ class WeekViewWidget(QWidget):
         
         self.week_range_label.setText(f"{start_of_week.strftime('%Y년 %m월 %d일')} - {end_of_week.strftime('%m월 %d일')}")
 
+        # 현재 테마에 맞는 색상표를 가져옵니다.
+        current_theme = self.main_widget.settings.get("theme", "dark")
+        is_dark = current_theme == "dark"
+        colors = {
+            "saturday": "#8080FF" if is_dark else "#0000DD",
+            "sunday": "#FF8080" if is_dark else "#DD0000",
+            "today": "#FFFF77" if is_dark else "#A0522D"
+        }
+
         days_of_week = ["일", "월", "화", "수", "목", "금", "토"]
         for i in range(7):
             day_date = start_of_week + datetime.timedelta(days=i)
             label_text = f"{days_of_week[i]} ({day_date.day})"
             self.day_labels[i].setText(label_text)
             
-            font_color = "white"
-            if day_date == today: font_color = "#FFFF77"
-            elif i == 0: font_color = "#ff8080"
-            elif i == 6: font_color = "#8080ff"
+            font_color = self.palette().color(self.foregroundRole()).name() # 기본 텍스트 색상
+            if day_date == today: font_color = colors['today']
+            elif i == 0: font_color = colors['sunday']
+            elif i == 6: font_color = colors['saturday']
             self.day_labels[i].setStyleSheet(f"color: {font_color}; font-weight: bold;")
 
         self.redraw_events_with_current_data()
@@ -357,68 +323,33 @@ class WeekViewWidget(QWidget):
         self.draw_all_day_events(all_day_events, start_of_week)
         self.time_scale.update()
 
-    def draw_all_day_events(self, events, start_of_week):
-        if not events:
+    def draw_all_day_events(self, all_day_events, start_of_week):
+        if not all_day_events:
             self.all_day_widget.setVisible(False)
             return
         
         self.all_day_widget.setVisible(True)
         
-        sorted_events = sorted(events, key=lambda e: (
-            datetime.date.fromisoformat(e['start']['date']),
-            -(datetime.date.fromisoformat(e['end']['date']) - datetime.date.fromisoformat(e['start']['date'])).days
-        ))
+        calculator = WeekLayoutCalculator([], all_day_events, start_of_week)
+        positions, num_lanes = calculator.calculate_all_day_events()
 
-        lanes_occupancy = [[] for _ in range(7)]
-        event_to_lane = {}
+        for pos_info in positions:
+            event = pos_info['event']
+            lane = pos_info['lane']
+            start_col = pos_info['start_col']
+            span = pos_info['span']
 
-        for event in sorted_events:
-            start_date = datetime.date.fromisoformat(event['start']['date'])
-            end_date = datetime.date.fromisoformat(event['end']['date']) - datetime.timedelta(days=1)
+            event_label = EventLabelWidget(event, self.all_day_widget)
             
-            event_start_offset = (start_date - start_of_week).days
-            event_end_offset = (end_date - start_of_week).days
+            summary = event.get('summary', '')
+            if 'recurrence' in event:
+                summary = f"🔄 {summary}"
+            event_label.setText(summary)
 
-            lane_idx = 0
-            while True:
-                is_free = True
-                for day_offset in range(max(0, event_start_offset), min(7, event_end_offset + 1)):
-                    if lane_idx in lanes_occupancy[day_offset]:
-                        is_free = False
-                        break
-                if is_free:
-                    for day_offset in range(max(0, event_start_offset), min(7, event_end_offset + 1)):
-                        lanes_occupancy[day_offset].append(lane_idx)
-                    event_to_lane[event['id']] = lane_idx
-                    break
-                lane_idx += 1
-
-        for event in events:
-            start_date = datetime.date.fromisoformat(event['start']['date'])
-            end_date = datetime.date.fromisoformat(event['end']['date']) - datetime.timedelta(days=1)
+            event_label.edit_requested.connect(self.edit_event_requested)
+            event_label.setStyleSheet(f"background-color: {event.get('color', '#555555')}; border-radius: 3px; padding: 1px 3px;")
             
-            draw_start_date = max(start_date, start_of_week)
-            draw_end_date = min(end_date, start_of_week + datetime.timedelta(days=6))
-
-            if draw_start_date > draw_end_date: continue
-
-            start_offset = (draw_start_date - start_of_week).days
-            span = (draw_end_date - draw_start_date).days + 1
-            
-            if span > 0:
-                event_label = EventLabelWidget(event, self.all_day_widget)
-                
-                summary = event.get('summary', '')
-                if 'recurrence' in event:
-                    summary = f"🔄 {summary}"
-                event_label.setText(summary)
-
-                event_label.edit_requested.connect(self.edit_event_requested)
-                event_label.setStyleSheet(f"background-color: {event.get('color', '#555555')}; border-radius: 3px; padding: 1px 3px;")
-                
-                lane = event_to_lane.get(event['id'], 0)
-                self.all_day_layout.addWidget(event_label, lane, start_offset, 1, span)
-                self.all_day_event_widgets.append(event_label)
+            self.all_day_layout.addWidget(event_label, lane, start_col, 1, span)
+            self.all_day_event_widgets.append(event_label)
         
-        num_lanes = max(event_to_lane.values()) + 1 if event_to_lane else 0
         self.all_day_widget.setMinimumHeight(max(1, num_lanes) * 22 if num_lanes > 0 else 25)

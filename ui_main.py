@@ -12,50 +12,13 @@ from data_manager import DataManager
 from views.month_view import MonthViewWidget
 from views.week_view import WeekViewWidget
 from settings_window import SettingsWindow
-from event_editor_window import EventEditorWindow 
+from event_editor_window import EventEditorWindow
 
-# 스타일시트 정의 (기존과 동일)
-DARK_THEME_STYLESHEET = """
-    /* ... (기존 스타일시트 내용은 변경 없음) ... */
-    QWidget { background-color: #2E2E2E; color: #FFFFFF; border: none; font-family: "Malgun Gothic"; font-size: 10pt; }
-    QWidget#dialog_background { background-color: #3C3C3C; border-radius: 10px; }
-    QDialog { background-color: transparent; }
-    QLabel { background-color: transparent; }
-    QPushButton { background-color: #555555; border: 1px solid #777777; padding: 5px 10px; border-radius: 5px; min-height: 20px; }
-    QPushButton:hover { background-color: #6E6E6E; border-color: #888888; }
-    QPushButton:pressed { background-color: #4D4D4D; border-color: #666666; }
-    QPushButton:checked { background-color: #0078D7; border-color: #005A9E; }
-    QPushButton#today_button { background-color: #0078D7; border-color: #005A9E; }
-    QPushButton#today_button:hover { background-color: #0082F0; }
-    QPushButton#today_button:pressed { background-color: #006AC5; }
-    QLineEdit, QTextEdit { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 5px; }
-    QLineEdit:focus, QTextEdit:focus { border-color: #0078D7; }
-    QComboBox { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px 5px; }
-    QComboBox::drop-down { border: none; }
-    QComboBox::down-arrow { image: url(./views/down_arrow.png); width: 12px; height: 12px; }
-    QComboBox QAbstractItemView { background-color: #424242; border: 1px solid #5A5A5A; selection-background-color: #0078D7; }
-    QScrollBar:vertical { border: none; background: #2E2E2E; width: 10px; margin: 0px 0px 0px 0px; }
-    QScrollBar::handle:vertical { background: #5A5A5A; min-height: 20px; border-radius: 5px; }
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-    QScrollBar:horizontal { border: none; background: #2E2E2E; height: 10px; margin: 0px 0px 0px 0px; }
-    QScrollBar::handle:horizontal { background: #5A5A5A; min-width: 20px; border-radius: 5px; }
-    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
-    QMenu { background-color: #424242; border: 1px solid #5A5A5A; padding: 5px; }
-    QMenu::item { padding: 5px 20px; }
-    QMenu::item:selected { background-color: #0078D7; }
-    QMenu::separator { height: 1px; background: #5A5A5A; margin: 5px 0; }
-    QCheckBox::indicator { width: 16px; height: 16px; }
-    QCheckBox::indicator:unchecked { border: 1px solid #777; background-color: #424242; border-radius: 3px; }
-    QCheckBox::indicator:checked { background-color: #0078D7; border: 1px solid #005A9E; border-radius: 3px; }
-    QDateTimeEdit { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px; }
-    QDateTimeEdit::up-button, QDateTimeEdit::down-button { width: 0px; }
-    QDateTimeEdit::drop-down { border: none; }
-    QCalendarWidget QWidget { alternate-background-color: #424242; }
-    QMessageBox { background-color: #3C3C3C; }
-    QMessageBox QLabel { color: #FFFFFF; }
-    DayCellWidget { border: 1px solid #484848; }
-    QToolTip { background-color: #424242; color: #FFFFFF; border: none; border-radius: 5px; padding: 5px; opacity: 230; }
-"""
+def load_stylesheet(file_path):
+    """지정된 경로의 스타일시트 파일을 읽어서 문자열로 반환합니다."""
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.read()
+
 
 # --- ▼▼▼ 리사이즈 상태 감지를 위한 커스텀 QSizeGrip 추가 ▼▼▼ ---
 class CustomSizeGrip(QSizeGrip):
@@ -221,17 +184,32 @@ class MainWidget(QWidget):
     def open_settings_window(self):
         with self.data_manager.user_action_priority():
             original_opacity = self.settings.get("window_opacity", 0.95)
+            original_theme = self.settings.get("theme", "dark")
+
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=QCursor.pos())
             settings_dialog.transparency_changed.connect(self.set_window_opacity)
+            settings_dialog.theme_changed.connect(self.apply_theme) # 테마 변경 신호 연결
             
             result = settings_dialog.exec()
             
             if result:
                 self.data_manager.update_sync_timer()
                 self.set_window_opacity(self.settings.get("window_opacity", 0.95))
+                # 저장된 테마를 다시 적용 (확정)
+                self.apply_theme(self.settings.get("theme", "dark"))
                 self.refresh_current_view()
             else:
+                # 취소 시, 원래 테마와 투명도로 복구
                 self.set_window_opacity(original_opacity)
+                self.apply_theme(original_theme)
+
+    def apply_theme(self, theme_name):
+        """애플리케이션 전체에 테마를 적용합니다."""
+        try:
+            stylesheet = load_stylesheet(f'themes/{theme_name}_theme.qss')
+            QApplication.instance().setStyleSheet(stylesheet)
+        except FileNotFoundError:
+            print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
     def open_event_editor(self, data):
         with self.data_manager.user_action_priority():
@@ -333,16 +311,15 @@ class MainWidget(QWidget):
 if __name__ == '__main__':
     settings = load_settings()
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_THEME_STYLESHEET)
-    widget = MainWidget(settings)
-    widget.show()
-    widget.start()
-    sys.exit(app.exec())
+    
+    # 설정에 저장된 테마를 불러와 적용
+    selected_theme = settings.get("theme", "dark")
+    try:
+        stylesheet = load_stylesheet(f'themes/{selected_theme}_theme.qss')
+        app.setStyleSheet(stylesheet)
+    except FileNotFoundError:
+        print(f"경고: 'themes/{selected_theme}_theme.qss' 파일을 찾을 수 없습니다.")
 
-if __name__ == '__main__':
-    settings = load_settings()
-    app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_THEME_STYLESHEET)
     widget = MainWidget(settings)
     widget.show()
     widget.start()

@@ -6,6 +6,8 @@ from PyQt6.QtGui import QFont, QCursor
 
 from custom_dialogs import CustomMessageBox, NewDateSelectionDialog, MoreEventsDialog
 from .widgets import EventLabelWidget
+from .layout_calculator import MonthLayoutCalculator
+from .base_view import BaseViewWidget
 
 class DayCellWidget(QWidget):
     add_event_requested = pyqtSignal(datetime.date)
@@ -16,50 +18,21 @@ class DayCellWidget(QWidget):
         self.layout.setContentsMargins(3, 3, 3, 3)
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
     def mouseDoubleClickEvent(self, event):
-        # super()를 먼저 호출하여 기본 이벤트를 처리한 후, 커스텀 시그널을 발생시킵니다.
-        # 이렇게 하면 시그널 처리 도중 위젯이 삭제되더라도 런타임 에러가 발생하지 않습니다.
         super().mouseDoubleClickEvent(event)
         if event.button() == Qt.MouseButton.LeftButton:
             self.add_event_requested.emit(self.date_obj)
 
-class MonthViewWidget(QWidget):
-    add_event_requested = pyqtSignal(datetime.date)
-    edit_event_requested = pyqtSignal(dict)
-
+class MonthViewWidget(BaseViewWidget):
     def __init__(self, main_widget):
-        super().__init__()
-        self.main_widget = main_widget
-        self.data_manager = main_widget.data_manager
-        self.current_date = datetime.date.today()
+        super().__init__(main_widget)
         self.date_to_cell_map = {}
-        self.event_widgets = []
-        
-        # --- ▼▼▼ 리사이즈 최적화 코드 변경 ▼▼▼ ---
-        self.is_resizing = False 
-        # self.resize_timer는 더 이상 필요 없으므로 삭제
-        # --- ▲▲▲ 여기까지 변경 ▲▲▲ ---
-        
-        self.data_manager.data_updated.connect(self.on_data_updated)
-        
         self.initUI()
         self.refresh()
-
-    # --- ▼▼▼ 리사이즈 최적화 코드 추가 ▼▼▼ ---
-    def set_resizing(self, is_resizing):
-        """리사이즈 상태를 설정하고, 상태에 따라 이벤트 위젯을 숨기거나 다시 그립니다."""
-        self.is_resizing = is_resizing
-        if self.is_resizing:
-            # 리사이즈 시작 시, 모든 이벤트 위젯을 숨깁니다.
-            for widget in self.event_widgets:
-                widget.hide()
-        else:
-            # 리사이즈 종료 시, 이벤트를 다시 그립니다.
-            self.redraw_events_with_current_data()
-    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def on_data_updated(self, year, month):
         if year == self.current_date.year and month == self.current_date.month:
             self.redraw_events_with_current_data()
+
 
     def initUI(self):
         main_layout = QVBoxLayout(self)
@@ -70,12 +43,7 @@ class MonthViewWidget(QWidget):
         self.month_button = QPushButton()
         self.month_button.clicked.connect(self.open_date_selection_dialog)
         
-        nav_button_style = "QPushButton { color: white; background-color: transparent; border: none; font-size: 20px; } QPushButton:hover { color: #aaaaaa; }"
-        month_button_style = "QPushButton { color: white; background-color: transparent; border: none; font-size: 16px; font-weight: bold; } QPushButton:hover { color: #aaaaaa; }"
-        
-        prev_button.setStyleSheet(nav_button_style)
-        next_button.setStyleSheet(nav_button_style)
-        self.month_button.setStyleSheet(month_button_style)
+        # nav_button_style과 month_button_style 직접 지정을 제거
         
         prev_button.clicked.connect(self.go_to_previous_month)
         next_button.clicked.connect(self.go_to_next_month)
@@ -110,6 +78,22 @@ class MonthViewWidget(QWidget):
     def refresh(self): self.draw_grid(self.current_date.year, self.current_date.month)
 
     def draw_grid(self, year, month):
+        # 현재 테마에 맞는 색상표를 가져옵니다.
+        current_theme = self.main_widget.settings.get("theme", "dark")
+        is_dark = current_theme == "dark"
+
+        colors = {
+            "weekday": "#FFFFFF" if is_dark else "#222222",
+            "saturday": "#8080FF" if is_dark else "#0000DD",
+            "sunday": "#FF8080" if is_dark else "#DD0000",
+            "today_bg": "#444422" if is_dark else "#FFFFAA",
+            "today_fg": "#FFFF77" if is_dark else "#A0522D",
+            "other_month": "#777777" if is_dark else "#AAAAAA"
+        }
+
+        # month_button의 텍스트 색상을 테마에 맞게 설정
+        self.month_button.setStyleSheet(f"color: {colors['weekday']}; background-color: transparent; border: none; font-size: 16px; font-weight: bold;")
+
         while self.calendar_grid.count():
             child = self.calendar_grid.takeAt(0)
             if child.widget(): child.widget().deleteLater()
@@ -119,7 +103,7 @@ class MonthViewWidget(QWidget):
         for i, day in enumerate(days_of_week):
             label = QLabel(day)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            color = "#ff8080" if day == "일" else ("#8080ff" if day == "토" else "white")
+            color = colors['sunday'] if day == "일" else (colors['saturday'] if day == "토" else colors['weekday'])
             label.setStyleSheet(f"color: {color}; font-weight: bold;")
             self.calendar_grid.addWidget(label, 0, i)
 
@@ -136,15 +120,19 @@ class MonthViewWidget(QWidget):
                 day_label = QLabel(str(day))
                 day_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
                 day_widget.layout.addWidget(day_label)
-                font_color = "white"
-                if day_index == 0: font_color = "#ff8080"
-                elif day_index == 6: font_color = "#8080ff"
+                
+                font_color = colors['weekday']
+                if day_index == 0: font_color = colors['sunday']
+                elif day_index == 6: font_color = colors['saturday']
+                
                 day_label.setStyleSheet(f"color: {font_color}; background-color: transparent;")
+                
                 if current_day_obj == today:
-                    day_widget.setStyleSheet("background-color: #444422;")
-                    day_label.setStyleSheet("color: #FFFF77; font-weight: bold; background-color: transparent;")
+                    day_widget.setStyleSheet(f"background-color: {colors['today_bg']};")
+                    day_label.setStyleSheet(f"color: {colors['today_fg']}; font-weight: bold; background-color: transparent;")
                 else:
                     day_widget.setStyleSheet("background-color: transparent;")
+                
                 self.calendar_grid.addWidget(day_widget, week_index + 1, day_index)
                 self.date_to_cell_map[current_day_obj] = {'row': week_index + 1, 'col': day_index, 'widget': day_widget}
 
@@ -159,7 +147,7 @@ class MonthViewWidget(QWidget):
             day_label = QLabel(str(day))
             day_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
             day_widget.layout.addWidget(day_label)
-            day_label.setStyleSheet("color: #777777;")
+            day_label.setStyleSheet(f"color: {colors['other_month']};")
             self.calendar_grid.addWidget(day_widget, 1, i)
             self.date_to_cell_map[current_day_obj] = {'row': 1, 'col': i, 'widget': day_widget}
             prev_month_date -= datetime.timedelta(days=1)
@@ -176,7 +164,7 @@ class MonthViewWidget(QWidget):
             day_label = QLabel(str(day))
             day_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
             day_widget.layout.addWidget(day_label)
-            day_label.setStyleSheet("color: #777777;")
+            day_label.setStyleSheet(f"color: {colors['other_month']};")
             self.calendar_grid.addWidget(day_widget, row, i)
             self.date_to_cell_map[current_day_obj] = {'row': row, 'col': i, 'widget': day_widget}
             next_month_date += datetime.timedelta(days=1)
@@ -195,107 +183,89 @@ class MonthViewWidget(QWidget):
         for widget in self.event_widgets:
             widget.deleteLater()
         self.event_widgets.clear()
+
         if not events or not self.date_to_cell_map:
             return
-            
-        occupied_lanes = {}
-        more_events_to_create = {}
+
+        # 1. 계산기 객체 생성 및 실행
+        calculator = MonthLayoutCalculator(events, self.date_to_cell_map.keys())
+        event_positions, more_events_data = calculator.calculate()
 
         y_offset, event_height, event_spacing = 25, 20, 2
 
-        for event in sorted(events, key=lambda e: (e['start'].get('date', e['start'].get('dateTime', ''))[:10])):
-            try:
-                start_info, end_info = event['start'], event['end']
-                is_all_day = 'date' in start_info
-                start_str, end_str = (start_info.get('date') or start_info.get('dateTime')), (end_info.get('date') or end_info.get('dateTime'))
-                event_start_date, event_end_date = datetime.date.fromisoformat(start_str[:10]), datetime.date.fromisoformat(end_str[:10])
-                if is_all_day and len(end_str) == 10: event_end_date -= datetime.timedelta(days=1)
-                elif not is_all_day and end_str.endswith('00:00:00'): event_end_date -= datetime.timedelta(days=1)
+        # 2. 계산된 위치에 따라 이벤트 위젯 그리기
+        for pos_info in event_positions:
+            event = pos_info['event']
+            y_level = pos_info['y_level']
+            
+            days_by_row = {}
+            for day in pos_info['days_in_view']:
+                info = self.date_to_cell_map.get(day)
+                if info:
+                    days_by_row.setdefault(info['row'], []).append(day)
 
-                visible_days = self.date_to_cell_map.keys()
-                view_start_date, view_end_date = min(visible_days), max(visible_days)
+            for row, days_in_row in days_by_row.items():
+                start_cell_info = self.date_to_cell_map.get(days_in_row[0])
+                if not start_cell_info: continue
+
+                cell_height = self.calendar_grid.cellRect(start_cell_info['row'], start_cell_info['col']).height()
+                max_slots = (cell_height - y_offset) // (event_height + event_spacing)
+                max_visible_y_level = max_slots - 1
+
+                if y_level >= max_visible_y_level:
+                    for day in days_in_row:
+                        more_events_data.setdefault(day, []).append(event)
+                    continue
+
+                segment_start_date, segment_end_date = min(days_in_row), max(days_in_row)
+                start_cell, end_cell = self.date_to_cell_map[segment_start_date], self.date_to_cell_map[segment_end_date]
+                start_rect, end_rect = self.calendar_grid.cellRect(start_cell['row'], start_cell['col']), self.calendar_grid.cellRect(end_cell['row'], end_cell['col'])
+
+                if not start_rect.isValid() or not end_rect.isValid(): continue
+
+                x = start_rect.left()
+                y = start_rect.top() + y_offset + (y_level * (event_height + event_spacing))
+                width = end_rect.right() - start_rect.left()
+                height = event_height
+
+                is_true_start = (segment_start_date == pos_info['start_date'])
+                is_true_end = (segment_end_date == pos_info['end_date'])
+                is_week_start = (start_cell['col'] == 0)
+                is_week_end = (end_cell['col'] == 6)
                 
-                draw_start_date = max(event_start_date, view_start_date)
-                draw_end_date = min(event_end_date, view_end_date)
+                radius, sharp = "5px", "0px"
+                tlr = radius if is_true_start or is_week_start else sharp
+                blr = radius if is_true_start or is_week_start else sharp
+                trr = radius if is_true_end or is_week_end else sharp
+                brr = radius if is_true_end or is_week_end else sharp
+                border_radius_style = f"border-radius: {tlr} {trr} {brr} {blr};"
+
+                event_widget = EventLabelWidget(event, self)
+                event_widget.edit_requested.connect(self.on_edit_event_requested)
                 
-                if draw_start_date > draw_end_date: continue
-
-                event_span_days = [draw_start_date + datetime.timedelta(d) for d in range((draw_end_date - draw_start_date).days + 1)]
-                y_level = 0
-                while True:
-                    if not any(y_level in occupied_lanes.get(d, []) for d in event_span_days): break
-                    y_level += 1
+                summary = event.get('summary', '')
+                if 'recurrence' in event:
+                    summary = f"🔄 {summary}"
+                event_widget.setText(summary)
                 
-                days_by_row = {}
-                for day in event_span_days:
-                    info = self.date_to_cell_map.get(day)
-                    if info: days_by_row.setdefault(info['row'], []).append(day)
+                tooltip_text = f"<b>{event.get('summary', '')}</b>"
+                if 'dateTime' in event.get('start', {}):
+                    try:
+                        start_dt = datetime.datetime.fromisoformat(event['start']['dateTime'])
+                        tooltip_text += f"<br>{start_dt.strftime('%H:%M')}"
+                    except: pass
+                event_widget.setToolTip(tooltip_text)
 
-                for row, days_in_row in days_by_row.items():
-                    start_cell_info = self.date_to_cell_map.get(days_in_row[0])
-                    if not start_cell_info: continue
-                    
-                    cell_height = self.calendar_grid.cellRect(start_cell_info['row'], start_cell_info['col']).height()
-                    max_slots = (cell_height - y_offset) // (event_height + event_spacing)
-                    max_visible_y_level = max_slots - 1
+                event_widget.setGeometry(x, y, width, height)
+                event_color = event.get('color', '#555555')
+                event_widget.setStyleSheet(f"background-color: {event_color}; color: white; {border_radius_style} padding-left: 5px; font-size: 9pt;")
+                event_widget.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+                event_widget.show()
+                self.event_widgets.append(event_widget)
 
-                    if y_level >= max_visible_y_level:
-                        for day in days_in_row:
-                            more_events_to_create.setdefault(day, []).append(event)
-                        continue
-
-                    for d in days_in_row:
-                        occupied_lanes.setdefault(d, []).append(y_level)
-
-                    segment_start_date, segment_end_date = min(days_in_row), max(days_in_row)
-                    start_cell, end_cell = self.date_to_cell_map[segment_start_date], self.date_to_cell_map[segment_end_date]
-                    start_rect, end_rect = self.calendar_grid.cellRect(start_cell['row'], start_cell['col']), self.calendar_grid.cellRect(end_cell['row'], end_cell['col'])
-
-                    if not start_rect.isValid() or not end_rect.isValid(): continue
-
-                    x, y = start_rect.left(), start_rect.top() + y_offset + (y_level * (event_height + event_spacing))
-                    width, height = end_rect.right() - start_rect.left(), event_height
-
-                    is_true_start, is_true_end = (segment_start_date == event_start_date), (segment_end_date == event_end_date)
-                    is_week_start, is_week_end = (start_cell['col'] == 0), (end_cell['col'] == 6)
-                    
-                    radius, sharp = "5px", "0px"
-                    tlr = radius if is_true_start or is_week_start else sharp
-                    blr = radius if is_true_start or is_week_start else sharp
-                    trr = radius if is_true_end or is_week_end else sharp
-                    brr = radius if is_true_end or is_week_end else sharp
-                    border_radius_style = f"border-radius: {tlr} {trr} {brr} {blr};"
-
-                    event_widget = EventLabelWidget(event, self)
-                    event_widget.edit_requested.connect(self.on_edit_event_requested)
-                    
-                    summary = event.get('summary', '')
-                    # 반복 이벤트인 경우 아이콘 추가
-                    if 'recurrence' in event:
-                        summary = f"🔄 {summary}"
-                    event_widget.setText(summary)
-                    
-                    start_info = event.get('start', {})
-                    tooltip_text = f"<b>{event.get('summary', '')}</b>"
-                    if 'dateTime' in start_info:
-                        try:
-                            start_dt = datetime.datetime.fromisoformat(start_info.get('dateTime'))
-                            tooltip_text += f"<br>{start_dt.strftime('%H:%M')}"
-                        except: pass
-                    event_widget.setToolTip(tooltip_text)
-
-                    event_widget.setGeometry(x, y, width, height)
-                    event_color = event.get('color', '#555555')
-                    event_widget.setStyleSheet(f"background-color: {event_color}; color: white; {border_radius_style} padding-left: 5px; font-size: 9pt;")
-                    event_widget.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-                    event_widget.show()
-                    self.event_widgets.append(event_widget)
-            except Exception as e:
-                print(f"이벤트 그리기 오류: {e}, 이벤트: {event.get('summary', '')}")
-                continue
-        
+        # 3. "더보기" 버튼 그리기
         drawn_more_buttons = set()
-        for day, hidden_events in more_events_to_create.items():
+        for day, hidden_events in more_events_data.items():
             if day in drawn_more_buttons: continue
             
             cell_info = self.date_to_cell_map.get(day)

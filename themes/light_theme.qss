@@ -1,0 +1,170 @@
+/* Light Theme for Glassy Calendar */
+
+QWidget {
+    background-color: #F0F0F0; /* 밝은 회색 배경 */
+    color: #222222; /* 어두운 텍스트 */
+    border: none;
+    font-family: "Malgun Gothic";
+    font-size: 10pt;
+}
+
+QWidget#dialog_background {
+    background-color: #FAFAFA; /* 다이얼로그 배경은 더 밝게 */
+    border-radius: 10px;
+    border: 1px solid #D0D0D0; /* 약간의 테두리 */
+}
+
+QDialog {
+    background-color: transparent;
+}
+
+QLabel {
+    background-color: transparent;
+}
+
+QPushButton {
+    background-color: #E0E0E0;
+    border: 1px solid #C0C0C0;
+    padding: 5px 10px;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QPushButton:hover {
+    background-color: #D5D5D5;
+    border-color: #B0B0B0;
+}
+
+QPushButton:pressed {
+    background-color: #C5C5C5;
+    border-color: #A0A0A0;
+}
+
+QPushButton:checked {
+    background-color: #0078D7;
+    color: #FFFFFF;
+    border-color: #005A9E;
+}
+
+QPushButton#today_button {
+    background-color: #0078D7;
+    color: #FFFFFF;
+    border-color: #005A9E;
+}
+
+QPushButton#today_button:hover {
+    background-color: #0082F0;
+}
+
+QPushButton#today_button:pressed {
+    background-color: #006AC5;
+}
+
+QLineEdit, QTextEdit {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+QLineEdit:focus, QTextEdit:focus {
+    border-color: #0078D7;
+}
+
+QComboBox {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    padding: 3px 5px;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox::down-arrow {
+    /* TODO: 밝은 테마용 화살표 아이콘 필요 */
+}
+
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    selection-background-color: #0078D7;
+    selection-color: #FFFFFF;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #F0F0F0;
+    width: 10px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #C0C0C0;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #F0F0F0;
+    height: 10px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #C0C0C0;
+    min-width: 20px;
+    border-radius: 5px;
+}
+
+QMenu {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    padding: 5px;
+}
+
+QMenu::item:selected {
+    background-color: #0078D7;
+    color: #FFFFFF;
+}
+
+QCheckBox::indicator:unchecked {
+    border: 1px solid #B0B0B0;
+    background-color: #FFFFFF;
+    border-radius: 3px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #0078D7;
+    border: 1px solid #005A9E;
+    border-radius: 3px;
+}
+
+QDateTimeEdit {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    padding: 3px;
+}
+
+QCalendarWidget QWidget {
+    alternate-background-color: #E8E8E8;
+}
+
+QMessageBox {
+    background-color: #FAFAFA;
+}
+
+DayCellWidget {
+    border: 1px solid #DCDCDC;
+}
+
+QToolTip {
+    background-color: #FFFFFF;
+    color: #222222;
+    border: 1px solid #C0C0C0;
+    border-radius: 5px;
+    padding: 5px;
+}
