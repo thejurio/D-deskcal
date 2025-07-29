@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from dateutil.rrule import rrulestr, rrule # 임포트를 상단으로 이동
+from dateutil.rrule import rrulestr, rrule, YEARLY, MONTHLY, WEEKLY, DAILY # 임포트를 상단으로 이동
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox, QWidget, QStackedWidget)

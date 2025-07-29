@@ -9,6 +9,19 @@ from .widgets import EventLabelWidget
 from .layout_calculator import MonthLayoutCalculator
 from .base_view import BaseViewWidget
 
+def get_text_color_for_background(hex_color):
+    """주어진 배경색(hex)에 대해 검은색과 흰색 중 더 적합한 글자색을 반환합니다."""
+    try:
+        hex_color = hex_color.lstrip('#')
+        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        # 밝기 계산 (Luminance)
+        luminance = (0.299 * r + 0.587 * g + 0.114 * b)
+        # 밝기 임계값을 기준으로 텍스트 색상 결정
+        return '#000000' if luminance > 149 else '#FFFFFF'
+    except Exception:
+        # 색상 코드 파싱 오류 시 기본값으로 흰색 반환
+        return '#FFFFFF'
+
 class DayCellWidget(QWidget):
     add_event_requested = pyqtSignal(datetime.date)
     def __init__(self, date_obj, parent=None):
@@ -261,9 +274,11 @@ class MonthViewWidget(BaseViewWidget):
                 event_widget.setGeometry(x, y, width, height)
                 event_color = event.get('color', '#555555')
                 
-                # --- ▼▼▼ 완료된 일정 스타일 적용 (DB 기반) ▼▼▼ ---
+                # --- ▼▼▼ [수정] 글자색을 동적으로 결정하도록 변경 ▼▼▼ ---
+                text_color = get_text_color_for_background(event_color)
                 finished = self.data_manager.is_event_completed(event.get('id'))
-                style_sheet = f"background-color: {event_color}; color: white; {border_radius_style} padding-left: 5px; font-size: 9pt;"
+                style_sheet = f"background-color: {event_color}; color: {text_color}; {border_radius_style} padding-left: 5px; font-size: 9pt;"
+                # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
                 
                 current_effect = event_widget.graphicsEffect()
 
@@ -279,13 +294,10 @@ class MonthViewWidget(BaseViewWidget):
 
                 event_widget.setStyleSheet(style_sheet)
                 event_widget.update() # 위젯의 시각적 상태를 즉시 갱신
-                # --- ▲▲▲ 여기까지 적용 ▲▲▲ ---
 
                 event_widget.setAlignment(Qt.AlignmentFlag.AlignVCenter)
                 event_widget.show()
                 self.event_widgets.append(event_widget)
-
-                event_widget.setStyleSheet(style_sheet)
 
         # 3. "더보기" 버튼 그리기
         drawn_more_buttons = set()

@@ -269,7 +269,6 @@ class DataManager(QObject):
             return
 
         custom_colors = self.settings.get("calendar_colors", {})
-        # Provider에서 기본 색상을 가져오기 위한 맵 생성
         default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
 
         for month_key, events in self.event_cache.items():
@@ -279,12 +278,10 @@ class DataManager(QObject):
                     default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
                     event['color'] = custom_colors.get(cal_id, default_color)
             
-            # DB 캐시도 업데이트
             self._save_month_to_cache_db(month_key[0], month_key[1], events)
 
-        # 모든 뷰가 새로고침되도록 현재 보고 있는 달의 data_updated 시그널을 보냅니다.
-        if self.last_requested_month:
-            self.data_updated.emit(self.last_requested_month[0], self.last_requested_month[1])
+        # 모든 뷰가 스스로 새로고침하도록 event_completion_changed 시그널을 사용
+        self.event_completion_changed.emit()
         print("색상 업데이트 완료.")
 
     def _init_cache_db(self):
@@ -416,10 +413,25 @@ class DataManager(QObject):
         all_events = []
         _, num_days = calendar.monthrange(year, month)
         start_date, end_date = datetime.date(year, month, 1), datetime.date(year, month, num_days)
+        
+        # --- ▼▼▼ [추가] 색상 적용을 위한 정보 미리 준비 ▼▼▼ ---
+        all_calendars = self.get_all_calendars()
+        custom_colors = self.settings.get("calendar_colors", {})
+        default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
+        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+
         for provider in self.providers:
             try:
                 events = provider.get_events(start_date, end_date)
-                if events is not None: all_events.extend(events)
+                if events is not None:
+                    # --- ▼▼▼ [추가] 가져온 이벤트에 즉시 색상 적용 ▼▼▼ ---
+                    for event in events:
+                        cal_id = event.get('calendarId')
+                        if cal_id:
+                            default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
+                            event['color'] = custom_colors.get(cal_id, default_color)
+                    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+                    all_events.extend(events)
             except Exception as e:
                 print(f"'{type(provider).__name__}' 이벤트 조회 오류: {e}")
         return all_events

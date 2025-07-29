@@ -67,12 +67,7 @@ class MainWidget(QWidget):
         self.background_widget.setMouseTracking(True)
         # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
         
-        self.background_widget.setStyleSheet("""
-            QWidget#main_background {
-                background-color: rgb(30, 30, 30);
-                border-radius: 10px;
-            }
-        """)
+        
         
         self.setWindowOpacity(self.settings.get("window_opacity", 0.95))
         
@@ -200,13 +195,10 @@ class MainWidget(QWidget):
             result = settings_dialog.exec()
             
             if result:
-                # --- ▼▼▼ [수정] 색상 즉시 반영 로직 호출 ▼▼▼ ---
                 self.data_manager.update_cached_events_colors()
-                # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
                 self.data_manager.update_sync_timer()
                 self.set_window_opacity(self.settings.get("window_opacity", 0.95))
                 self.apply_theme(self.settings.get("theme", "dark"))
-                # self.refresh_current_view() # update_cached_events_colors가 시그널을 보내므로 중복 호출 불필요
             else:
                 # 취소 시, 원래 테마와 투명도로 복구
                 self.set_window_opacity(original_opacity)

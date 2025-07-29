@@ -1,9 +1,9 @@
 {
     "geometry": [
-        490,
-        -11,
-        869,
-        778
+        317,
+        21,
+        866,
+        774
     ],
     "use_local_calendar": true,
     "selected_calendars": [
@@ -17,7 +17,7 @@
         "local_calendar": "#4CAF50",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#9bf6ff",
         "family01556510902891015712@group.calendar.google.com": "#ffadad",
-        "thejurio@gmail.com": "#caffbf",
+        "thejurio@gmail.com": "#ffd6a5",
         "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
     },
     "sync_interval_minutes": 5,

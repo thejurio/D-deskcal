@@ -11,7 +11,7 @@ QWidget {
 QWidget#main_background {
     background-color: #FAFAFA; /* 팝업창과 동일한 하얀색 계열 */
     border-radius: 10px;
-    border: 1px solid #D0D0D0;
+    border: 1px solid #FFFFFF;
 }
 
 QWidget#dialog_background {
