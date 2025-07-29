@@ -2,8 +2,8 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QAction, QCursor
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
+from PyQt6.QtGui import QAction, QCursor, QIcon
 
 from settings_manager import load_settings, save_settings
 from config import DEFAULT_WINDOW_GEOMETRY
@@ -101,9 +101,12 @@ class MainWidget(QWidget):
         today_button.setObjectName("today_button")
         today_button.clicked.connect(self.go_to_today)
 
-        search_button = QPushButton("🔍") # 검색 아이콘
+        search_button = QPushButton() # 텍스트 제거
+        search_button.setIcon(QIcon("icons/search.svg")) # 아이콘 설정
+        search_button.setIconSize(QSize(20, 20)) # 아이콘 크기 설정
         search_button.setObjectName("search_button")
-        search_button.setFixedWidth(30)
+        search_button.setFixedSize(30, 28)
+        search_button.setStyleSheet("padding-bottom: 2px;")
         search_button.clicked.connect(self.open_search_dialog)
 
         view_mode_layout.addWidget(search_button)
@@ -208,9 +211,35 @@ class MainWidget(QWidget):
         """검색 다이얼로그를 엽니다."""
         with self.data_manager.user_action_priority():
             dialog = SearchDialog(self.data_manager, self, self.settings, pos=QCursor.pos())
-            # 검색 결과에서 이벤트를 수정하도록 요청하면, 이벤트 편집기를 엽니다.
-            dialog.edit_event_requested.connect(self.open_event_editor)
+            dialog.event_selected.connect(self.go_to_event)
             dialog.exec()
+
+    def go_to_event(self, event_data):
+        """선택된 이벤트의 날짜로 뷰를 이동하고 편집기를 엽니다."""
+        start_info = event_data.get('start', {})
+        date_str = start_info.get('dateTime', start_info.get('date'))
+        
+        if not date_str:
+            # 날짜 정보가 없으면 편집기만 바로 엽니다.
+            self.open_event_editor(event_data)
+            return
+
+        # 'Z'를 제거하고 datetime 객체로 변환
+        if date_str.endswith('Z'):
+            date_str = date_str[:-1]
+        
+        target_dt = datetime.datetime.fromisoformat(date_str)
+        target_date = target_dt.date()
+
+        # 뷰 이동
+        self.month_view.current_date = target_date
+        self.week_view.current_date = target_date
+        
+        # 현재 활성화된 뷰를 새로고침
+        self.refresh_current_view()
+        
+        # 잠시 후 편집기 열기 (뷰 전환 및 렌더링 시간 확보)
+        QTimer.singleShot(50, lambda: self.open_event_editor(event_data))
 
     def apply_theme(self, theme_name):
         """애플리케이션 전체에 테마를 적용합니다."""

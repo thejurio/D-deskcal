@@ -69,7 +69,7 @@ class SearchResultWidget(QWidget):
 
 
 class SearchDialog(BaseDialog):
-    edit_event_requested = pyqtSignal(dict)
+    event_selected = pyqtSignal(dict)
 
     def __init__(self, data_manager, parent=None, settings=None, pos=None):
         super().__init__(parent=parent, settings=settings, pos=pos)
@@ -142,5 +142,5 @@ class SearchDialog(BaseDialog):
     def on_item_double_clicked(self, item):
         widget = self.results_list.itemWidget(item)
         if widget:
-            self.edit_event_requested.emit(widget.event_data)
-            self.accept() # 수정 창을 열고 검색 창은 닫음
+            self.event_selected.emit(widget.event_data)
+            self.accept() # 검색창을 닫고 메인 뷰로 포커스 이동

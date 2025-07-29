@@ -15,7 +15,6 @@ class ClickableLabel(QLabel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -304,7 +303,9 @@ class WeekViewWidget(BaseViewWidget):
         next_button.clicked.connect(self.go_to_next_week)
         
         nav_layout.addWidget(prev_button)
-        nav_layout.addWidget(self.week_range_label, 1)
+        nav_layout.addStretch(1)
+        nav_layout.addWidget(self.week_range_label)
+        nav_layout.addStretch(1)
         nav_layout.addWidget(next_button)
         main_layout.addLayout(nav_layout)
 
