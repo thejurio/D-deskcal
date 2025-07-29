@@ -1,10 +1,11 @@
 # views/week_view.py
 import datetime
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QPushButton, QMenu, QGraphicsOpacityEffect
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QPushButton, QMenu, QGraphicsOpacityEffect, QToolTip 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QPoint, QRectF
 from PyQt6.QtGui import QAction, QCursor, QPainter, QColor, QPen, QFontMetrics, QTextOption
 
-from .widgets import EventLabelWidget # 종일 일정 표시에만 사용
+from .widgets import EventLabelWidget, get_text_color_for_background, draw_event
+
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
 
@@ -17,17 +18,19 @@ def get_text_color_for_background(hex_color):
     except Exception:
         return '#FFFFFF'
 
+
 class ScheduleCanvas(QWidget):
     """주간 뷰의 모든 그리드와 이벤트를 직접 그리는 단일 캔버스 위젯"""
     def __init__(self, parent_view):
         super().__init__(parent_view)
         self.parent_view = parent_view
         self.event_rects = [] # (QRect, event_data) 튜플 저장
-        self.setMouseTracking(True) # 마우스 추적 활성화 (향후 툴팁 등 확장을 위해)
+        self.hovered_event_id = None
+        self.setMouseTracking(True)
 
     def set_events(self, event_positions):
         self.event_rects = event_positions
-        self.update() # 위젯을 다시 그리도록 요청
+        self.update()
 
     def get_event_at(self, pos):
         for rect, event_data in self.event_rects:
@@ -35,27 +38,36 @@ class ScheduleCanvas(QWidget):
                 return event_data
         return None
 
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        event_under_mouse = self.get_event_at(event.pos())
+        
+        if event_under_mouse:
+            event_id = event_under_mouse.get('id')
+            if self.hovered_event_id != event_id:
+                self.hovered_event_id = event_id
+                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
+        else:
+            if self.hovered_event_id is not None:
+                self.hovered_event_id = None
+                QToolTip.hideText()
+
     def paintEvent(self, event):
+        # ... (이 함수의 내용은 변경 없음) ...
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # 필요한 정보들을 부모 뷰에서 가져옴
         pv = self.parent_view
         current_theme = pv.main_widget.settings.get("theme", "dark")
         time_grid_left = 50
         day_column_width = (self.width() - time_grid_left) / 7
         start_of_week = pv.current_date - datetime.timedelta(days=(pv.current_date.weekday() + 1) % 7)
-
-        # 1. 오늘 날짜 하이라이트
         today = datetime.date.today()
         if start_of_week <= today < start_of_week + datetime.timedelta(days=7):
             highlight_color = QColor("#FFFFAA") if current_theme == "light" else QColor("#4A4A26")
             day_offset = (today - start_of_week).days
             x = time_grid_left + day_offset * day_column_width
             painter.fillRect(int(x), 0, int(day_column_width), self.height(), highlight_color)
-
-        # 2. 가로/세로선
         line_color = QColor("#444") if current_theme == "dark" else QColor("#E0E0E0")
         painter.setPen(QPen(line_color, 1))
         for hour in range(1, pv.total_hours + 1):
@@ -64,38 +76,20 @@ class ScheduleCanvas(QWidget):
         for i in range(7):
             x = time_grid_left + i * day_column_width
             painter.drawLine(int(x), 0, int(x), self.height())
-        
-        # 3. 시간 텍스트
         text_color = QColor("#D0D0D0") if current_theme == "dark" else QColor("#222222")
         painter.setPen(text_color)
         for hour in range(pv.total_hours + 1):
             y = pv.padding + hour * pv.hour_height
             rect = QRect(0, y - pv.hour_height // 2, 45, pv.hour_height)
             painter.drawText(rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{hour:02d}:00")
-
-        # 4. 일정 그리기
-        text_option = QTextOption(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        text_option.setWrapMode(QTextOption.WrapMode.WordWrap)
         for rect, event_data in self.event_rects:
-            # 이벤트 배경 그리기
-            event_color = QColor(event_data.get('color', '#555555'))
-            painter.setBrush(event_color)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(rect, 4, 4)
-
-            # 이벤트 텍스트 그리기
-            text_color = QColor(get_text_color_for_background(event_data.get('color', '#555555')))
-            painter.setPen(text_color)
-            
             start_dt = datetime.datetime.fromisoformat(event_data['start']['dateTime'])
             end_dt = datetime.datetime.fromisoformat(event_data['end']['dateTime'])
             time_text = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
             summary = event_data.get('summary', '')
-            
-            text_rect = rect.adjusted(4, 4, -4, -4)
-            # QRect를 QRectF로 변환하여 전달
-            painter.drawText(QRectF(text_rect), f"{time_text}\n{summary}", text_option)
-
+            if 'recurrence' in event_data: summary = f"🔄 {summary}"
+            draw_event(painter, rect, event_data, time_text=time_text, summary_text=summary)
+    
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             clicked_event = self.get_event_at(event.pos())
@@ -109,6 +103,7 @@ class ScheduleCanvas(QWidget):
     def contextMenuEvent(self, event):
         clicked_event = self.get_event_at(event.pos())
         self.parent_view.show_context_menu(event.globalPos(), clicked_event)
+
 
 class WeekViewWidget(BaseViewWidget):
     def __init__(self, main_widget):

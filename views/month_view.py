@@ -2,23 +2,14 @@
 import datetime
 import calendar
 from collections import defaultdict
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QGraphicsOpacityEffect, QMenu
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QGraphicsOpacityEffect, QMenu, QToolTip
 from PyQt6.QtGui import QFont, QCursor, QPainter, QColor, QPen, QTextOption, QAction
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect, QPoint, QRectF
 from custom_dialogs import NewDateSelectionDialog, MoreEventsDialog
-# EventLabelWidget은 더 이상 사용하지 않으므로 import에서 제거
+from .widgets import get_text_color_for_background, draw_event
 from .layout_calculator import MonthLayoutCalculator
 from .base_view import BaseViewWidget
 
-def get_text_color_for_background(hex_color):
-    """주어진 배경색(hex)에 대해 검은색과 흰색 중 더 적합한 글자색을 반환합니다."""
-    try:
-        hex_color = hex_color.lstrip('#')
-        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        luminance = (0.299 * r + 0.587 * g + 0.114 * b)
-        return '#000000' if luminance > 149 else '#FFFFFF'
-    except Exception:
-        return '#FFFFFF'
 
 class DayCellWidget(QWidget):
     add_event_requested = pyqtSignal(datetime.date)
@@ -32,6 +23,8 @@ class DayCellWidget(QWidget):
         self.event_layout = [] # (QRect, event_data, style_info) 튜플 저장
         self.more_events_data = []
         self.more_button_rect = QRect()
+        self.hovered_event_id = None
+        self.setMouseTracking(True)
         
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(3, 3, 3, 3)
@@ -62,6 +55,20 @@ class DayCellWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             if self.more_button_rect.contains(event.pos()):
                 self.more_events_requested.emit(self.date_obj, self.more_events_data)
+                
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        event_under_mouse = self.get_event_at(event.pos())
+        
+        if event_under_mouse:
+            event_id = event_under_mouse.get('id')
+            if self.hovered_event_id != event_id:
+                self.hovered_event_id = event_id
+                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
+        else:
+            if self.hovered_event_id is not None:
+                self.hovered_event_id = None
+                QToolTip.hideText()
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -72,32 +79,21 @@ class DayCellWidget(QWidget):
         max_slots = (self.height() - y_offset) // (event_height + event_spacing)
         max_visible_y_level = max_slots - 1
 
-        text_option = QTextOption(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-        text_option.setWrapMode(QTextOption.WrapMode.NoWrap)
-
         for rect, event_data, style_info in self.event_layout:
-            # 배경 그리기
-            event_color = QColor(event_data.get('color', '#555555'))
-            painter.setBrush(event_color)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(rect, 5, 5)
-
-            # 텍스트 그리기
-            text_color = QColor(get_text_color_for_background(event_data.get('color', '#555555')))
-            painter.setPen(text_color)
-
             summary = event_data.get('summary', '')
             if 'recurrence' in event_data: summary = f"🔄 {summary}"
-
-            # 텍스트를 그릴 안쪽 영역
-            text_rect = rect.adjusted(5, 0, -5, 0)
-            # QRect를 QRectF로 변환하여 전달
-            painter.drawText(QRectF(text_rect), summary, text_option)
+            draw_event(painter, rect, event_data, time_text=None, summary_text=summary)
 
         # 더보기 버튼 그리기
         if self.more_events_data:
             y = y_offset + (max_visible_y_level * (event_height + event_spacing))
             self.more_button_rect = QRect(0, y, self.width(), event_height)
+            
+            # 폰트를 굵게 설정
+            font = painter.font()
+            font.setBold(True)
+            painter.setFont(font)
+            
             painter.setPen(QColor("#a0c4ff"))
             painter.drawText(self.more_button_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"  + {len(self.more_events_data)}개 더보기")
 
