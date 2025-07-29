@@ -330,10 +330,18 @@ class WeekViewWidget(BaseViewWidget):
         dialog = WeekSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
         if dialog.exec():
             self.current_date = dialog.get_selected_date()
+            self.data_manager.notify_date_changed(self.current_date)
             self.refresh()
 
-    def go_to_previous_week(self): self.current_date -= datetime.timedelta(days=7); self.refresh()
-    def go_to_next_week(self): self.current_date += datetime.timedelta(days=7); self.refresh()
+    def go_to_previous_week(self): 
+        self.current_date -= datetime.timedelta(days=7)
+        self.data_manager.notify_date_changed(self.current_date, direction="backward")
+        self.refresh()
+
+    def go_to_next_week(self): 
+        self.current_date += datetime.timedelta(days=7)
+        self.data_manager.notify_date_changed(self.current_date, direction="forward")
+        self.refresh()
 
     def _calculate_column_positions(self, total_width):
         """정수 기반으로 7개 요일 칸의 x좌표를 계산하여 누적 오차를 방지합니다."""

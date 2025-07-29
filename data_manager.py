@@ -349,6 +349,11 @@ class DataManager(QObject):
     def request_full_sync(self):
         self.caching_manager.request_full_sync()
 
+    def notify_date_changed(self, new_date, direction="none"):
+        """UI에서 날짜 변경이 있을 때 호출되어 슬라이딩 캐시를 유발합니다."""
+        self.last_requested_month = (new_date.year, new_date.month)
+        self.caching_manager.request_caching_around(new_date.year, new_date.month, direction)
+
     def stop_caching_thread(self):
         if self.caching_thread and self.caching_thread.isRunning():
             self.caching_manager.stop()

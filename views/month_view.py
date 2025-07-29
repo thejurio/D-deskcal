@@ -135,6 +135,7 @@ class MonthViewWidget(BaseViewWidget):
         if dialog.exec():
             year, month = dialog.get_selected_date()
             self.current_date = self.current_date.replace(year=year, month=month, day=1)
+            self.data_manager.notify_date_changed(self.current_date)
             self.refresh()
 
     def show_more_events_popup(self, date_obj, events):
@@ -287,10 +288,12 @@ class MonthViewWidget(BaseViewWidget):
     # contextMenuEvent도 BaseViewWidget의 기본 동작으로 충분
     def go_to_previous_month(self):
         self.current_date = self.current_date.replace(day=1) - datetime.timedelta(days=1)
+        self.data_manager.notify_date_changed(self.current_date, direction="backward")
         self.refresh()
 
     def go_to_next_month(self):
         self.current_date = (self.current_date.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        self.data_manager.notify_date_changed(self.current_date, direction="forward")
         self.refresh()
 
     def contextMenuEvent(self, event):
