@@ -4,9 +4,23 @@ from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollAr
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QPoint, QRectF
 from PyQt6.QtGui import QAction, QCursor, QPainter, QColor, QPen, QFontMetrics
 
+from custom_dialogs import WeekSelectionDialog
 from .widgets import draw_event
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
+
+class ClickableLabel(QLabel):
+    """클릭 이벤트를 처리할 수 있는 커스텀 QLabel"""
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 # 레이아웃을 위한 상수 정의
 TIME_GRID_LEFT = 50
@@ -277,13 +291,21 @@ class WeekViewWidget(BaseViewWidget):
 
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
-        self.week_range_label = QLabel()
+        
+        # ClickableLabel 사용
+        self.week_range_label = ClickableLabel()
+        self.week_range_label.setObjectName("week_range_label")
         self.week_range_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.week_range_label.clicked.connect(self.open_week_selection_dialog)
+        
         prev_button.setObjectName("nav_button"); next_button.setObjectName("nav_button")
-        self.week_range_label.setObjectName("week_label")
+        
         prev_button.clicked.connect(self.go_to_previous_week)
         next_button.clicked.connect(self.go_to_next_week)
-        nav_layout.addWidget(prev_button); nav_layout.addWidget(self.week_range_label, 1); nav_layout.addWidget(next_button)
+        
+        nav_layout.addWidget(prev_button)
+        nav_layout.addWidget(self.week_range_label, 1)
+        nav_layout.addWidget(next_button)
         main_layout.addLayout(nav_layout)
 
         self.header_canvas = HeaderCanvas(self)
@@ -302,6 +324,12 @@ class WeekViewWidget(BaseViewWidget):
         self.timeline = QWidget(self.time_grid_canvas)
         self.timeline.setObjectName("timeline")
         self.timeline.setStyleSheet("background-color: #FF3333;")
+
+    def open_week_selection_dialog(self):
+        dialog = WeekSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
+        if dialog.exec():
+            self.current_date = dialog.get_selected_date()
+            self.refresh()
 
     def go_to_previous_week(self): self.current_date -= datetime.timedelta(days=7); self.refresh()
     def go_to_next_week(self): self.current_date += datetime.timedelta(days=7); self.refresh()
@@ -401,11 +429,24 @@ class WeekViewWidget(BaseViewWidget):
         start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
         end_of_week = start_of_week + datetime.timedelta(days=6)
         
-        self.week_range_label.setText(f"{start_of_week.strftime('%Y년 %m월 %d일')} - {end_of_week.strftime('%m월 %d일')}")
+        # 주차 계산 (해당 월의 몇 번째 주인지)
+        first_day_of_month = start_of_week.replace(day=1)
+        # 해당 월의 첫 번째 일요일 찾기
+        first_sunday = first_day_of_month - datetime.timedelta(days=(first_day_of_month.weekday() + 1) % 7)
+        week_number = (start_of_week - first_sunday).days // 7 + 1
+
+        # HTML을 사용하여 레이블 텍스트 설정
+        main_text = f"{start_of_week.month}월 {week_number}주"
+        sub_text = f"({start_of_week.strftime('%Y.%m.%d')} - {end_of_week.strftime('%Y.%m.%d')})"
         
         is_dark = self.main_widget.settings.get("theme", "dark") == "dark"
         text_color = "#D0D0D0" if is_dark else "#222222"
-        self.week_range_label.setStyleSheet(f"color: {text_color}; font-size: 16px; font-weight: bold;")
+        
+        label_html = f"""
+        <p style="font-size: 16px; font-weight: bold; color: {text_color}; margin-bottom: -2px;">{main_text}</p>
+        <p style="font-size: 10px; color: {text_color}; margin-top: 0px;">{sub_text}</p>
+        """
+        self.week_range_label.setText(label_html)
 
         self.redraw_events_with_current_data()
         self.update_timeline()

@@ -218,6 +218,218 @@ class NewDateSelectionDialog(BaseDialog):
             self.populate_month_grid()
     def get_selected_date(self): return self.selected_year, self.selected_month
 
+class WeekSelectionDialog(BaseDialog):
+    def __init__(self, current_date, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
+        self.current_display_year = current_date.year
+        self.selected_year = current_date.year
+        self.selected_month = current_date.month
+        self.selected_date = current_date
+        self.weeks_in_month = []
+
+        self.setWindowTitle("주 이동")
+        self.setModal(True)
+        self.setFixedSize(320, 320)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        content_layout.setSpacing(10)
+
+        nav_layout = QHBoxLayout()
+        self.prev_button = QPushButton("<")
+        self.next_button = QPushButton(">")
+        self.title_label = QLabel()
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 12pt;")
+        nav_layout.addWidget(self.prev_button)
+        nav_layout.addStretch(1)
+        nav_layout.addWidget(self.title_label)
+        nav_layout.addStretch(1)
+        nav_layout.addWidget(self.next_button)
+        content_layout.addLayout(nav_layout)
+
+        self.stacked_widget = QStackedWidget()
+        content_layout.addWidget(self.stacked_widget)
+
+        bottom_layout = QHBoxLayout()
+        self.back_button = QPushButton("뒤로")
+        self.back_button.setVisible(False)
+        close_button = QPushButton("닫기")
+        bottom_layout.addWidget(self.back_button)
+        bottom_layout.addStretch(1)
+        bottom_layout.addWidget(close_button)
+        content_layout.addLayout(bottom_layout)
+
+        self.year_view = self.create_grid_view(self.select_year, 4)
+        self.month_view = self.create_grid_view(self.select_month, 4)
+        self.week_view = self.create_list_view(self.select_week) # Week view is a list
+
+        self.stacked_widget.addWidget(self.year_view)
+        self.stacked_widget.addWidget(self.month_view)
+        self.stacked_widget.addWidget(self.week_view)
+
+        self.prev_button.clicked.connect(self.on_prev_clicked)
+        self.next_button.clicked.connect(self.on_next_clicked)
+        self.back_button.clicked.connect(self.on_back_clicked)
+        close_button.clicked.connect(self.reject)
+
+        self.show_year_view()
+
+    def create_grid_view(self, click_handler, cols=4):
+        view = QWidget()
+        grid = QGridLayout(view)
+        grid.setSpacing(5)
+        for i in range(12):
+            button = QPushButton()
+            button.setFixedSize(65, 45)
+            button.clicked.connect(lambda _, b=button: click_handler(b))
+            grid.addWidget(button, i // cols, i % cols)
+        return view
+
+    def create_list_view(self, click_handler):
+        view = QWidget()
+        layout = QVBoxLayout(view)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0,0,0,0)
+        return view
+
+    def show_year_view(self):
+        self.current_mode = 'year'
+        self.back_button.setVisible(False)
+        self.populate_year_grid()
+        self.stacked_widget.setCurrentWidget(self.year_view)
+
+    def show_month_view(self):
+        self.current_mode = 'month'
+        self.back_button.setVisible(True)
+        self.populate_month_grid()
+        self.stacked_widget.setCurrentWidget(self.month_view)
+
+    def show_week_view(self):
+        self.current_mode = 'week'
+        self.back_button.setVisible(True)
+        self.populate_week_list()
+        self.stacked_widget.setCurrentWidget(self.week_view)
+
+    def populate_year_grid(self):
+        start_year = self.current_display_year - (self.current_display_year % 12)
+        self.title_label.setText(f"{start_year} - {start_year + 11}")
+        grid = self.year_view.layout()
+        for i in range(12):
+            year = start_year + i
+            button = grid.itemAt(i).widget()
+            button.setText(str(year))
+            button.setStyleSheet("background-color: transparent;" if year != self.selected_year else "background-color: #0078D7;")
+
+    def populate_month_grid(self):
+        self.title_label.setText(f"{self.selected_year}년")
+        grid = self.month_view.layout()
+        for i in range(12):
+            month = i + 1
+            button = grid.itemAt(i).widget()
+            button.setText(f"{month}월")
+            button.setStyleSheet("background-color: transparent;" if month != self.selected_month else "background-color: #0078D7;")
+
+    def populate_week_list(self):
+        self.title_label.setText(f"{self.selected_year}년 {self.selected_month}월")
+        layout = self.week_view.layout()
+        # Clear previous buttons
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        self.weeks_in_month.clear()
+        first_day = datetime.date(self.selected_year, self.selected_month, 1)
+        cal_start_date = first_day - datetime.timedelta(days=(first_day.weekday() + 1) % 7)
+
+        week_num = 1
+        current_date = cal_start_date
+        while True:
+            start_of_week = current_date
+            end_of_week = start_of_week + datetime.timedelta(days=6)
+
+            if start_of_week.month == self.selected_month or end_of_week.month == self.selected_month:
+                self.weeks_in_month.append(start_of_week)
+                week_text = f"{week_num}주 ({start_of_week.strftime('%m.%d')} ~ {end_of_week.strftime('%m.%d')})"
+                
+                button = QPushButton(week_text)
+                button.setFixedSize(280, 40)
+                button.clicked.connect(lambda _, b=button: self.select_week(b))
+                
+                is_current_week = start_of_week <= self.selected_date <= end_of_week
+                button.setStyleSheet("background-color: #0078D7;" if is_current_week else "background-color: transparent;")
+                
+                layout.addWidget(button)
+                week_num += 1
+
+            current_date += datetime.timedelta(days=7)
+            if current_date.month > self.selected_month and current_date.year >= self.selected_year:
+                if not (current_date.month == 1 and self.selected_month == 12):
+                    break
+            if current_date.year > self.selected_year:
+                break
+        layout.addStretch(1)
+
+    def select_year(self, button):
+        self.selected_year = int(button.text())
+        self.show_month_view()
+
+    def select_month(self, button):
+        self.selected_month = int(button.text().replace("월", ""))
+        self.show_week_view()
+    
+    def select_week(self, button):
+        # Find the index of the button text in the combo box to get the date
+        for i in range(self.week_view.layout().count() -1): # Exclude stretch
+            if self.week_view.layout().itemAt(i).widget() == button:
+                self.selected_date = self.weeks_in_month[i]
+                break
+        self.accept()
+
+    def on_prev_clicked(self):
+        if self.current_mode == 'year':
+            self.current_display_year -= 12
+            self.populate_year_grid()
+        elif self.current_mode == 'month':
+            self.selected_year -= 1
+            self.populate_month_grid()
+        elif self.current_mode == 'week':
+            self.selected_month -= 1
+            if self.selected_month == 0:
+                self.selected_month = 12
+                self.selected_year -= 1
+            self.populate_week_list()
+
+    def on_next_clicked(self):
+        if self.current_mode == 'year':
+            self.current_display_year += 12
+            self.populate_year_grid()
+        elif self.current_mode == 'month':
+            self.selected_year += 1
+            self.populate_month_grid()
+        elif self.current_mode == 'week':
+            self.selected_month += 1
+            if self.selected_month == 13:
+                self.selected_month = 1
+                self.selected_year += 1
+            self.populate_week_list()
+            
+    def on_back_clicked(self):
+        if self.current_mode == 'week':
+            self.show_month_view()
+        elif self.current_mode == 'month':
+            self.show_year_view()
+
+    def get_selected_date(self):
+        return self.selected_date
+
 class MoreEventsDialog(BaseDialog):
     edit_requested = pyqtSignal(dict)
     delete_requested = pyqtSignal(dict)
