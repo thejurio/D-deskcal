@@ -1,35 +1,83 @@
 # views/week_view.py
 import datetime
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea, QPushButton, QMenu, QGraphicsOpacityEffect, QToolTip 
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollArea, QPushButton, QMenu, QToolTip
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QPoint, QRectF
-from PyQt6.QtGui import QAction, QCursor, QPainter, QColor, QPen, QFontMetrics, QTextOption
+from PyQt6.QtGui import QAction, QCursor, QPainter, QColor, QPen, QFontMetrics
 
-from .widgets import EventLabelWidget, get_text_color_for_background, draw_event
-
+from .widgets import draw_event
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
 
-def get_text_color_for_background(hex_color):
-    try:
-        hex_color = hex_color.lstrip('#')
-        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        luminance = (0.299 * r + 0.587 * g + 0.114 * b)
-        return '#000000' if luminance > 149 else '#FFFFFF'
-    except Exception:
-        return '#FFFFFF'
+# 레이아웃을 위한 상수 정의
+TIME_GRID_LEFT = 50
+HEADER_HEIGHT = 30
+ALL_DAY_LANE_HEIGHT = 25
+HORIZONTAL_MARGIN = 8
 
-
-class ScheduleCanvas(QWidget):
-    """주간 뷰의 모든 그리드와 이벤트를 직접 그리는 단일 캔버스 위젯"""
+class HeaderCanvas(QWidget):
+    """요일 헤더를 그리는 위젯"""
     def __init__(self, parent_view):
         super().__init__(parent_view)
         self.parent_view = parent_view
-        self.event_rects = [] # (QRect, event_data) 튜플 저장
-        self.hovered_event_id = None
-        self.setMouseTracking(True)
+        self.column_x_coords = []
+        self.setFixedHeight(HEADER_HEIGHT)
 
-    def set_events(self, event_positions):
-        self.event_rects = event_positions
+    def set_data(self, column_x_coords):
+        self.column_x_coords = column_x_coords
+        self.update()
+
+    def paintEvent(self, event):
+        if not self.column_x_coords:
+            return
+            
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        is_dark = self.parent_view.main_widget.settings.get("theme", "dark") == "dark"
+        
+        painter.save()
+        header_bg_color = QColor("#2A2A2A") if is_dark else QColor("#F0F0F0")
+        painter.fillRect(self.rect(), header_bg_color)
+        
+        colors = {"weekday": "#D0D0D0" if is_dark else "#222222", "saturday": "#8080FF" if is_dark else "#0000DD", "sunday": "#FF8080" if is_dark else "#DD0000", "today": "#FFFF77" if is_dark else "#A0522D" }
+        days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
+        today = datetime.date.today()
+        start_of_week = self.parent_view.current_date - datetime.timedelta(days=(self.parent_view.current_date.weekday() + 1) % 7)
+
+        for i in range(7):
+            day_date = start_of_week + datetime.timedelta(days=i)
+            text = f"{days_of_week_str[i]} ({day_date.day})"
+            
+            font_color = colors['weekday']
+            if day_date == today: font_color = colors['today']
+            elif i == 0: font_color = colors['sunday']
+            elif i == 6: font_color = colors['saturday']
+            
+            painter.setPen(QColor(font_color))
+            
+            x = self.column_x_coords[i]
+            width = self.column_x_coords[i+1] - x
+            rect = QRectF(x, 0, width, HEADER_HEIGHT)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+        painter.restore()
+
+class AllDayCanvas(QWidget):
+    """종일 이벤트를 그리는 위젯"""
+    def __init__(self, parent_view):
+        super().__init__(parent_view)
+        self.parent_view = parent_view
+        self.setMouseTracking(True)
+        self.event_positions = []
+        self.column_x_coords = []
+        self.event_rects = []
+        self.hovered_event_id = None
+
+    def set_data(self, positions, num_lanes, column_x_coords):
+        self.event_positions = positions
+        self.column_x_coords = column_x_coords
+        height = num_lanes * ALL_DAY_LANE_HEIGHT + 5 if num_lanes > 0 else 0
+        self.setFixedHeight(height)
+        self.setVisible(height > 0)
         self.update()
 
     def get_event_at(self, pos):
@@ -41,64 +89,166 @@ class ScheduleCanvas(QWidget):
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
         event_under_mouse = self.get_event_at(event.pos())
+        current_event_id = event_under_mouse.get('id') if event_under_mouse else None
         
-        if event_under_mouse:
-            event_id = event_under_mouse.get('id')
-            if self.hovered_event_id != event_id:
-                self.hovered_event_id = event_id
+        if self.hovered_event_id != current_event_id:
+            self.hovered_event_id = current_event_id
+            if current_event_id:
                 QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
-        else:
-            if self.hovered_event_id is not None:
-                self.hovered_event_id = None
+            else:
                 QToolTip.hideText()
 
     def paintEvent(self, event):
-        # ... (이 함수의 내용은 변경 없음) ...
-        super().paintEvent(event)
+        if not self.column_x_coords:
+            return
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pv = self.parent_view
-        current_theme = pv.main_widget.settings.get("theme", "dark")
-        time_grid_left = 50
-        day_column_width = (self.width() - time_grid_left) / 7
-        start_of_week = pv.current_date - datetime.timedelta(days=(pv.current_date.weekday() + 1) % 7)
-        today = datetime.date.today()
-        if start_of_week <= today < start_of_week + datetime.timedelta(days=7):
-            highlight_color = QColor("#FFFFAA") if current_theme == "light" else QColor("#4A4A26")
-            day_offset = (today - start_of_week).days
-            x = time_grid_left + day_offset * day_column_width
-            painter.fillRect(int(x), 0, int(day_column_width), self.height(), highlight_color)
-        line_color = QColor("#444") if current_theme == "dark" else QColor("#E0E0E0")
-        painter.setPen(QPen(line_color, 1))
-        for hour in range(1, pv.total_hours + 1):
-            y = pv.padding + hour * pv.hour_height
-            painter.drawLine(time_grid_left, y, self.width(), y)
-        for i in range(7):
-            x = time_grid_left + i * day_column_width
-            painter.drawLine(int(x), 0, int(x), self.height())
-        text_color = QColor("#D0D0D0") if current_theme == "dark" else QColor("#222222")
-        painter.setPen(text_color)
-        for hour in range(pv.total_hours + 1):
-            y = pv.padding + hour * pv.hour_height
-            rect = QRect(0, y - pv.hour_height // 2, 45, pv.hour_height)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{hour:02d}:00")
+        self.event_rects.clear()
+
+        for pos_info in self.event_positions:
+            event_data, lane, start_col, span = pos_info['event'], pos_info['lane'], pos_info['start_col'], pos_info['span']
+            
+            start_x = self.column_x_coords[start_col]
+            end_x = self.column_x_coords[start_col + span]
+            
+            x = start_x + (HORIZONTAL_MARGIN / 2)
+            y = lane * ALL_DAY_LANE_HEIGHT + 2
+            width = (end_x - start_x) - HORIZONTAL_MARGIN
+            height = ALL_DAY_LANE_HEIGHT - 4
+            
+            rect = QRect(int(x), int(y), int(width), int(height))
+            self.event_rects.append((rect, event_data))
+            
+            summary = event_data.get('summary', '')
+            if 'recurrence' in event_data: summary = f"🔄 {summary}"
+            
+            is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
+            draw_event(painter, rect, event_data, time_text="", summary_text=summary, is_completed=is_completed)
+
+    def mouseDoubleClickEvent(self, event):
+        clicked_event = self.get_event_at(event.pos())
+        if clicked_event:
+            self.parent_view.edit_event_requested.emit(clicked_event)
+
+    def contextMenuEvent(self, event):
+        clicked_event = self.get_event_at(event.pos())
+        self.parent_view.show_context_menu(event.globalPos(), clicked_event)
+
+
+class TimeGridCanvas(QWidget):
+    """시간 그리드와 시간별 이벤트를 그리는 위젯"""
+    def __init__(self, parent_view):
+        super().__init__(parent_view)
+        self.parent_view = parent_view
+        self.setMouseTracking(True)
+        self.event_positions = []
+        self.column_x_coords = []
+        self.event_rects = []
+        self.hovered_event_id = None
+        min_height = self.parent_view.total_hours * self.parent_view.hour_height
+        self.setMinimumHeight(min_height)
+
+    def set_data(self, positions, column_x_coords):
+        self.event_positions = positions
+        self.column_x_coords = column_x_coords
+        self.update()
+
+    def get_event_at(self, pos):
         for rect, event_data in self.event_rects:
+            if rect.contains(pos):
+                return event_data
+        return None
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        event_under_mouse = self.get_event_at(event.pos())
+        current_event_id = event_under_mouse.get('id') if event_under_mouse else None
+        
+        if self.hovered_event_id != current_event_id:
+            self.hovered_event_id = current_event_id
+            if current_event_id:
+                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
+            else:
+                QToolTip.hideText()
+
+    def paintEvent(self, event):
+        if not self.column_x_coords:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        is_dark = self.parent_view.main_widget.settings.get("theme", "dark") == "dark"
+        self.event_rects.clear()
+
+        self._draw_time_grid(painter, is_dark)
+        self._draw_timed_events(painter)
+
+    def _draw_time_grid(self, painter, is_dark):
+        painter.save()
+        today = datetime.date.today()
+        start_of_week = self.parent_view.current_date - datetime.timedelta(days=(self.parent_view.current_date.weekday() + 1) % 7)
+
+        if start_of_week <= today < start_of_week + datetime.timedelta(days=7):
+            highlight_color = QColor("#FFFFAA") if not is_dark else QColor("#4A4A26")
+            day_offset = (today - start_of_week).days
+            x = self.column_x_coords[day_offset]
+            width = self.column_x_coords[day_offset+1] - x
+            painter.fillRect(int(x), 0, int(width), self.height(), highlight_color)
+
+        line_color = QColor("#444") if is_dark else QColor("#E0E0E0")
+        painter.setPen(QPen(line_color, 1))
+        
+        for hour in range(1, self.parent_view.total_hours + 1):
+            y = hour * self.parent_view.hour_height
+            painter.drawLine(TIME_GRID_LEFT, y, self.width(), y)
+        
+        for x in self.column_x_coords:
+            painter.drawLine(int(x), 0, int(x), self.height())
+
+        text_color = QColor("#D0D0D0") if is_dark else QColor("#222222")
+        painter.setPen(text_color)
+        for hour in range(self.parent_view.total_hours + 1):
+            y = hour * self.parent_view.hour_height
+            rect = QRect(0, y - self.parent_view.hour_height // 2, 45, self.parent_view.hour_height)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{hour:02d}:00")
+        painter.restore()
+
+    def _draw_timed_events(self, painter):
+        painter.save()
+        for pos_info in self.event_positions:
+            event_data = pos_info['event']
+            rect_coords = pos_info['rect']
+            
+            # This calculation might need adjustment if layout_calculator changes
+            day_column_width = (self.width() - TIME_GRID_LEFT) / 7
+            
+            x = rect_coords[0] + TIME_GRID_LEFT + (HORIZONTAL_MARGIN / 2)
+            y = rect_coords[1]
+            width = rect_coords[2] - HORIZONTAL_MARGIN
+            height = rect_coords[3]
+            
+            rect = QRect(int(x), int(y), int(width), int(height))
+            self.event_rects.append((rect, event_data))
+            
             start_dt = datetime.datetime.fromisoformat(event_data['start']['dateTime'])
             end_dt = datetime.datetime.fromisoformat(event_data['end']['dateTime'])
             time_text = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
             summary = event_data.get('summary', '')
             if 'recurrence' in event_data: summary = f"🔄 {summary}"
-            draw_event(painter, rect, event_data, time_text=time_text, summary_text=summary)
-    
+
+            is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
+            draw_event(painter, rect, event_data, time_text=time_text, summary_text=summary, is_completed=is_completed)
+        painter.restore()
+
     def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            clicked_event = self.get_event_at(event.pos())
-            if clicked_event:
-                self.parent_view.edit_event_requested.emit(clicked_event)
-            else:
-                target_datetime = self.parent_view._get_datetime_from_pos(event.pos())
-                if target_datetime:
-                    self.parent_view.add_event_requested.emit(target_datetime)
+        clicked_event = self.get_event_at(event.pos())
+        if clicked_event:
+            self.parent_view.edit_event_requested.emit(clicked_event)
+        else:
+            target_datetime = self.parent_view._get_datetime_from_pos(event.pos())
+            if target_datetime:
+                self.parent_view.add_event_requested.emit(target_datetime)
     
     def contextMenuEvent(self, event):
         clicked_event = self.get_event_at(event.pos())
@@ -108,12 +258,9 @@ class ScheduleCanvas(QWidget):
 class WeekViewWidget(BaseViewWidget):
     def __init__(self, main_widget):
         super().__init__(main_widget)
-        self.day_labels = []
         self.hour_height = 56
         self.total_hours = 24
-        self.padding = 10
-        self.all_day_event_widgets = []
-
+        
         self.initUI()
 
         self.timeline_timer = QTimer(self)
@@ -139,59 +286,54 @@ class WeekViewWidget(BaseViewWidget):
         nav_layout.addWidget(prev_button); nav_layout.addWidget(self.week_range_label, 1); nav_layout.addWidget(next_button)
         main_layout.addLayout(nav_layout)
 
-        header_widget = QWidget()
-        header_widget.setObjectName("week_header")
-        header_widget.setFixedHeight(30)
-        header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(50, 0, 0, 0)
-        self.day_labels = [QLabel() for _ in range(7)]
-        for label in self.day_labels:
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            header_layout.addWidget(label)
-        main_layout.addWidget(header_widget)
-
-        self.all_day_widget = QWidget()
-        self.all_day_widget.setObjectName("all_day_area")
-        self.all_day_layout = QGridLayout(self.all_day_widget)
-        self.all_day_layout.setContentsMargins(50, 2, 0, 2)
-        self.all_day_layout.setSpacing(1)
-        main_layout.addWidget(self.all_day_widget)
+        self.header_canvas = HeaderCanvas(self)
+        self.all_day_canvas = AllDayCanvas(self)
+        main_layout.addWidget(self.header_canvas)
+        main_layout.addWidget(self.all_day_canvas)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setObjectName("week_scroll_area")
         main_layout.addWidget(self.scroll_area)
         
-        self.canvas = ScheduleCanvas(self)
-        self.scroll_area.setWidget(self.canvas)
-        self.canvas.setMinimumHeight(self.hour_height * self.total_hours + self.padding * 2)
+        self.time_grid_canvas = TimeGridCanvas(self)
+        self.scroll_area.setWidget(self.time_grid_canvas)
 
-        self.timeline = QWidget(self.canvas)
+        self.timeline = QWidget(self.time_grid_canvas)
         self.timeline.setObjectName("timeline")
         self.timeline.setStyleSheet("background-color: #FF3333;")
 
     def go_to_previous_week(self): self.current_date -= datetime.timedelta(days=7); self.refresh()
     def go_to_next_week(self): self.current_date += datetime.timedelta(days=7); self.refresh()
 
-    def set_resizing(self, is_resizing):
-        self.is_resizing = is_resizing
-        # 더 이상 위젯을 숨길 필요가 없으므로 redraw만 호출
-        if not self.is_resizing:
-            self.redraw_events_with_current_data()
+    def _calculate_column_positions(self, total_width):
+        """정수 기반으로 7개 요일 칸의 x좌표를 계산하여 누적 오차를 방지합니다."""
+        positions = [TIME_GRID_LEFT]
+        grid_width = total_width - TIME_GRID_LEFT
+        
+        base_col_width = grid_width // 7
+        remainder = grid_width % 7
+        
+        current_x = TIME_GRID_LEFT
+        for i in range(7):
+            col_width = base_col_width + (1 if i < remainder else 0)
+            current_x += col_width
+            positions.append(current_x)
             
+        return positions
+
     def _get_datetime_from_pos(self, pos):
-        # 캔버스 내부 좌표로 변환
-        canvas_pos = self.canvas.mapFrom(self, pos)
+        column_xs = self._calculate_column_positions(self.time_grid_canvas.width())
+        if not (column_xs[0] <= pos.x() < column_xs[7]): return None
         
-        time_label_width, days_width = 50, self.canvas.width() - 50
-        if not (time_label_width <= canvas_pos.x() < self.canvas.width()): return None
+        day_index = 0
+        for i in range(7):
+            if column_xs[i] <= pos.x() < column_xs[i+1]:
+                day_index = i
+                break
         
-        day_column_width = days_width / 7
-        day_index = int((canvas_pos.x() - time_label_width) // day_column_width)
-        
-        y_pos_in_grid = canvas_pos.y() - self.padding
-        hour = int(y_pos_in_grid / self.hour_height)
-        minute = int((y_pos_in_grid % self.hour_height) / self.hour_height * 60)
+        hour = int(pos.y() / self.hour_height)
+        minute = int((pos.y() % self.hour_height) / self.hour_height * 60)
         minute = round(minute / 15) * 15
         if minute == 60: minute, hour = 0, hour + 1
         
@@ -231,12 +373,15 @@ class WeekViewWidget(BaseViewWidget):
             delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
             menu.addAction(delete_action)
         else:
-            local_pos = self.mapFromGlobal(global_pos)
-            target_datetime = self._get_datetime_from_pos(local_pos)
-            if target_datetime:
-                add_action = QAction("일정 추가", self)
-                add_action.triggered.connect(lambda: self.add_event_requested.emit(target_datetime))
-                menu.addAction(add_action)
+            clicked_widget = self.childAt(self.mapFromGlobal(global_pos))
+            if isinstance(clicked_widget, (TimeGridCanvas, AllDayCanvas)):
+                 local_pos = clicked_widget.mapFromGlobal(global_pos)
+                 if isinstance(clicked_widget, TimeGridCanvas):
+                    target_datetime = self._get_datetime_from_pos(local_pos)
+                    if target_datetime:
+                        add_action = QAction("일정 추가", self)
+                        add_action.triggered.connect(lambda: self.add_event_requested.emit(target_datetime))
+                        menu.addAction(add_action)
 
         self.main_widget.add_common_context_menu_actions(menu)
         menu.exec(global_pos)
@@ -247,119 +392,93 @@ class WeekViewWidget(BaseViewWidget):
         
         if start_of_week <= now.date() < start_of_week + datetime.timedelta(days=7):
             self.timeline.show()
-            y = self.padding + now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
-            self.timeline.setGeometry(50, int(y), self.canvas.width() - 50, 2)
+            y = now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
+            self.timeline.setGeometry(TIME_GRID_LEFT, int(y), self.time_grid_canvas.width() - TIME_GRID_LEFT, 2)
         else:
             self.timeline.hide()
 
     def refresh(self):
-        today = datetime.date.today()
         start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
         end_of_week = start_of_week + datetime.timedelta(days=6)
         
         self.week_range_label.setText(f"{start_of_week.strftime('%Y년 %m월 %d일')} - {end_of_week.strftime('%m월 %d일')}")
-
-        current_theme = self.main_widget.settings.get("theme", "dark")
-        is_dark = current_theme == "dark"
-        colors = {"weekday": "#D0D0D0" if is_dark else "#222222", "saturday": "#8080FF" if is_dark else "#0000DD", "sunday": "#FF8080" if is_dark else "#DD0000", "today": "#FFFF77" if is_dark else "#A0522D" }
-
-        days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
-        for i in range(7):
-            day_date = start_of_week + datetime.timedelta(days=i)
-            self.day_labels[i].setText(f"{days_of_week_str[i]} ({day_date.day})")
-            font_color = colors['weekday'];
-            if day_date == today: font_color = colors['today']
-            elif i == 0: font_color = colors['sunday']
-            elif i == 6: font_color = colors['saturday']
-            self.day_labels[i].setStyleSheet(f"color: {font_color}; font-weight: bold;")
         
-        self.week_range_label.setStyleSheet(f"color: {colors['weekday']}; font-size: 16px; font-weight: bold;")
+        is_dark = self.main_widget.settings.get("theme", "dark") == "dark"
+        text_color = "#D0D0D0" if is_dark else "#222222"
+        self.week_range_label.setStyleSheet(f"color: {text_color}; font-size: 16px; font-weight: bold;")
 
         self.redraw_events_with_current_data()
         self.update_timeline()
 
+        today = datetime.date.today()
         if start_of_week <= today <= end_of_week:
             now = datetime.datetime.now()
-            target_y = self.padding + now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
+            target_y = now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
             scroll_offset = self.scroll_area.height() * 0.3
             self.scroll_area.verticalScrollBar().setValue(int(target_y - scroll_offset))
 
     def redraw_events_with_current_data(self):
-        # 종일 일정은 기존 위젯 방식 유지 (클릭 등 상호작용이 더 쉬움)
-        for widget in self.all_day_event_widgets: widget.deleteLater()
-        self.all_day_event_widgets.clear()
-
         start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
-        end_of_week = start_of_week + datetime.timedelta(days=6)
         
-        week_events = self.data_manager.get_events_for_period(start_of_week, end_of_week)
+        week_events = self.data_manager.get_events_for_period(start_of_week, start_of_week + datetime.timedelta(days=6))
         selected_ids = self.main_widget.settings.get("selected_calendars", [])
         filtered_events = [event for event in week_events if event.get('calendarId') in selected_ids]
 
         time_events, all_day_events = [], []
         for e in filtered_events:
-            start_str = e['start'].get('dateTime') or e['start'].get('date')
-            end_str = e['end'].get('dateTime') or e['end'].get('date')
+            is_all_day_native = 'date' in e['start']
+            start_str = e['start'].get('dateTime', e['start'].get('date'))
+            end_str = e['end'].get('dateTime', e['end'].get('date'))
             start_dt = datetime.datetime.fromisoformat(start_str.replace('Z', ''))
             end_dt = datetime.datetime.fromisoformat(end_str.replace('Z', ''))
-            is_all_day_native = 'date' in e['start']
-            is_multi_day = (end_dt - start_dt).total_seconds() >= 86400
-            if is_all_day_native or (is_multi_day and 'dateTime' in e['start']):
+            duration_seconds = (end_dt - start_dt).total_seconds()
+            is_multi_day = duration_seconds >= 86400
+            is_exactly_24h_midnight = duration_seconds == 86400 and start_dt.time() == datetime.time(0, 0) and end_dt.time() == datetime.time(0, 0)
+
+            if is_all_day_native or (is_multi_day and not is_exactly_24h_midnight):
                 all_day_events.append(e)
             elif 'dateTime' in e['start']:
                 time_events.append(e)
 
-        self.draw_all_day_events(all_day_events, start_of_week)
+        calculator = WeekLayoutCalculator(time_events, all_day_events, start_of_week, self.hour_height)
+        
+        all_day_positions, num_lanes = calculator.calculate_all_day_events()
+        
+        # 정확한 칸 위치 계산
+        column_xs = self._calculate_column_positions(self.time_grid_canvas.width())
+        
+        # layout_calculator가 이 정보를 알도록 수정이 필요할 수 있음
+        # 지금은 TimeGridCanvas에서만 이 정보를 사용
+        time_event_positions = calculator.calculate_time_events((self.time_grid_canvas.width() - TIME_GRID_LEFT) / 7)
+        
+        self.header_canvas.set_data(column_xs)
+        self.all_day_canvas.set_data(all_day_positions, num_lanes, column_xs)
+        self.time_grid_canvas.set_data(time_event_positions, column_xs)
 
-        # 시간대별 일정 계산 및 캔버스에 전달
-        time_grid_left = 50
-        day_column_width = (self.canvas.width() - time_grid_left) / 7
-        calculator = WeekLayoutCalculator(time_events, [], start_of_week, self.hour_height)
-        positions = calculator.calculate_time_events(day_column_width)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.redraw_events_with_current_data()
+        self.update_timeline()
         
-        event_rects = []
-        for pos_info in positions:
-            rect_coords = pos_info['rect']
-            # x 좌표에 time_grid_left를 더해 실제 캔버스 좌표로 변환
-            rect = QRect(rect_coords[0] + time_grid_left, rect_coords[1] + self.padding, rect_coords[2], rect_coords[3])
-            event_rects.append((rect, pos_info['event']))
-            
-        self.canvas.set_events(event_rects)
-
-
-    def draw_all_day_events(self, all_day_events, start_of_week):
-        # 이 함수는 기존과 거의 동일하게 유지
-        if not all_day_events:
-            self.all_day_widget.hide()
-            return
+    def apply_settings(self):
+        super().apply_settings()
+        self.refresh()
         
-        self.all_day_widget.show()
+        current_theme = self.main_widget.settings.get("theme", "dark")
+        if current_theme == "dark":
+            QToolTip.setStyleSheet("QToolTip { background-color: #2E2E2E; color: #E0E0E0; border: 1px solid #555555; }")
+        else:
+            QToolTip.setStyleSheet("QToolTip { background-color: #FFFFE0; color: #000000; border: 1px solid #AAAAAA; }")
         
-        while self.all_day_layout.count():
-            child = self.all_day_layout.takeAt(0)
-            if child.widget(): child.widget().deleteLater()
+        nav_style = self.main_widget.theme_manager.get_nav_button_style()
+        for btn in self.findChildren(QPushButton):
+            if btn.objectName() == "nav_button":
+                btn.setStyleSheet(nav_style)
         
-        calculator = WeekLayoutCalculator([], all_day_events, start_of_week)
-        positions, num_lanes = calculator.calculate_all_day_events()
-
-        for pos_info in positions:
-            event, lane, start_col, span = pos_info['event'], pos_info['lane'], pos_info['start_col'], pos_info['span']
-            event_label = EventLabelWidget(event, self.all_day_widget)
-            summary = event.get('summary', '')
-            if 'recurrence' in event: summary = f"🔄 {summary}"
-            event_label.setText(summary)
-            event_label.edit_requested.connect(self.edit_event_requested)
-            event_color = event.get('color', '#555555')
-            text_color = get_text_color_for_background(event_color)
-            finished = self.data_manager.is_event_completed(event.get('id'))
-            style_sheet = f"background-color: {event_color}; color: {text_color}; border-radius: 4px; padding: 2px 4px; font-size: 9pt;"
-            
-            if finished: style_sheet += "text-decoration: line-through;"
-            
-            event_label.setStyleSheet(style_sheet)
-            self.all_day_layout.addWidget(event_label, lane, start_col, 1, span)
-            self.all_day_event_widgets.append(event_label)
+        scroll_area_style = self.main_widget.theme_manager.get_scroll_area_style()
+        self.scroll_area.setStyleSheet(scroll_area_style)
         
-        new_height = max(1, num_lanes) * 25 if num_lanes > 0 else 0
-        self.all_day_widget.setMinimumHeight(new_height)
-        self.all_day_widget.adjustSize()
+        self.timeline.setStyleSheet(f"background-color: {self.main_widget.theme_manager.get_timeline_color()};")
+        self.header_canvas.update()
+        self.all_day_canvas.update()
+        self.time_grid_canvas.update()

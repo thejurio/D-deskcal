@@ -81,8 +81,14 @@ class DayCellWidget(QWidget):
 
         for rect, event_data, style_info in self.event_layout:
             summary = event_data.get('summary', '')
-            if 'recurrence' in event_data: summary = f"🔄 {summary}"
-            draw_event(painter, rect, event_data, time_text=None, summary_text=summary)
+            if 'recurrence' in event_data:
+                summary = f"🔄 {summary}"
+            
+            # 너비를 4px 줄이고 중앙 정렬하기 위해 rect 조정
+            adjusted_rect = rect.adjusted(2, 0, -2, 0)
+            
+            is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
+            draw_event(painter, adjusted_rect, event_data, time_text=None, summary_text=summary, is_completed=is_completed)
 
         # 더보기 버튼 그리기
         if self.more_events_data:

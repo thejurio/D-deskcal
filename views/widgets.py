@@ -1,7 +1,7 @@
 # views/widgets.py
 from PyQt6.QtWidgets import QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics, QTextDocument
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics, QTextDocument, QPainterPath
 
 class EventLabelWidget(QLabel):
     edit_requested = pyqtSignal(dict)
@@ -57,23 +57,28 @@ def get_text_color_for_background(hex_color):
     except Exception:
         return '#FFFFFF'
 
-def draw_event(painter, rect, event_data, time_text, summary_text):
+def draw_event(painter, rect, event_data, time_text, summary_text, is_completed=False):
     """하나의 이벤트를 그리는 중앙 함수"""
     painter.save()
 
-    # 1. 배경 그리기
+    # 완료된 이벤트 처리
+    if is_completed:
+        painter.setOpacity(0.5)
+
+    # 1. 배경 그리기 및 클리핑 경로 설정
     event_color = QColor(event_data.get('color', '#555555'))
     painter.setBrush(event_color)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawRoundedRect(rect, 4, 4)
+    
+    clip_path = QPainterPath()
+    clip_path.addRoundedRect(QRectF(rect), 4, 4)
+    painter.drawPath(clip_path)
+    painter.setClipPath(clip_path)
 
     # 2. 텍스트 그리기 준비
     text_color = QColor(get_text_color_for_background(event_data.get('color', '#555555')))
     painter.setPen(text_color)
-    # 상하 여백을 2에서 1로 줄여 텍스트를 위로 이동
     text_rect = rect.adjusted(4, -2, -4, -1)
-    
-    original_font = painter.font()
     
     # 3. 그릴 텍스트 조합 (HTML 사용)
     full_html = ""
@@ -82,14 +87,16 @@ def draw_event(painter, rect, event_data, time_text, summary_text):
         full_html += f"<p style='margin:0; font-size:8pt;'>{escaped_time}</p>"
 
     escaped_summary = summary_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    full_html += f"<p style='margin:0;'>{escaped_summary}</p>"
+    
+    summary_style = "text-decoration:line-through;" if is_completed else ""
+    full_html += f"<p style='margin:0; {summary_style}'>{escaped_summary}</p>"
     
     # 4. QTextDocument를 사용하여 Rich Text 그리기
     doc = QTextDocument()
-    doc.setDefaultStyleSheet(f"p {{ color: {text_color.name()}; line-height: 100%; }}") # 줄 간격 조절
-    doc.setHtml(full_html)
+    doc.setDefaultStyleSheet(f"p {{ color: {text_color.name()}; line-height: 100%; }}")
     doc.setTextWidth(text_rect.width())
-    
+    doc.setHtml(full_html)
+
     painter.translate(text_rect.topLeft())
     doc.drawContents(painter, QRectF(0, 0, text_rect.width(), text_rect.height()))
     
