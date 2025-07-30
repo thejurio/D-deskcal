@@ -1,5 +1,6 @@
 import sys
 import datetime
+import copy
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
@@ -222,27 +223,40 @@ class MainWidget(QWidget):
 
     def open_settings_window(self):
         with self.data_manager.user_action_priority():
-            original_opacity = self.settings.get("window_opacity", 0.95)
-            original_theme = self.settings.get("theme", "dark")
+            original_settings_snapshot = copy.deepcopy(self.settings)
 
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=QCursor.pos())
             settings_dialog.transparency_changed.connect(self.set_window_opacity)
-            settings_dialog.theme_changed.connect(self.apply_theme) # 테마 변경 신호 연결
+            settings_dialog.theme_changed.connect(self.apply_theme)
             
             result = settings_dialog.exec()
             
-            if result:
-                self.data_manager.update_cached_events_colors()
-                self.data_manager.update_sync_timer()
-                self.set_window_opacity(self.settings.get("window_opacity", 0.95))
-                self.apply_theme(self.settings.get("theme", "dark"))
-                # 변경된 설정을 적용하기 위해 모든 뷰를 새로고침합니다.
-                self.month_view.refresh()
-                self.week_view.refresh()
-            else:
-                # 취소 시, 원래 테마와 투명도로 복구
-                self.set_window_opacity(original_opacity)
-                self.apply_theme(original_theme)
+            if result == QDialog.DialogCode.Accepted:
+                changed_fields = settings_dialog.get_changed_fields()
+                
+                # 1. 즉시 적용되어야 하는 시각적 요소
+                if "window_opacity" in changed_fields:
+                    self.set_window_opacity(self.settings.get("window_opacity", 0.95))
+                if "theme" in changed_fields:
+                    self.apply_theme(self.settings.get("theme", "dark"))
+
+                # 2. 데이터와 관련된 변경사항 처리
+                if "sync_interval_minutes" in changed_fields:
+                    self.data_manager.update_sync_timer()
+                
+                # 3. 캘린더 표시에 영향을 주는 변경사항 처리 (가장 무거운 작업)
+                view_related_changes = {"selected_calendars", "calendar_colors", "start_day_of_week", "hide_weekends"}
+                if any(field in changed_fields for field in view_related_changes):
+                    if "calendar_colors" in changed_fields:
+                        self.data_manager.update_cached_events_colors()
+                    self.refresh_current_view()
+
+            else: # 취소 시, 원래 테마와 투명도로 복구
+                self.set_window_opacity(original_settings_snapshot.get("window_opacity", 0.95))
+                self.apply_theme(original_settings_snapshot.get("theme", "dark"))
+                # 원본 설정 객체를 복원
+                self.settings.clear()
+                self.settings.update(original_settings_snapshot)
 
     def open_search_dialog(self):
         """검색 다이얼로그를 엽니다."""

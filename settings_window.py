@@ -266,6 +266,10 @@ class SettingsWindow(BaseDialog):
         self.temp_settings.setdefault("calendar_colors", {})[cal_id] = combo.currentData()
 
     def save_and_close(self):
+        """
+        변경사항을 self.temp_settings에 적용하고,
+        어떤 부분이 변경되었는지 감지하여 결과를 반환합니다.
+        """
         self.temp_settings["use_local_calendar"] = self.local_calendar_checkbox.isChecked()
         self.temp_settings["selected_calendars"] = [cal_id for cal_id, cb in self.checkboxes.items() if cb.isChecked()]
         self.temp_settings.setdefault("calendar_colors", {}).update({cal_id: combo.currentData() for cal_id, combo in self.color_combos.items() if combo.currentData()})
@@ -275,7 +279,25 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["hide_weekends"] = self.hide_weekends_checkbox.isChecked()
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
-        
+
+        # 변경된 필드 감지
+        changed_fields = []
+        for key, new_value in self.temp_settings.items():
+            if key not in self.original_settings or self.original_settings[key] != new_value:
+                changed_fields.append(key)
+
+        # 원본 설정 업데이트
         self.original_settings.clear()
         self.original_settings.update(self.temp_settings)
-        self.accept()
+        
+        # 변경된 필드 정보를 담아 QDialog.Accepted(1)와 함께 반환
+        self.done(1)
+        
+    def get_changed_fields(self):
+        """어떤 필드가 변경되었는지 리스트로 반환합니다."""
+        changed = []
+        # self.temp_settings가 최종 저장본이므로, 이를 기준으로 비교
+        for key, new_value in self.temp_settings.items():
+            if self.original_settings.get(key) != new_value:
+                changed.append(key)
+        return changed

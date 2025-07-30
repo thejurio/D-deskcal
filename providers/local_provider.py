@@ -39,7 +39,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
 
 
     def _init_db_table(self):
-        """데이터베이스 테이블을 생성합니다. (없을 경우에만)"""
+        """데이터베이스 테이블과 인덱스를 생성합니다. (없을 경우에만)"""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -52,6 +52,9 @@ class LocalCalendarProvider(BaseCalendarProvider):
                         event_json TEXT NOT NULL
                     )
                 """)
+                # 날짜 검색 성능 향상을 위한 인덱스 추가
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_date ON events (start_date)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_end_date ON events (end_date)")
                 conn.commit()
         except sqlite3.Error as e:
             print(f"로컬 DB 테이블 초기화 중 오류 발생: {e}")
