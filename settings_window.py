@@ -27,9 +27,14 @@ class SettingsWindow(BaseDialog):
         self.original_settings = settings
         self.temp_settings = copy.deepcopy(settings)
 
+        # ▼▼▼ [추가] 변경된 필드를 저장할 리스트를 초기화합니다. ▼▼▼
+        self.changed_fields_list = []
+        # ▲▲▲ 여기까지 추가 ▲▲▲
+
         self.setWindowTitle("설정")
         self.setModal(True)
         self.setMinimumSize(750, 550)
+
         
         margin_widget = QWidget()
         margin_widget.setObjectName("settings_margin_background")
@@ -280,24 +285,22 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
 
-        # 변경된 필드 감지
-        changed_fields = []
+        # ▼▼▼ [수정] 원본 설정을 업데이트하기 전에 변경된 필드를 계산하여 저장합니다. ▼▼▼
+        self.changed_fields_list = []
         for key, new_value in self.temp_settings.items():
             if key not in self.original_settings or self.original_settings[key] != new_value:
-                changed_fields.append(key)
+                self.changed_fields_list.append(key)
+        # ▲▲▲ 여기까지 수정 ▲▲▲
 
         # 원본 설정 업데이트
         self.original_settings.clear()
         self.original_settings.update(self.temp_settings)
         
-        # 변경된 필드 정보를 담아 QDialog.Accepted(1)와 함께 반환
+        # QDialog.Accepted(1)를 반환하며 다이얼로그를 닫습니다.
         self.done(1)
         
     def get_changed_fields(self):
-        """어떤 필드가 변경되었는지 리스트로 반환합니다."""
-        changed = []
-        # self.temp_settings가 최종 저장본이므로, 이를 기준으로 비교
-        for key, new_value in self.temp_settings.items():
-            if self.original_settings.get(key) != new_value:
-                changed.append(key)
-        return changed
+        """미리 저장해둔 변경된 필드 리스트를 반환합니다."""
+        # ▼▼▼ [수정] 실시간 비교 대신, 저장된 리스트를 반환합니다. ▼▼▼
+        return self.changed_fields_list
+        # ▲▲▲ 여기까지 수정 ▲▲▲

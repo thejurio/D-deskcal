@@ -1,7 +1,7 @@
 {
     "geometry": [
-        314,
-        45,
+        399,
+        50,
         1127,
         680
     ],
@@ -17,7 +17,7 @@
         "local_calendar": "#4CAF50",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#9bf6ff",
         "family01556510902891015712@group.calendar.google.com": "#ffadad",
-        "thejurio@gmail.com": "#ffd6a5",
+        "thejurio@gmail.com": "#ffadad",
         "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
     },
     "sync_interval_minutes": 1,

@@ -20,93 +20,24 @@ class DayCellWidget(QWidget):
         super().__init__(parent_view)
         self.date_obj = date_obj
         self.parent_view = parent_view
-        self.event_layout = [] # (QRect, event_data, style_info) 튜플 저장
-        self.more_events_data = []
-        self.more_button_rect = QRect()
-        self.hovered_event_id = None
-        self.setMouseTracking(True)
         
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(3, 3, 3, 3)
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-    def set_events(self, event_layout_data, more_events_data):
-        self.event_layout = event_layout_data
-        self.more_events_data = more_events_data
-        self.update()
-
-    def get_event_at(self, pos):
-        for rect, event_data, _ in self.event_layout:
-            if rect.contains(pos):
-                return event_data
-        return None
-
     def mouseDoubleClickEvent(self, event):
-        super().mouseDoubleClickEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton:
-            clicked_event = self.get_event_at(event.pos())
-            if clicked_event:
-                self.edit_event_requested.emit(clicked_event)
-            else:
-                self.add_event_requested.emit(self.date_obj)
+        # MonthViewWidget에서 직접 처리하므로, 여기서는 단순 요청만 보냄
+        self.add_event_requested.emit(self.date_obj)
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton:
-            if self.more_button_rect.contains(event.pos()):
-                self.more_events_requested.emit(self.date_obj, self.more_events_data)
-                
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        event_under_mouse = self.get_event_at(event.pos())
-        
-        if event_under_mouse:
-            event_id = event_under_mouse.get('id')
-            if self.hovered_event_id != event_id:
-                self.hovered_event_id = event_id
-                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
-        else:
-            if self.hovered_event_id is not None:
-                self.hovered_event_id = None
-                QToolTip.hideText()
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        y_offset, event_height, event_spacing = 25, 20, 2
-        max_slots = (self.height() - y_offset) // (event_height + event_spacing)
-        max_visible_y_level = max_slots - 1
-
-        for rect, event_data, style_info in self.event_layout:
-            summary = event_data.get('summary', '')
-            if 'recurrence' in event_data:
-                summary = f"🔄 {summary}"
-            
-            # 너비를 4px 줄이고 중앙 정렬하기 위해 rect 조정
-            adjusted_rect = rect.adjusted(2, 0, -2, 0)
-            
-            is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
-            draw_event(painter, adjusted_rect, event_data, time_text=None, summary_text=summary, is_completed=is_completed)
-
-        # 더보기 버튼 그리기
-        if self.more_events_data:
-            y = y_offset + (max_visible_y_level * (event_height + event_spacing))
-            self.more_button_rect = QRect(0, y, self.width(), event_height)
-            
-            # 폰트를 굵게 설정
-            font = painter.font()
-            font.setBold(True)
-            painter.setFont(font)
-            
-            painter.setPen(QColor("#a0c4ff"))
-            painter.drawText(self.more_button_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"  + {len(self.more_events_data)}개 더보기")
 
 class MonthViewWidget(BaseViewWidget):
     def __init__(self, main_widget):
         super().__init__(main_widget)
         self.date_to_cell_map = {}
+        self.event_rects = []  # (QRect, event_data) 튜플 저장
+        self.more_buttons = {} # {date: QRect} 딕셔너리 저장
+        self.hovered_event_id = None
+        self.setMouseTracking(True)
         self.initUI()
         self.refresh()
         self.data_manager.event_completion_changed.connect(self.redraw_events_with_current_data)
@@ -275,34 +206,131 @@ class MonthViewWidget(BaseViewWidget):
                 rect = QRect(0, y, start_cell_info.width(), event_height) # DayCellWidget 내부 좌표
                 events_by_day[day].append((rect, event, style_info))
         
-        # 3. 각 DayCellWidget에 그릴 데이터 전달
+        # 3. 각 DayCellWidget에 그릴 데이터 전달 -> 이제 MonthViewWidget이 직접 그림
+        self.update() # paintEvent 호출
+
+    def redraw_events_with_current_data(self):
+        # 데이터 변경 시 전체 그리드를 다시 만들 필요 없이, paintEvent만 다시 호출합니다.
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        self.event_rects.clear()
+        self.more_buttons.clear()
+
+        all_events = self.data_manager.get_events(self.current_date.year, self.current_date.month)
+        selected_ids = self.main_widget.settings.get("selected_calendars", [])
+        filtered_events = [event for event in all_events if event.get('calendarId') in selected_ids]
+        
+        if not self.date_to_cell_map:
+            return
+
+        calculator = MonthLayoutCalculator(filtered_events, self.date_to_cell_map.keys())
+        event_positions, _ = calculator.calculate()
+
+        events_by_day = defaultdict(list)
+        y_offset, event_height, event_spacing = 25, 20, 2
+
+        for pos_info in event_positions:
+            event_data = pos_info['event']
+            y_level = pos_info['y_level']
+            
+            for day in pos_info['days_in_view']:
+                cell_widget = self.date_to_cell_map.get(day)
+                if not cell_widget: continue
+                
+                y = y_offset + (y_level * (event_height + event_spacing))
+                
+                # MonthViewWidget 좌표계로 변환
+                cell_pos = cell_widget.pos()
+                global_rect = QRect(cell_pos.x(), cell_pos.y() + y, cell_widget.width(), event_height)
+                
+                is_start = day == pos_info['start_date']
+                is_end = day == pos_info['end_date']
+                style_info = {'is_start': is_start, 'is_end': is_end}
+                
+                events_by_day[day].append((global_rect, event_data, style_info))
+
         for date, cell_widget in self.date_to_cell_map.items():
+            if not cell_widget.isVisible(): continue
+            
             max_slots = (cell_widget.height() - y_offset) // (event_height + event_spacing)
             max_visible_y_level = max(0, max_slots - 1)
             
-            visible_events, more_events = [], []
-            
-            # y_level을 기준으로 보이는 이벤트와 '더보기' 이벤트를 나눔
-            event_y_levels_on_day = {layout[1]['id']: layout[0].y() for layout in events_by_day.get(date, [])}
-            
+            visible_events, more_events_data = [], []
             sorted_day_events = sorted(events_by_day.get(date, []), key=lambda x: x[0].y())
             
-            for layout_item in sorted_day_events:
-                event = layout_item[1]
-                y_level = (layout_item[0].y() - y_offset) // (event_height + event_spacing)
-
+            y_levels_on_day = set()
+            for rect, event_data, style in sorted_day_events:
+                y_level = (rect.y() - cell_widget.y() - y_offset) // (event_height + event_spacing)
                 if y_level < max_visible_y_level:
-                    visible_events.append(layout_item)
+                    visible_events.append((rect, event_data, style))
+                    y_levels_on_day.add(y_level)
                 else:
-                    more_events.append(event)
-            
-            # 중복 제거
-            more_events = list({e['id']: e for e in more_events}.values())
+                    more_events_data.append(event_data)
 
-            cell_widget.set_events(visible_events, more_events)
+            for rect, event_data, style in visible_events:
+                summary = event_data.get('summary', '')
+                if 'recurrence' in event_data: summary = f"🔄 {summary}"
+                
+                adjusted_rect = rect.adjusted(2, 0, -2, 0)
+                is_completed = self.data_manager.is_event_completed(event_data.get('id'))
+                
+                # ▼▼▼ [수정] 그리는 순간에 최신 색상 가져와 적용 ▼▼▼
+                event_data_copy = event_data.copy()
+                event_data_copy['color'] = self.data_manager.get_color_for_calendar(event_data.get('calendarId'))
+                
+                draw_event(painter, adjusted_rect, event_data_copy, time_text=None, summary_text=summary, is_completed=is_completed)
+                # ▲▲▲ 여기까지 수정 ▲▲▲
+                self.event_rects.append((rect, event_data))
 
-    # resizeEvent는 BaseViewWidget의 기본 동작으로 충분하므로, 재정의 필요 없음
-    # contextMenuEvent도 BaseViewWidget의 기본 동작으로 충분
+            if more_events_data:
+                y = y_offset + (max_visible_y_level * (event_height + event_spacing))
+                cell_pos = cell_widget.pos()
+                more_rect = QRect(cell_pos.x(), cell_pos.y() + y, cell_widget.width(), event_height)
+                
+                font = painter.font(); font.setBold(True); painter.setFont(font)
+                painter.setPen(QColor("#a0c4ff"))
+                painter.drawText(more_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"  + {len(more_events_data)}개 더보기")
+                self.more_buttons[date] = (more_rect, more_events_data)
+
+    def get_event_at(self, pos):
+        for rect, event_data in self.event_rects:
+            if rect.contains(pos):
+                return event_data
+        return None
+
+    def mouseDoubleClickEvent(self, event):
+        clicked_event = self.get_event_at(event.pos())
+        if clicked_event:
+            self.edit_event_requested.emit(clicked_event)
+        else:
+            target_widget = self.childAt(event.pos())
+            if isinstance(target_widget, DayCellWidget):
+                self.add_event_requested.emit(target_widget.date_obj)
+
+    def mousePressEvent(self, event):
+        for date, (rect, data) in self.more_buttons.items():
+            if rect.contains(event.pos()):
+                self.show_more_events_popup(date, data)
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        event_under_mouse = self.get_event_at(event.pos())
+        current_event_id = event_under_mouse.get('id') if event_under_mouse else None
+        
+        if self.hovered_event_id != current_event_id:
+            self.hovered_event_id = current_event_id
+            if current_event_id:
+                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
+            else:
+                QToolTip.hideText()
+        super().mouseMoveEvent(event)
+
     def go_to_previous_month(self):
         self.navigation_requested.emit("backward")
 
@@ -311,24 +339,18 @@ class MonthViewWidget(BaseViewWidget):
 
     def contextMenuEvent(self, event):
         pos = event.pos()
-        target_widget = self.childAt(pos)
+        target_event = self.get_event_at(pos)
         
         day_cell = None
-        while target_widget is not None:
+        if not target_event:
+            target_widget = self.childAt(pos)
             if isinstance(target_widget, DayCellWidget):
                 day_cell = target_widget
-                break
-            target_widget = target_widget.parent()
 
         menu = QMenu(self)
         main_opacity = self.main_widget.settings.get("window_opacity", 0.95)
         menu_opacity = main_opacity + (1 - main_opacity) * 0.85
         menu.setWindowOpacity(menu_opacity)
-        
-        target_event = None
-        if day_cell:
-            pos_in_cell = day_cell.mapFrom(self, pos)
-            target_event = day_cell.get_event_at(pos_in_cell)
 
         if target_event:
             event_id = target_event.get('id')

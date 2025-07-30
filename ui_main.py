@@ -221,6 +221,18 @@ class MainWidget(QWidget):
         if hasattr(current_widget, 'refresh'):
             current_widget.refresh()
 
+    def handle_visual_preview(self):
+        """설정 변경 중 뷰의 내용만 다시 그리도록 요청하는 가벼운 슬롯입니다."""
+        current_widget = self.stacked_widget.currentWidget()
+        if current_widget:
+            current_widget.update() # 전체 위젯을 다시 만들지 않고, paintEvent만 다시 호출
+
+    def handle_visual_preview(self):
+        """설정 변경 중 뷰의 내용만 다시 그리도록 요청하는 가벼운 슬롯입니다."""
+        current_widget = self.stacked_widget.currentWidget()
+        if current_widget:
+            current_widget.update() # 전체 위젯을 다시 만들지 않고, paintEvent만 다시 호출
+
     def open_settings_window(self):
         with self.data_manager.user_action_priority():
             original_settings_snapshot = copy.deepcopy(self.settings)
@@ -234,29 +246,41 @@ class MainWidget(QWidget):
             if result == QDialog.DialogCode.Accepted:
                 changed_fields = settings_dialog.get_changed_fields()
                 
-                # 1. 즉시 적용되어야 하는 시각적 요소
+                # 1. 뷰와 직접 관련 없는 설정 적용
                 if "window_opacity" in changed_fields:
                     self.set_window_opacity(self.settings.get("window_opacity", 0.95))
                 if "theme" in changed_fields:
                     self.apply_theme(self.settings.get("theme", "dark"))
-
-                # 2. 데이터와 관련된 변경사항 처리
                 if "sync_interval_minutes" in changed_fields:
                     self.data_manager.update_sync_timer()
                 
-                # 3. 캘린더 표시에 영향을 주는 변경사항 처리 (가장 무거운 작업)
-                view_related_changes = {"selected_calendars", "calendar_colors", "start_day_of_week", "hide_weekends"}
-                if any(field in changed_fields for field in view_related_changes):
-                    if "calendar_colors" in changed_fields:
-                        self.data_manager.update_cached_events_colors()
+                # 2. 뷰 구조 자체를 변경해야 하는 경우 (무거운 작업)
+                grid_structure_changes = {"start_day_of_week", "hide_weekends"}
+                if any(field in changed_fields for field in grid_structure_changes):
                     self.refresh_current_view()
+                    # 전체 뷰를 새로고침하면 다른 시각적 업데이트가 모두 포함되므로 여기서 함수를 종료합니다.
+                    return 
 
-            else: # 취소 시, 원래 테마와 투명도로 복구
-                self.set_window_opacity(original_settings_snapshot.get("window_opacity", 0.95))
-                self.apply_theme(original_settings_snapshot.get("theme", "dark"))
-                # 원본 설정 객체를 복원
+                # ▼▼▼ [수정] 캘린더 색상 변경 시 처리 로직 ▼▼▼
+                if "calendar_colors" in changed_fields:
+                    # 데이터 수정 없이 화면만 다시 그리도록 요청
+                    self.handle_visual_preview()
+                # ▲▲▲ 여기까지 수정 ▲▲▲
+
+                # 4. 표시할 캘린더가 변경된 경우 (가벼운 UI 갱신만 필요)
+                if "selected_calendars" in changed_fields:
+                    # 만약 색상 변경으로 인해 이미 UI 갱신이 예정되었다면, 중복해서 호출할 필요가 없습니다.
+                    if "calendar_colors" not in changed_fields:
+                        # 불필요한 데이터 다운로드 대신, 화면만 다시 그리도록 가벼운 업데이트를 요청합니다.
+                        self.handle_visual_preview()
+
+            else: # 취소 시, 원래 상태로 복구
                 self.settings.clear()
                 self.settings.update(original_settings_snapshot)
+                self.set_window_opacity(self.settings.get("window_opacity", 0.95))
+                self.apply_theme(self.settings.get("theme", "dark"))
+                self.refresh_current_view() # 뷰를 원래 상태로 되돌리기 위해 새로고침
+
 
     def open_search_dialog(self):
         """검색 다이얼로그를 엽니다."""

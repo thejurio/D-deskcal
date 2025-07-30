@@ -169,6 +169,18 @@ class DataManager(QObject):
     calendar_list_changed = pyqtSignal()
     event_completion_changed = pyqtSignal() # 완료 상태 변경 시그널 추가
 
+    def get_color_for_calendar(self, cal_id):
+        """특정 캘린더 ID에 대한 현재 색상 설정을 빠르게 반환합니다."""
+        custom_colors = self.settings.get("calendar_colors", {})
+        if cal_id in custom_colors:
+            return custom_colors[cal_id]
+
+        if not hasattr(self, '_default_color_map_cache') or self._default_color_map_cache is None:
+            all_calendars = self.get_all_calendars() # 캐시된 목록을 사용하므로 빠름
+            self._default_color_map_cache = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
+        
+        return self._default_color_map_cache.get(cal_id, DEFAULT_EVENT_COLOR)
+
     def __init__(self, settings, start_timer=True, load_cache=True):
         super().__init__()
         self.settings = settings
@@ -176,7 +188,12 @@ class DataManager(QObject):
         self.auth_manager.auth_state_changed.connect(self.on_auth_state_changed)
 
         self.event_cache = {}
-        self.completed_event_ids = set() # 완료된 이벤트 ID를 저장할 집합
+        self.completed_event_ids = set() 
+        
+        # ▼▼▼ [수정] 캐시 변수 2개 추가 ▼▼▼
+        self.calendar_list_cache = None
+        self._default_color_map_cache = None
+        # ▲▲▲ 여기까지 수정 ▲▲▲
 
         if load_cache:
             self._init_cache_db()
@@ -201,6 +218,7 @@ class DataManager(QObject):
             self.update_sync_timer()
         
         self.setup_providers()
+
 
     def _init_completed_events_db(self):
         """완료된 이벤트 ID 저장을 위한 DB 테이블을 생성합니다."""
@@ -261,28 +279,6 @@ class DataManager(QObject):
         except sqlite3.Error as e:
             print(f"이벤트 진행 중 처리 중 DB 오류 발생: {e}")
 
-    def update_cached_events_colors(self):
-        """현재 캐시된 모든 이벤트의 색상을 최신 설정에 따라 업데이트합니다."""
-        print("캐시된 이벤트의 색상을 업데이트합니다...")
-        all_calendars = self.get_all_calendars()
-        if not all_calendars:
-            return
-
-        custom_colors = self.settings.get("calendar_colors", {})
-        default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
-
-        for month_key, events in self.event_cache.items():
-            for event in events:
-                cal_id = event.get('calendarId')
-                if cal_id:
-                    default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
-                    event['color'] = custom_colors.get(cal_id, default_color)
-            
-            self._save_month_to_cache_db(month_key[0], month_key[1], events)
-
-        # 모든 뷰가 스스로 새로고침하도록 event_completion_changed 시그널을 사용
-        self.event_completion_changed.emit()
-        print("색상 업데이트 완료.")
 
     def _init_cache_db(self):
         """캐시 저장을 위한 DB 테이블을 생성합니다."""
@@ -323,7 +319,13 @@ class DataManager(QObject):
         """로그인/로그아웃 시 호출됩니다."""
         print("인증 상태 변경 감지. Provider를 재설정하고 데이터를 새로고침합니다.")
         self.setup_providers()
-        # 캘린더 목록이 바뀌었으므로 UI에 알려야 함
+        
+        # ▼▼▼ [수정] 캐시 초기화 2줄 추가 ▼▼▼
+        self.calendar_list_cache = None
+        if hasattr(self, '_default_color_map_cache'):
+            del self._default_color_map_cache
+        # ▲▲▲ 여기까지 수정 ▲▲▲
+
         self.calendar_list_changed.emit()
         
         # 메모리와 DB의 모든 캐시를 삭제
@@ -335,7 +337,6 @@ class DataManager(QObject):
             year, month = self.last_requested_month
             self.get_events(year, month) # 데이터 다시 요청
         self.request_full_sync() # 전체 동기화도 요청
-
 
     def update_sync_timer(self):
         interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
@@ -441,6 +442,26 @@ class DataManager(QObject):
                 print(f"'{type(provider).__name__}' 이벤트 조회 오류: {e}")
         return all_events
 
+    def force_sync_month(self, year, month):
+        """
+        캐시를 무시하고 특정 월의 데이터를 즉시 동기화한 후 UI를 업데이트합니다.
+        """
+        print(f"현재 보이는 월({year}년 {month}월)을 강제로 즉시 동기화합니다...")
+        
+        # 1. Provider로부터 최신 데이터 가져오기
+        events = self._fetch_events_from_providers(year, month)
+        
+        if events is not None:
+            # 2. 메모리 캐시와 DB 캐시 업데이트
+            self.event_cache[(year, month)] = events
+            self._save_month_to_cache_db(year, month, events)
+            
+            # 3. UI에 데이터가 변경되었음을 즉시 알림
+            self.data_updated.emit(year, month)
+            print("강제 동기화 완료. UI 업데이트 신호를 보냈습니다.")
+        else:
+            print("강제 동기화 실패: Provider로부터 데이터를 가져오지 못했습니다.")
+
     def get_events(self, year, month):
         cache_key = (year, month)
         direction = "none"
@@ -498,6 +519,9 @@ class DataManager(QObject):
         return list(unique_events)
 
     def get_all_calendars(self):
+        if self.calendar_list_cache is not None:
+            return self.calendar_list_cache
+
         all_calendars = []
         for provider in self.providers:
             if hasattr(provider, 'get_calendars'):
@@ -505,7 +529,10 @@ class DataManager(QObject):
                     all_calendars.extend(provider.get_calendars())
                 except Exception as e:
                     print(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생: {e}")
+        
+        self.calendar_list_cache = all_calendars
         return all_calendars
+
 
     def add_event(self, event_data):
         provider_name = event_data.get('provider')
