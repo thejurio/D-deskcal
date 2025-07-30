@@ -25,7 +25,7 @@ class ClickableLabel(QLabel):
 TIME_GRID_LEFT = 50
 HEADER_HEIGHT = 30
 ALL_DAY_LANE_HEIGHT = 25
-# HORIZONTAL_MARGIN = 8 # 더 이상 사용되지 않음
+HORIZONTAL_MARGIN = 2
 
 class HeaderCanvas(QWidget):
     """요일 헤더를 그리는 위젯"""
@@ -46,32 +46,47 @@ class HeaderCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        is_dark = self.parent_view.main_widget.settings.get("theme", "dark") == "dark"
+        settings = self.parent_view.main_widget.settings
+        is_dark = settings.get("theme", "dark") == "dark"
+        start_day_of_week = settings.get("start_day_of_week", 6)
+        hide_weekends = settings.get("hide_weekends", False)
         
         painter.save()
         header_bg_color = QColor("#2A2A2A") if is_dark else QColor("#F0F0F0")
         painter.fillRect(self.rect(), header_bg_color)
         
         colors = {"weekday": "#D0D0D0" if is_dark else "#222222", "saturday": "#8080FF" if is_dark else "#0000DD", "sunday": "#FF8080" if is_dark else "#DD0000", "today": "#FFFF77" if is_dark else "#A0522D" }
-        days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
-        today = datetime.date.today()
-        start_of_week = self.parent_view.current_date - datetime.timedelta(days=(self.parent_view.current_date.weekday() + 1) % 7)
+        
+        if start_day_of_week == 0: # 월요일 시작
+            days_of_week_str = ["월", "화", "수", "목", "금", "토", "일"]
+            weekend_indices = [5, 6]
+        else: # 일요일 시작
+            days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
+            weekend_indices = [0, 6]
 
+        today = datetime.date.today()
+        start_of_week = self.parent_view._get_start_of_week()
+
+        col_idx = 0
         for i in range(7):
             day_date = start_of_week + datetime.timedelta(days=i)
+            if hide_weekends and day_date.weekday() in [5, 6]:
+                continue
+
             text = f"{days_of_week_str[i]} ({day_date.day})"
             
             font_color = colors['weekday']
             if day_date == today: font_color = colors['today']
-            elif i == 0: font_color = colors['sunday']
-            elif i == 6: font_color = colors['saturday']
+            elif i == weekend_indices[0]: font_color = colors['sunday']
+            elif i == weekend_indices[1]: font_color = colors['saturday']
             
             painter.setPen(QColor(font_color))
             
-            x = self.column_x_coords[i]
-            width = self.column_x_coords[i+1] - x
+            x = self.column_x_coords[col_idx]
+            width = self.column_x_coords[col_idx+1] - x
             rect = QRectF(x, 0, width, HEADER_HEIGHT)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+            col_idx += 1
         painter.restore()
 
 class AllDayCanvas(QWidget):
@@ -122,17 +137,17 @@ class AllDayCanvas(QWidget):
         for pos_info in self.event_positions:
             event_data, lane, start_col, span = pos_info['event'], pos_info['lane'], pos_info['start_col'], pos_info['span']
             
+            if start_col + span > len(self.column_x_coords) -1: continue
+
             start_x = self.column_x_coords[start_col]
             end_x = self.column_x_coords[start_col + span]
             
-            # HORIZONTAL_MARGIN 제거
-            x = start_x
+            x = start_x + (HORIZONTAL_MARGIN / 2)
             y = lane * ALL_DAY_LANE_HEIGHT + 2
-            width = end_x - start_x
+            width = (end_x - start_x) - HORIZONTAL_MARGIN
             height = ALL_DAY_LANE_HEIGHT - 4
             
-            # 경계를 위해 1px 간격 추가
-            rect = QRect(int(x), int(y), int(width - 1), int(height))
+            rect = QRect(int(x), int(y), int(width), int(height))
             self.event_rects.append((rect, event_data))
             
             summary = event_data.get('summary', '')
@@ -202,9 +217,11 @@ class TimeGridCanvas(QWidget):
     def _draw_time_grid(self, painter, is_dark):
         painter.save()
         today = datetime.date.today()
-        start_of_week = self.parent_view.current_date - datetime.timedelta(days=(self.parent_view.current_date.weekday() + 1) % 7)
-
-        if start_of_week <= today < start_of_week + datetime.timedelta(days=7):
+        start_of_week = self.parent_view._get_start_of_week()
+        
+        hide_weekends = self.parent_view.main_widget.settings.get("hide_weekends", False)
+        
+        if not hide_weekends and start_of_week <= today < start_of_week + datetime.timedelta(days=7):
             highlight_color = QColor("#FFFFAA") if not is_dark else QColor("#4A4A26")
             day_offset = (today - start_of_week).days
             x = self.column_x_coords[day_offset]
@@ -235,14 +252,12 @@ class TimeGridCanvas(QWidget):
             event_data = pos_info['event']
             rect_coords = pos_info['rect']
             
-            # HORIZONTAL_MARGIN을 사용하지 않고 layout_calculator에서 계산된 값을 사용
-            x = rect_coords[0] + TIME_GRID_LEFT
+            x = rect_coords[0] + TIME_GRID_LEFT + (HORIZONTAL_MARGIN / 2)
             y = rect_coords[1]
-            width = rect_coords[2]
+            width = rect_coords[2] - HORIZONTAL_MARGIN
             height = rect_coords[3]
             
-            # 겹치는 이벤트 사이에 최소한의 구분을 위해 1px 빼주기
-            rect = QRect(int(x), int(y), int(width - 1), int(height))
+            rect = QRect(int(x), int(y), int(width), int(height))
             self.event_rects.append((rect, event_data))
             
             start_dt = datetime.datetime.fromisoformat(event_data['start']['dateTime'])
@@ -292,7 +307,6 @@ class WeekViewWidget(BaseViewWidget):
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
         
-        # ClickableLabel 사용
         self.week_range_label = ClickableLabel()
         self.week_range_label.setObjectName("week_range_label")
         self.week_range_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -344,16 +358,30 @@ class WeekViewWidget(BaseViewWidget):
         self.data_manager.notify_date_changed(self.current_date, direction="forward")
         self.refresh()
 
+    def _get_start_of_week(self):
+        hide_weekends = self.main_widget.settings.get("hide_weekends", False)
+        start_day_setting = self.main_widget.settings.get("start_day_of_week", 6) # 6 for Sunday
+        weekday = self.current_date.weekday() # 0 for Monday
+
+        # 주말 숨기기 옵션이 켜져 있으면, 항상 월요일을 한 주의 시작으로 간주합니다.
+        if hide_weekends:
+            return self.current_date - datetime.timedelta(days=weekday)
+
+        if start_day_setting == 6: # Sunday start
+            return self.current_date - datetime.timedelta(days=(weekday + 1) % 7)
+        else: # Monday start
+            return self.current_date - datetime.timedelta(days=weekday)
+
     def _calculate_column_positions(self, total_width):
-        """정수 기반으로 7개 요일 칸의 x좌표를 계산하여 누적 오차를 방지합니다."""
+        num_days = 5 if self.main_widget.settings.get("hide_weekends", False) else 7
         positions = [TIME_GRID_LEFT]
         grid_width = total_width - TIME_GRID_LEFT
         
-        base_col_width = grid_width // 7
-        remainder = grid_width % 7
+        base_col_width = grid_width // num_days
+        remainder = grid_width % num_days
         
         current_x = TIME_GRID_LEFT
-        for i in range(7):
+        for i in range(num_days):
             col_width = base_col_width + (1 if i < remainder else 0)
             current_x += col_width
             positions.append(current_x)
@@ -362,24 +390,29 @@ class WeekViewWidget(BaseViewWidget):
 
     def _get_datetime_from_pos(self, pos):
         column_xs = self._calculate_column_positions(self.time_grid_canvas.width())
-        if not (column_xs[0] <= pos.x() < column_xs[7]): return None
+        if not (column_xs[0] <= pos.x() < column_xs[-1]): return None
         
-        day_index = 0
-        for i in range(7):
+        hide_weekends = self.main_widget.settings.get("hide_weekends", False)
+        
+        col_index = 0
+        for i in range(len(column_xs) - 1):
             if column_xs[i] <= pos.x() < column_xs[i+1]:
-                day_index = i
+                col_index = i
                 break
         
+        start_of_week = self._get_start_of_week()
+        if hide_weekends:
+            # col_index (0-4)를 실제 요일(월-금)로 매핑
+            target_date = start_of_week + datetime.timedelta(days=col_index)
+        else:
+            target_date = start_of_week + datetime.timedelta(days=col_index)
+
         hour = int(pos.y() / self.hour_height)
         minute = int((pos.y() % self.hour_height) / self.hour_height * 60)
         minute = round(minute / 15) * 15
         if minute == 60: minute, hour = 0, hour + 1
         
         if not (0 <= hour < 25): return None
-
-        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
-        target_date = start_of_week + datetime.timedelta(days=day_index)
-        
         if hour == 24: target_date += datetime.timedelta(days=1); hour = 0
             
         return datetime.datetime(target_date.year, target_date.month, target_date.day, hour, minute)
@@ -426,26 +459,44 @@ class WeekViewWidget(BaseViewWidget):
 
     def update_timeline(self):
         now = datetime.datetime.now()
-        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
+        today = now.date()
+        start_of_week = self._get_start_of_week()
         
-        if start_of_week <= now.date() < start_of_week + datetime.timedelta(days=7):
+        hide_weekends = self.main_widget.settings.get("hide_weekends", False)
+        if hide_weekends and today.weekday() >= 5:
+            self.timeline.hide()
+            return
+
+        if start_of_week <= today < start_of_week + datetime.timedelta(days=7):
             self.timeline.show()
-            y = now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
-            self.timeline.setGeometry(TIME_GRID_LEFT, int(y), self.time_grid_canvas.width() - TIME_GRID_LEFT, 2)
+            
+            column_xs = self._calculate_column_positions(self.time_grid_canvas.width())
+            
+            if hide_weekends:
+                day_offset = today.weekday()
+            else:
+                day_offset = (today - start_of_week).days
+
+            if day_offset < len(column_xs) -1:
+                x = column_xs[day_offset]
+                width = column_xs[day_offset + 1] - x
+                y = now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
+                self.timeline.setGeometry(int(x), int(y), int(width), 2)
+            else:
+                self.timeline.hide()
         else:
             self.timeline.hide()
 
     def refresh(self):
-        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
-        end_of_week = start_of_week + datetime.timedelta(days=6)
+        start_of_week = self._get_start_of_week()
+        hide_weekends = self.main_widget.settings.get("hide_weekends", False)
+        num_days = 5 if hide_weekends else 7
+        end_of_week = start_of_week + datetime.timedelta(days=num_days - 1)
         
-        # 주차 계산 (해당 월의 몇 번째 주인지)
         first_day_of_month = start_of_week.replace(day=1)
-        # 해당 월의 첫 번째 일요일 찾기
-        first_sunday = first_day_of_month - datetime.timedelta(days=(first_day_of_month.weekday() + 1) % 7)
-        week_number = (start_of_week - first_sunday).days // 7 + 1
+        first_day_of_cal = self._get_start_of_week()
+        week_number = (start_of_week - first_day_of_cal).days // 7 + 1
 
-        # HTML을 사용하여 레이블 텍스트 설정
         main_text = f"{start_of_week.month}월 {week_number}주"
         sub_text = f"({start_of_week.strftime('%Y.%m.%d')} - {end_of_week.strftime('%Y.%m.%d')})"
         
@@ -469,19 +520,24 @@ class WeekViewWidget(BaseViewWidget):
             self.scroll_area.verticalScrollBar().setValue(int(target_y - scroll_offset))
 
     def redraw_events_with_current_data(self):
-        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
+        start_of_week = self._get_start_of_week()
+        hide_weekends = self.main_widget.settings.get("hide_weekends", False)
+        num_days = 5 if hide_weekends else 7
         
-        week_events = self.data_manager.get_events_for_period(start_of_week, start_of_week + datetime.timedelta(days=6))
+        week_events = self.data_manager.get_events_for_period(start_of_week, start_of_week + datetime.timedelta(days=num_days-1))
         selected_ids = self.main_widget.settings.get("selected_calendars", [])
         filtered_events = [event for event in week_events if event.get('calendarId') in selected_ids]
 
         time_events, all_day_events = [], []
         for e in filtered_events:
+            start_dt_str = e['start'].get('dateTime', e['start'].get('date'))
+            start_dt = datetime.datetime.fromisoformat(start_dt_str.replace('Z', ''))
+            if hide_weekends and start_dt.weekday() >= 5:
+                continue
+
             is_all_day_native = 'date' in e['start']
-            start_str = e['start'].get('dateTime', e['start'].get('date'))
-            end_str = e['end'].get('dateTime', e['end'].get('date'))
-            start_dt = datetime.datetime.fromisoformat(start_str.replace('Z', ''))
-            end_dt = datetime.datetime.fromisoformat(end_str.replace('Z', ''))
+            end_dt_str = e['end'].get('dateTime', e['end'].get('date'))
+            end_dt = datetime.datetime.fromisoformat(end_dt_str.replace('Z', ''))
             duration_seconds = (end_dt - start_dt).total_seconds()
             is_multi_day = duration_seconds >= 86400
             is_exactly_24h_midnight = duration_seconds == 86400 and start_dt.time() == datetime.time(0, 0) and end_dt.time() == datetime.time(0, 0)
@@ -495,12 +551,10 @@ class WeekViewWidget(BaseViewWidget):
         
         all_day_positions, num_lanes = calculator.calculate_all_day_events()
         
-        # 정확한 칸 위치 계산
         column_xs = self._calculate_column_positions(self.time_grid_canvas.width())
         
-        # layout_calculator가 이 정보를 알도록 수정이 필요할 수 있음
-        # 지금은 TimeGridCanvas에서만 이 정보를 사용
-        time_event_positions = calculator.calculate_time_events((self.time_grid_canvas.width() - TIME_GRID_LEFT) / 7)
+        day_width = (self.time_grid_canvas.width() - TIME_GRID_LEFT) / num_days
+        time_event_positions = calculator.calculate_time_events(day_width)
         
         self.header_canvas.set_data(column_xs)
         self.all_day_canvas.set_data(all_day_positions, num_lanes, column_xs)
@@ -511,37 +565,14 @@ class WeekViewWidget(BaseViewWidget):
         self.redraw_events_with_current_data()
         self.update_timeline()
         
-    def apply_settings(self):
-        super().apply_settings()
-        self.refresh()
-        
-        current_theme = self.main_widget.settings.get("theme", "dark")
-        if current_theme == "dark":
-            QToolTip.setStyleSheet("QToolTip { background-color: #2E2E2E; color: #E0E0E0; border: 1px solid #555555; }")
-        else:
-            QToolTip.setStyleSheet("QToolTip { background-color: #FFFFE0; color: #000000; border: 1px solid #AAAAAA; }")
-        
-        nav_style = self.main_widget.theme_manager.get_nav_button_style()
-        for btn in self.findChildren(QPushButton):
-            if btn.objectName() == "nav_button":
-                btn.setStyleSheet(nav_style)
-        
-        scroll_area_style = self.main_widget.theme_manager.get_scroll_area_style()
-        self.scroll_area.setStyleSheet(scroll_area_style)
-        
-        self.timeline.setStyleSheet(f"background-color: {self.main_widget.theme_manager.get_timeline_color()};")
-        self.header_canvas.update()
-        self.all_day_canvas.update()
-        self.time_grid_canvas.update()
-
     def on_data_updated(self, year, month):
-        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
-        end_of_week = start_of_week + datetime.timedelta(days=6)
+        start_of_week, end_of_week = self.get_current_view_period()
         if start_of_week.year == year and start_of_week.month == month or \
            end_of_week.year == year and end_of_week.month == month:
             self.redraw_events_with_current_data()
             
     def get_current_view_period(self):
-        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
-        end_of_week = start_of_week + datetime.timedelta(days=6)
+        start_of_week = self._get_start_of_week()
+        num_days = 5 if self.main_widget.settings.get("hide_weekends", False) else 7
+        end_of_week = start_of_week + datetime.timedelta(days=num_days - 1)
         return start_of_week, end_of_week

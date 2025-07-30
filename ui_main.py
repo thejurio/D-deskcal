@@ -202,6 +202,9 @@ class MainWidget(QWidget):
                 self.data_manager.update_sync_timer()
                 self.set_window_opacity(self.settings.get("window_opacity", 0.95))
                 self.apply_theme(self.settings.get("theme", "dark"))
+                # 변경된 설정을 적용하기 위해 모든 뷰를 새로고침합니다.
+                self.month_view.refresh()
+                self.week_view.refresh()
             else:
                 # 취소 시, 원래 테마와 투명도로 복구
                 self.set_window_opacity(original_opacity)

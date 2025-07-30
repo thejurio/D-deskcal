@@ -1,11 +1,11 @@
 {
     "geometry": [
-        174,
-        37,
-        1111,
-        677
+        312,
+        44,
+        1127,
+        680
     ],
-    "use_local_calendar": true,
+    "use_local_calendar": false,
     "selected_calendars": [
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "family01556510902891015712@group.calendar.google.com",
@@ -20,8 +20,15 @@
         "thejurio@gmail.com": "#ffd6a5",
         "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
     },
-    "sync_interval_minutes": 5,
+    "sync_interval_minutes": 1,
     "window_opacity": 1.0,
     "theme": "light",
-    "last_selected_calendar_id": "thejurio@gmail.com"
+    "last_selected_calendar_id": "thejurio@gmail.com",
+    "always_on_top": false,
+    "window_position": null,
+    "window_size": null,
+    "notifications_enabled": true,
+    "default_notification_time": 10,
+    "start_day_of_week": 6,
+    "hide_weekends": false
 }
