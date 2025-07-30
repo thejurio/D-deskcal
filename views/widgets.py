@@ -79,7 +79,15 @@ def draw_event(painter, rect, event_data, time_text, summary_text, is_completed=
     text_color = QColor(get_text_color_for_background(event_data.get('color', '#555555')))
     painter.setPen(text_color)
     text_rect = rect.adjusted(4, -2, -4, -1)
+
+    # 가로 폭이 3글자 미만이면 텍스트를 그리지 않음
+    font_metrics = QFontMetrics(painter.font())
+    min_text_width = font_metrics.horizontalAdvance('가나다')
     
+    if text_rect.width() < min_text_width:
+        painter.restore()
+        return
+
     # 3. 그릴 텍스트 조합 (HTML 사용)
     full_html = ""
     if time_text:
@@ -91,7 +99,7 @@ def draw_event(painter, rect, event_data, time_text, summary_text, is_completed=
     summary_style = "text-decoration:line-through;" if is_completed else ""
     full_html += f"<p style='margin:0; {summary_style}'>{escaped_summary}</p>"
     
-    # 4. QTextDocument를 사용하여 Rich Text 그리기
+    # 4. QTextDocument를 사용하여 Rich Text 그리기 (수직 오버플로우 체크 제거)
     doc = QTextDocument()
     doc.setDefaultStyleSheet(f"p {{ color: {text_color.name()}; line-height: 100%; }}")
     doc.setTextWidth(text_rect.width())

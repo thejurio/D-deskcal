@@ -25,7 +25,7 @@ class ClickableLabel(QLabel):
 TIME_GRID_LEFT = 50
 HEADER_HEIGHT = 30
 ALL_DAY_LANE_HEIGHT = 25
-HORIZONTAL_MARGIN = 8
+# HORIZONTAL_MARGIN = 8 # 더 이상 사용되지 않음
 
 class HeaderCanvas(QWidget):
     """요일 헤더를 그리는 위젯"""
@@ -125,12 +125,14 @@ class AllDayCanvas(QWidget):
             start_x = self.column_x_coords[start_col]
             end_x = self.column_x_coords[start_col + span]
             
-            x = start_x + (HORIZONTAL_MARGIN / 2)
+            # HORIZONTAL_MARGIN 제거
+            x = start_x
             y = lane * ALL_DAY_LANE_HEIGHT + 2
-            width = (end_x - start_x) - HORIZONTAL_MARGIN
+            width = end_x - start_x
             height = ALL_DAY_LANE_HEIGHT - 4
             
-            rect = QRect(int(x), int(y), int(width), int(height))
+            # 경계를 위해 1px 간격 추가
+            rect = QRect(int(x), int(y), int(width - 1), int(height))
             self.event_rects.append((rect, event_data))
             
             summary = event_data.get('summary', '')
@@ -233,15 +235,14 @@ class TimeGridCanvas(QWidget):
             event_data = pos_info['event']
             rect_coords = pos_info['rect']
             
-            # This calculation might need adjustment if layout_calculator changes
-            day_column_width = (self.width() - TIME_GRID_LEFT) / 7
-            
-            x = rect_coords[0] + TIME_GRID_LEFT + (HORIZONTAL_MARGIN / 2)
+            # HORIZONTAL_MARGIN을 사용하지 않고 layout_calculator에서 계산된 값을 사용
+            x = rect_coords[0] + TIME_GRID_LEFT
             y = rect_coords[1]
-            width = rect_coords[2] - HORIZONTAL_MARGIN
+            width = rect_coords[2]
             height = rect_coords[3]
             
-            rect = QRect(int(x), int(y), int(width), int(height))
+            # 겹치는 이벤트 사이에 최소한의 구분을 위해 1px 빼주기
+            rect = QRect(int(x), int(y), int(width - 1), int(height))
             self.event_rects.append((rect, event_data))
             
             start_dt = datetime.datetime.fromisoformat(event_data['start']['dateTime'])
@@ -532,3 +533,15 @@ class WeekViewWidget(BaseViewWidget):
         self.header_canvas.update()
         self.all_day_canvas.update()
         self.time_grid_canvas.update()
+
+    def on_data_updated(self, year, month):
+        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
+        end_of_week = start_of_week + datetime.timedelta(days=6)
+        if start_of_week.year == year and start_of_week.month == month or \
+           end_of_week.year == year and end_of_week.month == month:
+            self.redraw_events_with_current_data()
+            
+    def get_current_view_period(self):
+        start_of_week = self.current_date - datetime.timedelta(days=(self.current_date.weekday() + 1) % 7)
+        end_of_week = start_of_week + datetime.timedelta(days=6)
+        return start_of_week, end_of_week

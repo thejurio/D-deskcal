@@ -93,9 +93,11 @@ class WeekLayoutCalculator:
 
 
     def calculate_time_events(self, day_column_width):
-        """시간대별 이벤트의 위치와 크기를 계산합니다. (겹침 처리 포함)"""
+        """시간대별 이벤트의 위치와 크기를 계산합니다. (겹침 처리 및 간격 포함)"""
         positions = []
         events_by_day = defaultdict(list)
+        HORIZONTAL_EVENT_GAP = 0  # 이벤트 간 수평 간격
+
         for event in self.time_events:
             start_dt = datetime.datetime.fromisoformat(self._get_start_str(event)).replace(tzinfo=None)
             events_by_day[start_dt.date()].append(event)
@@ -106,30 +108,66 @@ class WeekLayoutCalculator:
 
             col_index = (day_date - self.start_of_week).days
             
-            event_columns = self._group_overlapping_events(day_events)
-            num_columns = len(event_columns)
-            if num_columns == 0: continue
+            # 겹치는 이벤트를 그룹화
+            event_groups = self._group_overlapping_events_for_layout(day_events)
 
-            sub_col_width = day_column_width / num_columns
+            for group in event_groups:
+                # 그룹 내에서 다시 겹치는 단위로 세부 그룹(열)을 만듦
+                columns = self._find_columns_in_group(group)
+                num_columns = len(columns)
+                if num_columns == 0: continue
 
-            for i, column in enumerate(event_columns):
-                for event in column:
-                    start_dt = datetime.datetime.fromisoformat(self._get_start_str(event)).replace(tzinfo=None)
-                    end_dt = datetime.datetime.fromisoformat(self._get_end_str(event)).replace(tzinfo=None)
-                    
-                    y = start_dt.hour * self.hour_height + (start_dt.minute / 60) * self.hour_height
-                    height = max(20, ((end_dt - start_dt).total_seconds() / 3600) * self.hour_height)
-                    
-                    x = col_index * day_column_width + i * sub_col_width
+                # 간격을 고려한 서브 컬럼 너비 계산
+                total_gap = (num_columns - 1) * HORIZONTAL_EVENT_GAP
+                sub_col_width = (day_column_width - total_gap) / num_columns
 
-                    positions.append({'event': event, 'rect': (int(x + 1), int(y), int(sub_col_width - 2), int(height))})
+                for i, column in enumerate(columns):
+                    for event in column:
+                        start_dt = datetime.datetime.fromisoformat(self._get_start_str(event)).replace(tzinfo=None)
+                        end_dt = datetime.datetime.fromisoformat(self._get_end_str(event)).replace(tzinfo=None)
+                        
+                        y = start_dt.hour * self.hour_height + (start_dt.minute / 60) * self.hour_height
+                        duration_seconds = (end_dt - start_dt).total_seconds()
+                        height = max(20, (duration_seconds / 3600) * self.hour_height)
+                        
+                        # 간격을 포함하여 x 위치 계산
+                        x = col_index * day_column_width + i * (sub_col_width + HORIZONTAL_EVENT_GAP)
+
+                        positions.append({'event': event, 'rect': (int(x), int(y), int(sub_col_width), int(height))})
         
         return positions
 
-    def _group_overlapping_events(self, day_events):
-        """겹치는 이벤트를 여러 개의 세로 열로 나누어 반환합니다."""
-        # 이벤트를 시작 시간 기준으로 정렬
+    def _group_overlapping_events_for_layout(self, day_events):
+        """레이아웃 계산을 위해 직접적으로 겹치는 이벤트들을 그룹으로 묶습니다."""
+        if not day_events:
+            return []
+        
         sorted_events = sorted(day_events, key=self._get_start_str)
+        
+        groups = []
+        current_group = [sorted_events[0]]
+        group_end_time = datetime.datetime.fromisoformat(self._get_end_str(sorted_events[0]))
+
+        for event in sorted_events[1:]:
+            event_start_time = datetime.datetime.fromisoformat(self._get_start_str(event))
+            if event_start_time < group_end_time:
+                current_group.append(event)
+                group_end_time = max(group_end_time, datetime.datetime.fromisoformat(self._get_end_str(event)))
+            else:
+                groups.append(current_group)
+                current_group = [event]
+                group_end_time = datetime.datetime.fromisoformat(self._get_end_str(event))
+        
+        groups.append(current_group)
+        return groups
+
+    def _find_columns_in_group(self, group_events):
+        """하나의 이벤트 그룹 내에서 겹치지 않는 이벤트들의 열(column)을 찾습니다."""
+        if not group_events:
+            return []
+
+        # 이벤트를 시작 시간 기준으로 정렬
+        sorted_events = sorted(group_events, key=self._get_start_str)
 
         columns = []  # 각 열은 겹치지 않는 이벤트들의 리스트
         for event in sorted_events:
