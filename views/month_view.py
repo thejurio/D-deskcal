@@ -134,9 +134,8 @@ class MonthViewWidget(BaseViewWidget):
         dialog = NewDateSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
         if dialog.exec():
             year, month = dialog.get_selected_date()
-            self.current_date = self.current_date.replace(year=year, month=month, day=1)
-            self.data_manager.notify_date_changed(self.current_date)
-            self.refresh()
+            new_date = self.current_date.replace(year=year, month=month, day=1)
+            self.date_selected.emit(new_date)
 
     def show_more_events_popup(self, date_obj, events):
         dialog = MoreEventsDialog(date_obj, events, self, settings=self.main_widget.settings, pos=QCursor.pos(), data_manager=self.data_manager)
@@ -144,7 +143,10 @@ class MonthViewWidget(BaseViewWidget):
         dialog.delete_requested.connect(self.confirm_delete_event)
         dialog.exec()
 
-    def refresh(self): self.draw_grid(self.current_date.year, self.current_date.month)
+    def refresh(self):
+        if self.is_resizing:
+            return
+        self.draw_grid(self.current_date.year, self.current_date.month)
 
     def draw_grid(self, year, month):
         # 1. 설정값 가져오기
@@ -302,14 +304,10 @@ class MonthViewWidget(BaseViewWidget):
     # resizeEvent는 BaseViewWidget의 기본 동작으로 충분하므로, 재정의 필요 없음
     # contextMenuEvent도 BaseViewWidget의 기본 동작으로 충분
     def go_to_previous_month(self):
-        self.current_date = self.current_date.replace(day=1) - datetime.timedelta(days=1)
-        self.data_manager.notify_date_changed(self.current_date, direction="backward")
-        self.refresh()
+        self.navigation_requested.emit("backward")
 
     def go_to_next_month(self):
-        self.current_date = (self.current_date.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        self.data_manager.notify_date_changed(self.current_date, direction="forward")
-        self.refresh()
+        self.navigation_requested.emit("forward")
 
     def contextMenuEvent(self, event):
         pos = event.pos()

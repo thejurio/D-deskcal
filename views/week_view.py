@@ -344,19 +344,14 @@ class WeekViewWidget(BaseViewWidget):
     def open_week_selection_dialog(self):
         dialog = WeekSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
         if dialog.exec():
-            self.current_date = dialog.get_selected_date()
-            self.data_manager.notify_date_changed(self.current_date)
-            self.refresh()
+            new_date = dialog.get_selected_date()
+            self.date_selected.emit(new_date)
 
-    def go_to_previous_week(self): 
-        self.current_date -= datetime.timedelta(days=7)
-        self.data_manager.notify_date_changed(self.current_date, direction="backward")
-        self.refresh()
+    def go_to_previous_week(self):
+        self.navigation_requested.emit("backward")
 
-    def go_to_next_week(self): 
-        self.current_date += datetime.timedelta(days=7)
-        self.data_manager.notify_date_changed(self.current_date, direction="forward")
-        self.refresh()
+    def go_to_next_week(self):
+        self.navigation_requested.emit("forward")
 
     def _get_start_of_week(self):
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)

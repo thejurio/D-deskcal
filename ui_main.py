@@ -43,6 +43,7 @@ class MainWidget(QWidget):
         super().__init__()
         self.settings = settings
         self.data_manager = DataManager(settings)
+        self.current_date = datetime.date.today() # 중앙 상태
         self.is_resizing = False # 크기 조절 상태 플래그
         self.is_moving = False # 이동 상태 플래그
         self.border_width = 5 # 리사이즈 감지 영역
@@ -122,10 +123,18 @@ class MainWidget(QWidget):
 
         self.month_view = MonthViewWidget(self)
         self.week_view = WeekViewWidget(self)
+        
+        # --- ▼▼▼ [수정] 시그널-슬롯 연결 ▼▼▼ ---
         self.month_view.add_event_requested.connect(self.open_event_editor)
         self.month_view.edit_event_requested.connect(self.open_event_editor)
+        self.month_view.navigation_requested.connect(self.handle_month_navigation)
+        self.month_view.date_selected.connect(self.set_current_date)
+
         self.week_view.add_event_requested.connect(self.open_event_editor)
         self.week_view.edit_event_requested.connect(self.open_event_editor)
+        self.week_view.navigation_requested.connect(self.handle_week_navigation)
+        self.week_view.date_selected.connect(self.set_current_date)
+        # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
 
         self.stacked_widget.addWidget(self.month_view)
         self.stacked_widget.addWidget(self.week_view)
@@ -135,6 +144,36 @@ class MainWidget(QWidget):
         
         month_button.setChecked(True)
         self.oldPos = None
+        
+        self.set_current_date(self.current_date, is_initial=True) # 초기 날짜 설정
+
+    # --- ▼▼▼ [추가] 중앙 날짜 설정 및 네비게이션 핸들러 ▼▼▼ ---
+    def set_current_date(self, new_date, is_initial=False):
+        """모든 뷰의 날짜를 중앙에서 설정하고 UI를 새로고침합니다."""
+        direction = "none"
+        if not is_initial:
+            if new_date > self.current_date: direction = "forward"
+            elif new_date < self.current_date: direction = "backward"
+
+        self.current_date = new_date
+        self.month_view.current_date = new_date
+        self.week_view.current_date = new_date
+        
+        self.data_manager.notify_date_changed(self.current_date, direction=direction)
+        self.refresh_current_view()
+
+    def handle_month_navigation(self, direction):
+        if direction == "forward":
+            new_date = (self.current_date.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        else: # "backward"
+            new_date = self.current_date.replace(day=1) - datetime.timedelta(days=1)
+        self.set_current_date(new_date)
+
+    def handle_week_navigation(self, direction):
+        days_to_move = 7 if direction == "forward" else -7
+        new_date = self.current_date + datetime.timedelta(days=days_to_move)
+        self.set_current_date(new_date)
+    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def start_resize(self):
         """크기 조절 시작 시 호출됩니다."""
@@ -154,10 +193,7 @@ class MainWidget(QWidget):
         self.setWindowOpacity(opacity)
 
     def go_to_today(self):
-        today = datetime.date.today()
-        self.month_view.current_date = today
-        self.week_view.current_date = today
-        self.refresh_current_view()
+        self.set_current_date(datetime.date.today())
 
     def start(self):
         from PyQt6.QtCore import QTimer
@@ -177,8 +213,6 @@ class MainWidget(QWidget):
             if other_buttons:
                 for button in other_buttons:
                     button.setChecked(False)
-        if self.stacked_widget.currentWidget() == self.week_view:
-            self.week_view.current_date = self.month_view.current_date
         self.refresh_current_view()
 
     def refresh_current_view(self):
@@ -235,11 +269,7 @@ class MainWidget(QWidget):
         target_date = target_dt.date()
 
         # 뷰 이동
-        self.month_view.current_date = target_date
-        self.week_view.current_date = target_date
-        
-        # 현재 활성화된 뷰를 새로고침
-        self.refresh_current_view()
+        self.set_current_date(target_date)
         
         # 잠시 후 편집기 열기 (뷰 전환 및 렌더링 시간 확보)
         QTimer.singleShot(50, lambda: self.open_event_editor(event_data))

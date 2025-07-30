@@ -9,6 +9,8 @@ from custom_dialogs import CustomMessageBox
 class BaseViewWidget(QWidget):
     add_event_requested = pyqtSignal(object) # date 또는 datetime을 모두 받을 수 있도록 object 사용
     edit_event_requested = pyqtSignal(dict)
+    navigation_requested = pyqtSignal(str)  # "forward", "backward"
+    date_selected = pyqtSignal(datetime.date)
 
     def __init__(self, main_widget):
         super().__init__()
