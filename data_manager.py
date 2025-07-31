@@ -644,13 +644,16 @@ class DataManager(QObject):
             except Exception as e:
                 print(f"'{type(provider).__name__}' 이벤트 검색 오류: {e}")
         
-        # ID를 기준으로 중복 제거 후, 시작 시간 순으로 정렬
+        # ID를 기준으로 중복 제거
         unique_results = list({event['id']: event for event in all_results}.values())
         
+        # 중앙에서 색상 적용
+        self._apply_colors_to_events(unique_results)
+
+        # 시작 시간 순으로 정렬
         def get_start_time(event):
             start = event.get('start', {})
             return start.get('dateTime') or start.get('date')
-
         unique_results.sort(key=get_start_time)
         
         return unique_results

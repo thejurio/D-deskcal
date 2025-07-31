@@ -161,10 +161,6 @@ class AllDayCanvas(QWidget):
         if clicked_event:
             self.parent_view.edit_event_requested.emit(clicked_event)
 
-    def contextMenuEvent(self, event):
-        clicked_event = self.get_event_at(event.pos())
-        self.parent_view.show_context_menu(event.globalPos(), clicked_event)
-
 
 class TimeGridCanvas(QWidget):
     """시간 그리드와 시간별 이벤트를 그리는 위젯"""
@@ -278,10 +274,6 @@ class TimeGridCanvas(QWidget):
             target_datetime = self.parent_view._get_datetime_from_pos(event.pos())
             if target_datetime:
                 self.parent_view.add_event_requested.emit(target_datetime)
-    
-    def contextMenuEvent(self, event):
-        clicked_event = self.get_event_at(event.pos())
-        self.parent_view.show_context_menu(event.globalPos(), clicked_event)
 
 
 class WeekViewWidget(BaseViewWidget):
@@ -336,6 +328,10 @@ class WeekViewWidget(BaseViewWidget):
         
         self.time_grid_canvas = TimeGridCanvas(self)
         self.scroll_area.setWidget(self.time_grid_canvas)
+
+        # AllDayCanvas와 TimeGridCanvas의 contextMenuEvent를 WeekViewWidget의 것으로 연결
+        self.all_day_canvas.contextMenuEvent = self.contextMenuEvent
+        self.time_grid_canvas.contextMenuEvent = self.contextMenuEvent
 
         self.timeline = QWidget(self.time_grid_canvas)
         self.timeline.setObjectName("timeline")

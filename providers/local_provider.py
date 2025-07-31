@@ -239,12 +239,9 @@ class LocalCalendarProvider(BaseCalendarProvider):
                     found_events.append(event)
 
             # 공통 속성 추가
-            calendar_colors = self.settings.get("calendar_colors", {})
-            calendar_emojis = self.settings.get("calendar_emojis", {})
             for event in found_events:
+                event['provider'] = LOCAL_CALENDAR_PROVIDER_NAME
                 event['calendarId'] = LOCAL_CALENDAR_ID
-                event['color'] = calendar_colors.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_COLOR)
-                event['emoji'] = calendar_emojis.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_EMOJI)
             
             return found_events
         except sqlite3.Error as e:

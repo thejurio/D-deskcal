@@ -341,41 +341,10 @@ class MonthViewWidget(BaseViewWidget):
         pos = event.pos()
         target_event = self.get_event_at(pos)
         
-        day_cell = None
+        date_info = None
         if not target_event:
             target_widget = self.childAt(pos)
             if isinstance(target_widget, DayCellWidget):
-                day_cell = target_widget
+                date_info = target_widget.date_obj
 
-        menu = QMenu(self)
-        main_opacity = self.main_widget.settings.get("window_opacity", 0.95)
-        menu_opacity = main_opacity + (1 - main_opacity) * 0.85
-        menu.setWindowOpacity(menu_opacity)
-
-        if target_event:
-            event_id = target_event.get('id')
-            is_completed = self.data_manager.is_event_completed(event_id)
-
-            edit_action = QAction("수정", self)
-            edit_action.triggered.connect(lambda: self.edit_event_requested.emit(target_event))
-            menu.addAction(edit_action)
-
-            if is_completed:
-                reopen_action = QAction("진행", self)
-                reopen_action.triggered.connect(lambda: self.data_manager.unmark_event_as_completed(event_id))
-                menu.addAction(reopen_action)
-            else:
-                complete_action = QAction("완료", self)
-                complete_action.triggered.connect(lambda: self.data_manager.mark_event_as_completed(event_id))
-                menu.addAction(complete_action)
-
-            delete_action = QAction("삭제", self)
-            delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
-            menu.addAction(delete_action)
-        elif day_cell:
-            add_action = QAction("일정 추가", self)
-            add_action.triggered.connect(lambda: self.add_event_requested.emit(day_cell.date_obj))
-            menu.addAction(add_action)
-            
-        self.main_widget.add_common_context_menu_actions(menu)
-        menu.exec(event.globalPos())
+        self.show_context_menu(event.globalPos(), target_event, date_info)

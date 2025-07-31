@@ -23,13 +23,9 @@ class SettingsWindow(BaseDialog):
         super().__init__(parent=parent, settings=settings, pos=pos)
         self.data_manager = data_manager
         
-        # 원본 설정을 보존하고, 변경사항은 복사본에 임시 저장합니다.
         self.original_settings = settings
         self.temp_settings = copy.deepcopy(settings)
-
-        # ▼▼▼ [추가] 변경된 필드를 저장할 리스트를 초기화합니다. ▼▼▼
-        self.changed_fields_list = []
-        # ▲▲▲ 여기까지 추가 ▲▲▲
+        self.changed_fields = set()
 
         self.setWindowTitle("설정")
         self.setModal(True)
@@ -89,6 +85,9 @@ class SettingsWindow(BaseDialog):
         self.data_manager.calendar_list_changed.connect(self.rebuild_ui)
         self.rebuild_ui()
         self.set_stylesheet()
+
+    def _mark_as_changed(self, field_name):
+        self.changed_fields.add(field_name)
 
     def set_stylesheet(self):
         is_dark = self.temp_settings.get("theme", "dark") == "dark"
@@ -168,9 +167,11 @@ class SettingsWindow(BaseDialog):
         form_layout_display = QFormLayout(); self.start_day_combo = QComboBox()
         self.start_day_combo.addItem("일요일", 6); self.start_day_combo.addItem("월요일", 0)
         self.start_day_combo.setCurrentIndex(self.start_day_combo.findData(self.temp_settings.get("start_day_of_week", 6)))
+        self.start_day_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("start_day_of_week"))
         form_layout_display.addRow("한 주의 시작:", self.start_day_combo)
         self.hide_weekends_checkbox = QCheckBox("주말(토, 일) 숨기기")
         self.hide_weekends_checkbox.setChecked(self.temp_settings.get("hide_weekends", False))
+        self.hide_weekends_checkbox.stateChanged.connect(lambda: self._mark_as_changed("hide_weekends"))
         form_layout_display.addRow(self.hide_weekends_checkbox)
         layout.addLayout(form_layout_display)
         self.stack.addWidget(page)
@@ -182,12 +183,14 @@ class SettingsWindow(BaseDialog):
         layout.addWidget(self._create_section_label("데이터 소스"))
         self.local_calendar_checkbox = QCheckBox("로컬 캘린더 사용 (calendar.db)")
         self.local_calendar_checkbox.setChecked(self.temp_settings.get("use_local_calendar", True))
+        self.local_calendar_checkbox.stateChanged.connect(lambda: self._mark_as_changed("use_local_calendar"))
         layout.addWidget(self.local_calendar_checkbox)
         layout.addWidget(self._create_section_label("동기화"))
         form_layout_sync = QFormLayout(); self.sync_interval_combo = QComboBox()
         self.sync_options = { 0: "사용 안 함", 1: "1분", 5: "5분", 15: "15분", 30: "30분", 60: "1시간" }
         for minutes, text in self.sync_options.items(): self.sync_interval_combo.addItem(text, minutes)
         self.sync_interval_combo.setCurrentIndex(self.sync_interval_combo.findData(self.temp_settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)))
+        self.sync_interval_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("sync_interval_minutes"))
         form_layout_sync.addRow("자동 동기화 주기:", self.sync_interval_combo)
         layout.addLayout(form_layout_sync)
         self.stack.addWidget(page)
@@ -225,7 +228,9 @@ class SettingsWindow(BaseDialog):
                 selected_calendars = [primary_cal['id']]
             for calendar in calendar_list:
                 cal_id = calendar["id"]; row_layout = QHBoxLayout(); checkbox = QCheckBox()
-                checkbox.setChecked(cal_id in selected_calendars); self.checkboxes[cal_id] = checkbox
+                checkbox.setChecked(cal_id in selected_calendars)
+                checkbox.stateChanged.connect(lambda state, c_id=cal_id: self._mark_as_changed("selected_calendars"))
+                self.checkboxes[cal_id] = checkbox
                 color_combo = self.create_color_combo(cal_id, calendar['backgroundColor']); self.color_combos[cal_id] = color_combo
                 color_combo.activated.connect(lambda idx, c_id=cal_id: self.handle_color_change(c_id, idx))
                 name_label = QLabel(calendar["summary"]); name_label.setWordWrap(True)
@@ -235,11 +240,13 @@ class SettingsWindow(BaseDialog):
             self.calendar_list_layout.addWidget(QLabel(f"캘린더 목록 로드 실패:\n{e}"))
 
     def on_opacity_changed(self, value):
+        self._mark_as_changed("window_opacity")
         self.temp_settings["window_opacity"] = value / 100.0
         self.opacity_label.setText(f"{value}%")
         self.transparency_changed.emit(self.temp_settings["window_opacity"])
 
     def on_theme_changed(self, text):
+        self._mark_as_changed("theme")
         selected_theme_name = self.theme_combo.currentData()
         self.temp_settings["theme"] = selected_theme_name
         self.theme_changed.emit(selected_theme_name)
@@ -259,6 +266,7 @@ class SettingsWindow(BaseDialog):
         return combo
 
     def handle_color_change(self, cal_id, index):
+        self._mark_as_changed("calendar_colors")
         combo = self.color_combos[cal_id]
         if combo.itemText(index) == CUSTOM_COLOR_TEXT:
             current_color_hex = combo.currentData() or self.temp_settings.get("calendar_colors", {}).get(cal_id, "#FFFFFF")
@@ -271,10 +279,7 @@ class SettingsWindow(BaseDialog):
         self.temp_settings.setdefault("calendar_colors", {})[cal_id] = combo.currentData()
 
     def save_and_close(self):
-        """
-        변경사항을 self.temp_settings에 적용하고,
-        어떤 부분이 변경되었는지 감지하여 결과를 반환합니다.
-        """
+        # 변경된 값들을 temp_settings에 최종적으로 반영
         self.temp_settings["use_local_calendar"] = self.local_calendar_checkbox.isChecked()
         self.temp_settings["selected_calendars"] = [cal_id for cal_id, cb in self.checkboxes.items() if cb.isChecked()]
         self.temp_settings.setdefault("calendar_colors", {}).update({cal_id: combo.currentData() for cal_id, combo in self.color_combos.items() if combo.currentData()})
@@ -285,22 +290,11 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
 
-        # ▼▼▼ [수정] 원본 설정을 업데이트하기 전에 변경된 필드를 계산하여 저장합니다. ▼▼▼
-        self.changed_fields_list = []
-        for key, new_value in self.temp_settings.items():
-            if key not in self.original_settings or self.original_settings[key] != new_value:
-                self.changed_fields_list.append(key)
-        # ▲▲▲ 여기까지 수정 ▲▲▲
-
         # 원본 설정 업데이트
         self.original_settings.clear()
         self.original_settings.update(self.temp_settings)
         
-        # QDialog.Accepted(1)를 반환하며 다이얼로그를 닫습니다.
         self.done(1)
         
     def get_changed_fields(self):
-        """미리 저장해둔 변경된 필드 리스트를 반환합니다."""
-        # ▼▼▼ [수정] 실시간 비교 대신, 저장된 리스트를 반환합니다. ▼▼▼
-        return self.changed_fields_list
-        # ▲▲▲ 여기까지 수정 ▲▲▲
+        return list(self.changed_fields)
