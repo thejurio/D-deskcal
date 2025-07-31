@@ -63,8 +63,8 @@ class MonthViewWidget(BaseViewWidget):
             self.refresh()
 
     def initUI(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
         self.month_button = QPushButton()
@@ -72,10 +72,10 @@ class MonthViewWidget(BaseViewWidget):
         prev_button.clicked.connect(self.go_to_previous_month)
         next_button.clicked.connect(self.go_to_next_month)
         nav_layout.addWidget(prev_button); nav_layout.addStretch(1); nav_layout.addWidget(self.month_button); nav_layout.addStretch(1); nav_layout.addWidget(next_button)
-        main_layout.addLayout(nav_layout)
+        self.main_layout.addLayout(nav_layout)
         self.calendar_grid = QGridLayout()
         self.calendar_grid.setSpacing(0)
-        main_layout.addLayout(self.calendar_grid)
+        self.main_layout.addLayout(self.calendar_grid)
 
     def open_date_selection_dialog(self):
         if not self.main_widget.is_interaction_unlocked(): return
@@ -93,72 +93,91 @@ class MonthViewWidget(BaseViewWidget):
 
     def refresh(self):
         if self.is_resizing: return
+
+        # --- ▼▼▼ [핵심 수정] 기존 그리드 레이아웃을 완전히 제거하고 새로 생성 ▼▼▼ ---
+        if self.calendar_grid is not None:
+            while self.calendar_grid.count():
+                child = self.calendar_grid.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+            self.main_layout.removeItem(self.calendar_grid)
+            self.calendar_grid.deleteLater()
         
-        # 1. 설정값 및 색상 가져오기
+        self.calendar_grid = QGridLayout()
+        self.calendar_grid.setSpacing(0)
+        self.main_layout.addLayout(self.calendar_grid)
+        self.date_to_cell_map.clear()
+        # --- ▲▲▲ 핵심 수정 종료 ▲▲▲ ---
+        
         start_day_of_week = self.main_widget.settings.get("start_day_of_week", 6)
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)
         is_dark = self.main_widget.settings.get("theme", "dark") == "dark"
-        # ▼▼▼ 'today_bg'와 'today_fg' 값을 수정합니다. ▼▼▼
+        
         colors = {
             "weekday": "#D0D0D0" if is_dark else "#222222", 
             "saturday": "#8080FF" if is_dark else "#0000DD", 
             "sunday": "#FF8080" if is_dark else "#DD0000", 
-            "today_bg": "#CCE5FF", # 연한 파란색 배경
-            "today_fg": "#004C99", # 진한 파란색 글자
+            "today_bg": "#CCE5FF",
+            "today_fg": "#004C99",
             "other_month": "#777777" if is_dark else "#AAAAAA"
         }
-        # ▲▲▲ 여기까지 수정 ▲▲▲
         self.month_button.setStyleSheet(f"color: {colors['weekday']}; background-color: transparent; border: none; font-size: 16px; font-weight: bold;")
-
-        # 2. 기존 위젯 정리
-        while self.calendar_grid.count():
-            child = self.calendar_grid.takeAt(0)
-            if child.widget(): child.widget().deleteLater()
-        self.date_to_cell_map.clear()
         
         year, month = self.current_date.year, self.current_date.month
         self.month_button.setText(f"{year}년 {month}월")
 
-        # 3. 요일 헤더 생성
-        days_of_week_labels = ["일", "월", "화", "수", "목", "금", "토"]
-        if start_day_of_week == 0: days_of_week_labels = days_of_week_labels[1:] + days_of_week_labels[:1]
-        weekend_indices = [0, 6] if start_day_of_week == 6 else [5, 6]
-        
-        col_map = {}
-        col_idx = 0
-        for i, day in enumerate(days_of_week_labels):
-            if hide_weekends and i in weekend_indices: continue
-            label = QLabel(day)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            color = colors['sunday'] if i == weekend_indices[0] else (colors['saturday'] if i == weekend_indices[1] else colors['weekday'])
-            label.setStyleSheet(f"color: {color}; font-weight: bold;")
-            self.calendar_grid.addWidget(label, 0, col_idx)
-            col_map[i] = col_idx
-            col_idx += 1
+        days_of_week_full = ["일", "월", "화", "수", "목", "금", "토"]
+        if start_day_of_week == 0:
+            days_of_week_ordered = days_of_week_full[1:] + days_of_week_full[:1]
+            original_indices = [1, 2, 3, 4, 5, 6, 0]
+        else:
+            days_of_week_ordered = days_of_week_full
+            original_indices = [0, 1, 2, 3, 4, 5, 6]
 
-        # 4. 날짜 셀 생성
+        col_map = {}
+        grid_col_idx = 0
+        for i, day_text in enumerate(days_of_week_ordered):
+            original_day_idx = original_indices[i]
+            
+            if hide_weekends and original_day_idx in [0, 6]:
+                continue
+
+            label = QLabel(day_text)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            color = colors['weekday']
+            if original_day_idx == 0: color = colors['sunday']
+            elif original_day_idx == 6: color = colors['saturday']
+            label.setStyleSheet(f"color: {color}; font-weight: bold;")
+            
+            self.calendar_grid.addWidget(label, 0, grid_col_idx)
+            col_map[original_day_idx] = grid_col_idx
+            grid_col_idx += 1
+
         cal = calendar.Calendar(firstweekday=start_day_of_week)
         month_calendar = cal.monthdayscalendar(year, month)
         today = datetime.date.today()
 
         for week_index, week in enumerate(month_calendar):
-            for day_of_week_idx, day in enumerate(week):
-                if day == 0 or (hide_weekends and day_of_week_idx in weekend_indices): continue
+            for day_of_week_original, day in enumerate(week):
+                if day == 0 or day_of_week_original not in col_map:
+                    continue
                 
+                grid_col = col_map[day_of_week_original]
                 current_day_obj = datetime.date(year, month, day)
                 cell_widget = DayCellWidget(current_day_obj, self)
                 cell_widget.add_event_requested.connect(self.add_event_requested)
                 
                 font_color = colors['weekday']
-                if day_of_week_idx == weekend_indices[0]: font_color = colors['sunday']
-                elif day_of_week_idx == weekend_indices[1]: font_color = colors['saturday']
+                if day_of_week_original == 0: font_color = colors['sunday']
+                elif day_of_week_original == 6: font_color = colors['saturday']
                 
                 cell_widget.day_label.setStyleSheet(f"color: {font_color}; background-color: transparent;")
                 if current_day_obj == today:
                     cell_widget.setStyleSheet(f"background-color: {colors['today_bg']}; border-radius: 5px;")
                     cell_widget.day_label.setStyleSheet(f"color: {colors['today_fg']}; font-weight: bold; background-color: transparent;")
                 
-                self.calendar_grid.addWidget(cell_widget, week_index + 1, col_map[day_of_week_idx])
+                self.calendar_grid.addWidget(cell_widget, week_index + 1, grid_col)
                 self.date_to_cell_map[current_day_obj] = cell_widget
 
         for i in range(1, self.calendar_grid.rowCount()):
@@ -166,7 +185,7 @@ class MonthViewWidget(BaseViewWidget):
         for i in range(self.calendar_grid.columnCount()):
             self.calendar_grid.setColumnStretch(i, 1)
         
-        QTimer.singleShot(10, self.draw_events) # 0ms -> 10ms로 변경하여 레이아웃 계산 시간 확보
+        QTimer.singleShot(10, self.draw_events)
 
     def draw_events(self):
         if not self.date_to_cell_map: return

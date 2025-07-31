@@ -64,36 +64,53 @@ class HeaderCanvas(QWidget):
         
         colors = {"weekday": "#D0D0D0" if is_dark else "#222222", "saturday": "#8080FF" if is_dark else "#0000DD", "sunday": "#FF8080" if is_dark else "#DD0000", "today": "#FFFF77" if is_dark else "#A0522D" }
         
-        if start_day_of_week == 0: # 월요일 시작
-            days_of_week_str = ["월", "화", "수", "목", "금", "토", "일"]
-            weekend_indices = [5, 6]
-        else: # 일요일 시작
-            days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
-            weekend_indices = [0, 6]
-
         today = datetime.date.today()
         start_of_week = self.parent_view._get_start_of_week()
 
-        col_idx = 0
-        for i in range(7):
-            day_date = start_of_week + datetime.timedelta(days=i)
-            if hide_weekends and day_date.weekday() in [5, 6]:
-                continue
+        # --- ▼▼▼ [핵심 수정] 주말 숨기기 로직 분리 ▼▼▼ ---
+        if hide_weekends:
+            # 주말 숨기기 모드에서는 항상 월-금 순서로 표시
+            days_to_display = ["월", "화", "수", "목", "금"]
+            for i, day_text in enumerate(days_to_display):
+                # 시작일(월요일)로부터 i일 후의 날짜 계산
+                day_date = start_of_week + datetime.timedelta(days=i)
+                text = f"{day_text} ({day_date.day})"
+                
+                font_color = colors['today'] if day_date == today else colors['weekday']
+                painter.setPen(QColor(font_color))
+                
+                x = self.column_x_coords[i]
+                width = self.column_x_coords[i+1] - x
+                rect = QRectF(x, 0, width, HEADER_HEIGHT)
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+        else:
+            # 주말 포함 모드에서는 사용자의 시작 요일 설정을 따름
+            if start_day_of_week == 0: # 월요일 시작
+                days_of_week_str = ["월", "화", "수", "목", "금", "토", "일"]
+            else: # 일요일 시작
+                days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
 
-            text = f"{days_of_week_str[i]} ({day_date.day})"
-            
-            font_color = colors['weekday']
-            if day_date == today: font_color = colors['today']
-            elif i == weekend_indices[0]: font_color = colors['sunday']
-            elif i == weekend_indices[1]: font_color = colors['saturday']
-            
-            painter.setPen(QColor(font_color))
-            
-            x = self.column_x_coords[col_idx]
-            width = self.column_x_coords[col_idx+1] - x
-            rect = QRectF(x, 0, width, HEADER_HEIGHT)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
-            col_idx += 1
+            for i in range(7):
+                day_date = start_of_week + datetime.timedelta(days=i)
+                text = f"{days_of_week_str[i]} ({day_date.day})"
+                
+                # 색상은 실제 요일(weekday) 기준으로 결정하여 정확성 확보
+                font_color = colors['weekday']
+                if day_date == today:
+                    font_color = colors['today']
+                elif day_date.weekday() == 6: # 일요일
+                    font_color = colors['sunday']
+                elif day_date.weekday() == 5: # 토요일
+                    font_color = colors['saturday']
+                
+                painter.setPen(QColor(font_color))
+                
+                x = self.column_x_coords[i]
+                width = self.column_x_coords[i+1] - x
+                rect = QRectF(x, 0, width, HEADER_HEIGHT)
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+        # --- ▲▲▲ 핵심 수정 종료 ▲▲▲ ---
+        
         painter.restore()
 # views/week_view.py의 AllDayCanvas 클래스
 class AllDayCanvas(QWidget):
