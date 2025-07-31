@@ -8,7 +8,7 @@ from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
 from custom_dialogs import BaseDialog
-from config import DEFAULT_SYNC_INTERVAL
+from config import DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE
 
 PASTEL_COLORS = {
     "기본": ["#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", "#a0c4ff", "#bdb2ff", "#ffc6ff", "#e4e4e4", "#f1f1f1"]
@@ -141,6 +141,16 @@ class SettingsWindow(BaseDialog):
         scroll_area.setWidget(self.calendar_list_widget)
         self.stack.addWidget(page)
 
+    def on_lock_mode_toggled(self, state):
+        """잠금 모드 체크박스 상태 변경 시 호출됩니다."""
+        self._mark_as_changed("lock_mode_enabled")
+        is_checked = bool(state)
+        self.lock_key_combo.setEnabled(is_checked)
+        # 잠금 모드를 끄면 창 위치를 '일반'으로 강제하고, 해당 설정을 변경된 것으로 표시
+        if not is_checked:
+            self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData("Normal"))
+            self._mark_as_changed("window_mode")
+
     def create_appearance_page(self):
         page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop); layout.setContentsMargins(25, 15, 25, 25)
@@ -162,6 +172,44 @@ class SettingsWindow(BaseDialog):
         self.opacity_slider.valueChanged.connect(self.on_opacity_changed)
         opacity_layout.addWidget(self.opacity_slider); opacity_layout.addWidget(self.opacity_label)
         form_layout_opacity.addRow("전체 투명도:", opacity_widget); layout.addLayout(form_layout_opacity)
+
+        # ▼▼▼ [수정] 창 동작(Window Behavior) 섹션 추가 ▼▼▼
+        layout.addWidget(self._create_section_label("창 동작"))
+        form_layout_behavior = QFormLayout()
+
+        # 창 위치 모드
+        self.window_mode_combo = QComboBox()
+        self.window_mode_options = {"AlwaysOnTop": "항상 위에", "Normal": "일반", "AlwaysOnBottom": "항상 아래에"}
+        for value, text in self.window_mode_options.items():
+            self.window_mode_combo.addItem(text, value)
+        current_window_mode = self.temp_settings.get("window_mode", DEFAULT_WINDOW_MODE)
+        self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData(current_window_mode))
+        self.window_mode_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("window_mode"))
+        form_layout_behavior.addRow("창 위치:", self.window_mode_combo)
+
+        # 잠금 모드 활성화
+        self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
+        is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
+        self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
+        self.lock_mode_checkbox.stateChanged.connect(self.on_lock_mode_toggled)
+        form_layout_behavior.addRow(self.lock_mode_checkbox)
+
+        # 잠금 해제 키 선택
+        self.lock_key_combo = QComboBox()
+        self.lock_key_options = {
+            "Ctrl": "Ctrl", "Alt": "Alt", "Shift": "Shift",
+            "z": "Z", "a": "A", "q": "Q" # 필요한 키 추가 가능
+        }
+        for value, text in self.lock_key_options.items():
+            self.lock_key_combo.addItem(text, value)
+        current_lock_key = self.temp_settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY)
+        self.lock_key_combo.setCurrentIndex(self.lock_key_combo.findData(current_lock_key))
+        self.lock_key_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("lock_mode_key"))
+        self.lock_key_combo.setEnabled(is_lock_mode_enabled) # 잠금 모드가 켜져 있을 때만 활성화
+        form_layout_behavior.addRow("잠금 해제 키:", self.lock_key_combo)
+
+        layout.addLayout(form_layout_behavior)
+
 
         layout.addWidget(self._create_section_label("달력 표시"))
         form_layout_display = QFormLayout(); self.start_day_combo = QComboBox()
@@ -289,6 +337,9 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["hide_weekends"] = self.hide_weekends_checkbox.isChecked()
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
+        self.temp_settings["window_mode"] = self.window_mode_combo.currentData()
+        self.temp_settings["lock_mode_enabled"] = self.lock_mode_checkbox.isChecked()
+        self.temp_settings["lock_mode_key"] = self.lock_key_combo.currentData()
 
         # 원본 설정 업데이트
         self.original_settings.clear()

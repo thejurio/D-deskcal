@@ -1,13 +1,21 @@
 import sys
 import datetime
 import copy
+
+# ▼▼▼ [수정] win32gui, win32con 임포트 추가 ▼▼▼
+if sys.platform == "win32":
+    import win32gui
+    import win32con
+    import win32api
+
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QAction, QCursor, QIcon
 
+from pynput import keyboard
 from settings_manager import load_settings, save_settings
-from config import DEFAULT_WINDOW_GEOMETRY
+from config import DEFAULT_WINDOW_GEOMETRY, DEFAULT_LOCK_MODE_ENABLED, DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE
 
 from data_manager import DataManager
 from views.month_view import MonthViewWidget
@@ -17,12 +25,9 @@ from event_editor_window import EventEditorWindow
 from search_dialog import SearchDialog
 
 def load_stylesheet(file_path):
-    """지정된 경로의 스타일시트 파일을 읽어서 문자열로 반환합니다."""
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
 
-
-# --- ▼▼▼ 리사이즈 상태 감지를 위한 커스텀 QSizeGrip 추가 ▼▼▼ ---
 class CustomSizeGrip(QSizeGrip):
     grip_pressed = pyqtSignal()
     grip_released = pyqtSignal()
@@ -36,27 +41,145 @@ class CustomSizeGrip(QSizeGrip):
         super().mouseReleaseEvent(event)
         if event.button() == Qt.MouseButton.LeftButton:
             self.grip_released.emit()
-# --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
-
 
 class MainWidget(QWidget):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
         self.data_manager = DataManager(settings)
-        self.current_date = datetime.date.today() # 중앙 상태
-        self.is_resizing = False # 크기 조절 상태 플래그
-        self.is_moving = False # 이동 상태 플래그
-        self.border_width = 5 # 리사이즈 감지 영역
+        self.current_date = datetime.date.today()
+        self.is_resizing = False
+        self.is_moving = False
+        self.border_width = 5
+
+        self._interaction_unlocked = False
+        self.lock_key_is_pressed = False
+        self.keyboard_listener = None
+        self.start_keyboard_listener()
+        
         self.initUI()
+
+        if sys.platform == "win32":
+            self.set_as_desktop_child()
+        
+        self.apply_window_settings()
+
+    def set_as_desktop_child(self):
+        try:
+            progman = win32gui.FindWindow("Progman", None)
+            win32gui.SendMessageTimeout(progman, 0x052C, 0, 0, win32con.SMTO_NORMAL, 1000)
+            worker_w = 0
+            def find_worker_w(hwnd, param):
+                if win32gui.FindWindowEx(hwnd, 0, "SHELLDLL_DefView", None):
+                    nonlocal worker_w
+                    worker_w = win32gui.FindWindowEx(0, hwnd, "WorkerW", None)
+                return True
+            win32gui.EnumWindows(find_worker_w, None)
+            hwnd = self.winId()
+            win32gui.SetParent(hwnd, worker_w)
+        except Exception as e:
+            print(f"바탕화면 자식창 설정 실패: {e}")
+
+             # ▼▼▼ [추가] 누락된 is_interaction_unlocked 메서드 ▼▼▼
+    def is_interaction_unlocked(self):
+        """현재 상호작용이 잠금 해제되었는지 여부를 반환합니다."""
+        if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
+            return True # 잠금 모드가 비활성화 상태면 항상 상호작용 가능
+        return self._interaction_unlocked
+    # ▲▲▲ 여기까지 추가 ▲▲▲
+
+    def _is_lock_key(self, key):
+        lock_key_str = self.settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY).lower()
+        if lock_key_str == 'ctrl':
+            return key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]
+        if lock_key_str == 'alt':
+            return key in [keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr]
+        if lock_key_str == 'shift':
+            return key in [keyboard.Key.shift_l, keyboard.Key.shift_r]
+        if hasattr(key, 'char') and key.char:
+            return key.char.lower() == lock_key_str
+        return False
+
+    def on_key_press(self, key):
+        if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
+            if self._is_lock_key(key) and not self._interaction_unlocked:
+                self._interaction_unlocked = True
+                self.lock_key_is_pressed = True
+                QTimer.singleShot(0, self.unlock_interactions)
+
+    def on_key_release(self, key):
+        if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
+            if self._is_lock_key(key):
+                self.lock_key_is_pressed = False
+                self._interaction_unlocked = False
+                if QApplication.instance().mouseButtons() == Qt.MouseButton.NoButton:
+                    self.lock_interactions()
+
+    def start_keyboard_listener(self):
+        if self.keyboard_listener is None:
+            self.keyboard_listener = keyboard.Listener(on_press=self.on_key_press, on_release=self.on_key_release)
+            self.keyboard_listener.start()
+
+    def stop_keyboard_listener(self):
+        if self.keyboard_listener:
+            self.keyboard_listener.stop()
+            self.keyboard_listener = None
+
+    # ▼▼▼ [핵심 수정] setWindowFlags 대신 SetWindowLong API 사용 ▼▼▼
+    def lock_interactions(self):
+        """[Windows 전용] 클릭 통과 기능을 활성화합니다."""
+        if sys.platform != "win32": return
+        try:
+            hwnd = self.winId()
+            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            # WS_EX_TRANSPARENT 스타일 추가
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style | win32con.WS_EX_TRANSPARENT)
+        except Exception as e:
+            print(f"Lock interactions error: {e}")
+
+    def unlock_interactions(self):
+        """[Windows 전용] 클릭 통과 기능을 비활성화합니다."""
+        if sys.platform != "win32": return
+        try:
+            hwnd = self.winId()
+            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            # WS_EX_TRANSPARENT 스타일 제거
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style & ~win32con.WS_EX_TRANSPARENT)
+            self.activateWindow()
+        except Exception as e:
+            print(f"Unlock interactions error: {e}")
+    # ▲▲▲ 여기까지 수정 ▲▲▲
+
+    def apply_window_settings(self):
+        if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
+            self.lock_interactions()
+        else:
+            self.unlock_interactions()
+        self.update_lock_icon()
+
+    def toggle_lock_mode(self):
+        """잠금 모드를 토글하고 설정을 저장한 뒤 UI를 업데이트합니다."""
+        is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
+        self.settings["lock_mode_enabled"] = not is_enabled
+        save_settings(self.settings)
+        self.apply_window_settings()
+
+    def update_lock_icon(self):
+        """현재 잠금 설정에 따라 아이콘을 업데이트합니다."""
+        is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
+        if is_enabled:
+            self.lock_button.setIcon(QIcon("icons/lock_locked.svg"))
+            self.lock_button.setToolTip("잠금 모드 활성화됨 (클릭하여 비활성화)")
+        else:
+            self.lock_button.setIcon(QIcon("icons/lock_unlocked.svg"))
+            self.lock_button.setToolTip("잠금 모드 비활성화됨 (클릭하여 활성화)")
 
     def initUI(self):
         self.setWindowTitle('Glassy Calendar')
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnBottomHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        # --- ▼▼▼ 마우스 트래킹 활성화 ▼▼▼ ---
-        self.setMouseTracking(True) 
-        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
+        self.setMouseTracking(True)
+        
         geometry = self.settings.get("geometry", DEFAULT_WINDOW_GEOMETRY)
         self.setGeometry(*geometry)
         
@@ -65,11 +188,7 @@ class MainWidget(QWidget):
 
         self.background_widget = QWidget()
         self.background_widget.setObjectName("main_background")
-        # --- ▼▼▼ 마우스 트래킹 활성화 ▼▼▼ ---
         self.background_widget.setMouseTracking(True)
-        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
-        
-        
         
         self.setWindowOpacity(self.settings.get("window_opacity", 0.95))
         
@@ -81,6 +200,7 @@ class MainWidget(QWidget):
         content_layout_wrapper.addLayout(content_layout)
 
         bottom_bar_layout = QHBoxLayout()
+        
         bottom_bar_layout.addStretch(1)
         
         size_grip = CustomSizeGrip(self.background_widget)
@@ -103,19 +223,27 @@ class MainWidget(QWidget):
         today_button.setObjectName("today_button")
         today_button.clicked.connect(self.go_to_today)
 
-        search_button = QPushButton() # 텍스트 제거
-        search_button.setIcon(QIcon("icons/search.svg")) # 아이콘 설정
-        search_button.setIconSize(QSize(20, 20)) # 아이콘 크기 설정
+        search_button = QPushButton()
+        search_button.setIcon(QIcon("icons/search.svg"))
+        search_button.setIconSize(QSize(20, 20))
         search_button.setObjectName("search_button")
         search_button.setFixedSize(30, 28)
         search_button.setStyleSheet("padding-bottom: 2px;")
         search_button.clicked.connect(self.open_search_dialog)
+
+        self.lock_button = QPushButton()
+        self.lock_button.setIconSize(QSize(20, 20))
+        self.lock_button.setObjectName("lock_button")
+        self.lock_button.setFixedSize(30, 28)
+        self.lock_button.setStyleSheet("padding-bottom: 2px;")
+        self.lock_button.clicked.connect(self.toggle_lock_mode)
 
         view_mode_layout.addWidget(search_button)
         view_mode_layout.addStretch(1)
         view_mode_layout.addWidget(month_button)
         view_mode_layout.addWidget(week_button)
         view_mode_layout.addStretch(1)
+        view_mode_layout.addWidget(self.lock_button)
         view_mode_layout.addWidget(today_button)
         content_layout.addLayout(view_mode_layout)
 
@@ -125,7 +253,6 @@ class MainWidget(QWidget):
         self.month_view = MonthViewWidget(self)
         self.week_view = WeekViewWidget(self)
         
-        # --- ▼▼▼ [수정] 시그널-슬롯 연결 ▼▼▼ ---
         self.month_view.add_event_requested.connect(self.open_event_editor)
         self.month_view.edit_event_requested.connect(self.open_event_editor)
         self.month_view.navigation_requested.connect(self.handle_month_navigation)
@@ -135,7 +262,6 @@ class MainWidget(QWidget):
         self.week_view.edit_event_requested.connect(self.open_event_editor)
         self.week_view.navigation_requested.connect(self.handle_week_navigation)
         self.week_view.date_selected.connect(self.set_current_date)
-        # --- ▲▲▲ 여기까지 수정 ▲▲▲ ---
 
         self.stacked_widget.addWidget(self.month_view)
         self.stacked_widget.addWidget(self.week_view)
@@ -146,11 +272,9 @@ class MainWidget(QWidget):
         month_button.setChecked(True)
         self.oldPos = None
         
-        self.set_current_date(self.current_date, is_initial=True) # 초기 날짜 설정
+        self.set_current_date(self.current_date, is_initial=True)
 
-    # --- ▼▼▼ [추가] 중앙 날짜 설정 및 네비게이션 핸들러 ▼▼▼ ---
     def set_current_date(self, new_date, is_initial=False):
-        """모든 뷰의 날짜를 중앙에서 설정하고 UI를 새로고침합니다."""
         direction = "none"
         if not is_initial:
             if new_date > self.current_date: direction = "forward"
@@ -166,7 +290,7 @@ class MainWidget(QWidget):
     def handle_month_navigation(self, direction):
         if direction == "forward":
             new_date = (self.current_date.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        else: # "backward"
+        else:
             new_date = self.current_date.replace(day=1) - datetime.timedelta(days=1)
         self.set_current_date(new_date)
 
@@ -174,17 +298,14 @@ class MainWidget(QWidget):
         days_to_move = 7 if direction == "forward" else -7
         new_date = self.current_date + datetime.timedelta(days=days_to_move)
         self.set_current_date(new_date)
-    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
 
     def start_resize(self):
-        """크기 조절 시작 시 호출됩니다."""
         if not self.is_resizing:
             self.is_resizing = True
             self.month_view.set_resizing(True)
             self.week_view.set_resizing(True)
 
     def end_resize(self):
-        """크기 조절 종료 시 호출됩니다."""
         if self.is_resizing:
             self.is_resizing = False
             self.month_view.set_resizing(False)
@@ -197,7 +318,6 @@ class MainWidget(QWidget):
         self.set_current_date(datetime.date.today())
 
     def start(self):
-        from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self.initial_load)
 
     def initial_load(self):
@@ -222,16 +342,9 @@ class MainWidget(QWidget):
             current_widget.refresh()
 
     def handle_visual_preview(self):
-        """설정 변경 중 뷰의 내용만 다시 그리도록 요청하는 가벼운 슬롯입니다."""
         current_widget = self.stacked_widget.currentWidget()
         if current_widget:
-            current_widget.update() # 전체 위젯을 다시 만들지 않고, paintEvent만 다시 호출
-
-    def handle_visual_preview(self):
-        """설정 변경 중 뷰의 내용만 다시 그리도록 요청하는 가벼운 슬롯입니다."""
-        current_widget = self.stacked_widget.currentWidget()
-        if current_widget:
-            current_widget.update() # 전체 위젯을 다시 만들지 않고, paintEvent만 다시 호출
+            current_widget.update()
 
     def open_settings_window(self):
         with self.data_manager.user_action_priority():
@@ -246,7 +359,6 @@ class MainWidget(QWidget):
             if result == QDialog.DialogCode.Accepted:
                 changed_fields = settings_dialog.get_changed_fields()
                 
-                # 1. 뷰와 직접 관련 없는 설정 적용
                 if "window_opacity" in changed_fields:
                     self.set_window_opacity(self.settings.get("window_opacity", 0.95))
                 if "theme" in changed_fields:
@@ -254,66 +366,53 @@ class MainWidget(QWidget):
                 if "sync_interval_minutes" in changed_fields:
                     self.data_manager.update_sync_timer()
                 
-                # 2. 뷰 구조 자체를 변경해야 하는 경우 (무거운 작업)
+                if any(field in changed_fields for field in ["window_mode", "lock_mode_enabled", "lock_mode_key"]):
+                    self.apply_window_settings()
+
                 grid_structure_changes = {"start_day_of_week", "hide_weekends"}
                 if any(field in changed_fields for field in grid_structure_changes):
                     self.refresh_current_view()
-                    # 전체 뷰를 새로고침하면 다른 시각적 업데이트가 모두 포함되므로 여기서 함수를 종료합니다.
                     return 
 
-                # ▼▼▼ [수정] 캘린더 색상 변경 시 처리 로직 ▼▼▼
                 if "calendar_colors" in changed_fields:
-                    # 데이터 수정 없이 화면만 다시 그리도록 요청
                     self.handle_visual_preview()
-                # ▲▲▲ 여기까지 수정 ▲▲▲
 
-                # 4. 표시할 캘린더가 변경된 경우 (가벼운 UI 갱신만 필요)
                 if "selected_calendars" in changed_fields:
-                    # 만약 색상 변경으로 인해 이미 UI 갱신이 예정되었다면, 중복해서 호출할 필요가 없습니다.
                     if "calendar_colors" not in changed_fields:
-                        # 불필요한 데이터 다운로드 대신, 화면만 다시 그리도록 가벼운 업데이트를 요청합니다.
                         self.handle_visual_preview()
 
-            else: # 취소 시, 원래 상태로 복구
+            else:
                 self.settings.clear()
                 self.settings.update(original_settings_snapshot)
                 self.set_window_opacity(self.settings.get("window_opacity", 0.95))
                 self.apply_theme(self.settings.get("theme", "dark"))
-                self.refresh_current_view() # 뷰를 원래 상태로 되돌리기 위해 새로고침
-
+                self.apply_window_settings()
+                self.refresh_current_view()
 
     def open_search_dialog(self):
-        """검색 다이얼로그를 엽니다."""
         with self.data_manager.user_action_priority():
             dialog = SearchDialog(self.data_manager, self, self.settings, pos=QCursor.pos())
             dialog.event_selected.connect(self.go_to_event)
             dialog.exec()
 
     def go_to_event(self, event_data):
-        """선택된 이벤트의 날짜로 뷰를 이동하고 편집기를 엽니다."""
         start_info = event_data.get('start', {})
         date_str = start_info.get('dateTime', start_info.get('date'))
         
         if not date_str:
-            # 날짜 정보가 없으면 편집기만 바로 엽니다.
             self.open_event_editor(event_data)
             return
 
-        # 'Z'를 제거하고 datetime 객체로 변환
         if date_str.endswith('Z'):
             date_str = date_str[:-1]
         
         target_dt = datetime.datetime.fromisoformat(date_str)
         target_date = target_dt.date()
 
-        # 뷰 이동
         self.set_current_date(target_date)
-        
-        # 잠시 후 편집기 열기 (뷰 전환 및 렌더링 시간 확보)
         QTimer.singleShot(50, lambda: self.open_event_editor(event_data))
 
     def apply_theme(self, theme_name):
-        """애플리케이션 전체에 테마를 적용합니다."""
         try:
             stylesheet = load_stylesheet(f'themes/{theme_name}_theme.qss')
             QApplication.instance().setStyleSheet(stylesheet)
@@ -327,7 +426,7 @@ class MainWidget(QWidget):
                 return
 
             editor = None
-            cursor_pos = QCursor.pos() # 커서 위치 저장
+            cursor_pos = QCursor.pos()
             if isinstance(data, (datetime.date, datetime.datetime)):
                 editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
@@ -337,20 +436,14 @@ class MainWidget(QWidget):
                 result = editor.exec()
                 if result == QDialog.DialogCode.Accepted:
                     event_data = editor.get_event_data()
-                    
                     is_recurring = 'recurrence' in event_data.get('body', {})
-
                     if editor.mode == 'new': 
                         self.data_manager.add_event(event_data)
                     else: 
                         self.data_manager.update_event(event_data)
-                    
                     self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
-
-                    # 반복 일정이면 즉시 동기화를 요청하여 나머지 일정을 빨리 가져옴
                     if is_recurring:
                         QTimer.singleShot(500, self.data_manager.request_full_sync)
-
                 elif result == EventEditorWindow.DeleteRole:
                     event_to_delete = editor.get_event_data()
                     self.data_manager.delete_event(event_to_delete)
@@ -369,6 +462,8 @@ class MainWidget(QWidget):
         menu.addAction(exitAction)
 
     def contextMenuEvent(self, event):
+        if not self.is_interaction_unlocked():
+            return
         menu = QMenu(self)
         main_opacity = self.settings.get("window_opacity", 0.95)
         menu_opacity = main_opacity + (1 - main_opacity) * 0.85
@@ -380,27 +475,28 @@ class MainWidget(QWidget):
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
         save_settings(self.settings)
         self.data_manager.stop_caching_thread()
+        self.stop_keyboard_listener()
         event.accept()
 
     def mousePressEvent(self, event):
+        if not self.is_interaction_unlocked():
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position()
-            
-            # 클릭 위치가 가장자리인지 확인하여 리사이즈 모드 결정
             in_left = pos.x() < self.border_width
             in_right = pos.x() > self.width() - self.border_width
             in_top = pos.y() < self.border_width
             in_bottom = pos.y() > self.height() - self.border_width
-
             if in_left or in_right or in_top or in_bottom:
                 self.is_resizing = True
                 self.start_resize()
             else:
                 self.is_moving = True
-            
             self.oldPos = event.globalPosition().toPoint()
 
     def mouseMoveEvent(self, event):
+        if not self.is_interaction_unlocked():
+            return
         if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
             delta = event.globalPosition().toPoint() - self.oldPos
             if self.is_moving:
@@ -408,19 +504,22 @@ class MainWidget(QWidget):
             self.oldPos = event.globalPosition().toPoint()
 
     def mouseReleaseEvent(self, event):
+        if not self.is_interaction_unlocked() and not self.lock_key_is_pressed:
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             if self.is_resizing:
                 self.end_resize()
             self.is_moving = False
             self.is_resizing = False
             self.oldPos = None
-            self.unsetCursor() # 커서 모양 원래대로
+            self.unsetCursor()
+        if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED) and not self.lock_key_is_pressed:
+            QTimer.singleShot(50, self.lock_interactions)
 
 if __name__ == '__main__':
     settings = load_settings()
     app = QApplication(sys.argv)
     
-    # 설정에 저장된 테마를 불러와 적용
     selected_theme = settings.get("theme", "dark")
     try:
         stylesheet = load_stylesheet(f'themes/{selected_theme}_theme.qss')
