@@ -2,14 +2,14 @@ import sys
 import datetime
 import copy
 
-# ▼▼▼ [수정] win32gui, win32con 임포트 추가 ▼▼▼
+# ▼▼▼ [수정] win32gui, win32con, QSystemTrayIcon 임포트 추가 ▼▼▼
 if sys.platform == "win32":
     import win32gui
     import win32con
     import win32api
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
-                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog)
+                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QAction, QCursor, QIcon
 
@@ -273,6 +273,60 @@ class MainWidget(QWidget):
         self.oldPos = None
         
         self.set_current_date(self.current_date, is_initial=True)
+        self.setup_tray_icon()
+
+    def setup_tray_icon(self):
+        """시스템 트레이 아이콘을 설정합니다."""
+        self.tray_icon = QSystemTrayIcon(QIcon("icons/tray_icon.svg"), self)
+        self.tray_icon.setToolTip("Glassy Calendar")
+
+        tray_menu = QMenu()
+        show_action = QAction("열기", self)
+        show_action.triggered.connect(self.show_window)
+        tray_menu.addAction(show_action)
+
+        tray_menu.addSeparator()
+
+        add_event_action = QAction("일정 추가", self)
+        add_event_action.triggered.connect(lambda: self.open_event_editor(datetime.date.today()))
+        tray_menu.addAction(add_event_action)
+
+        settings_action = QAction("설정", self)
+        settings_action.triggered.connect(self.open_settings_window)
+        tray_menu.addAction(settings_action)
+
+        refresh_action = QAction("새로고침", self)
+        refresh_action.triggered.connect(self.data_manager.request_full_sync)
+        tray_menu.addAction(refresh_action)
+
+        tray_menu.addSeparator()
+
+        quit_action = QAction("종료", self)
+        quit_action.triggered.connect(self.quit_application)
+        tray_menu.addAction(quit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+        self.tray_icon.show()
+
+    def on_tray_icon_activated(self, reason):
+        """트레이 아이콘 클릭 시 창을 보여줍니다."""
+        if reason == QSystemTrayIcon.ActivationReason.Trigger: # 왼쪽 클릭
+            self.show_window()
+
+    def show_window(self):
+        """창을 보여주고 활성화합니다."""
+        self.show()
+        self.activateWindow()
+
+    def quit_application(self):
+        """애플리케이션을 완전히 종료합니다."""
+        self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
+        save_settings(self.settings)
+        self.data_manager.stop_caching_thread()
+        self.stop_keyboard_listener()
+        self.tray_icon.hide()
+        QApplication.instance().quit()
 
     def set_current_date(self, new_date, is_initial=False):
         direction = "none"
@@ -458,7 +512,7 @@ class MainWidget(QWidget):
         menu.addAction(settingsAction)
         menu.addSeparator()
         exitAction = QAction("종료 (Exit)", self)
-        exitAction.triggered.connect(self.close)
+        exitAction.triggered.connect(self.quit_application)
         menu.addAction(exitAction)
 
     def contextMenuEvent(self, event):
@@ -472,11 +526,15 @@ class MainWidget(QWidget):
         menu.exec(event.globalPos())
         
     def closeEvent(self, event):
-        self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
-        save_settings(self.settings)
-        self.data_manager.stop_caching_thread()
-        self.stop_keyboard_listener()
-        event.accept()
+        """창을 닫을 때 트레이로 최소화합니다."""
+        event.ignore()
+        self.hide()
+        self.tray_icon.showMessage(
+            "Glassy Calendar",
+            "캘린더가 백그라운드에서 실행 중입니다.",
+            QSystemTrayIcon.MessageIcon.Information,
+            2000
+        )
 
     def mousePressEvent(self, event):
         if not self.is_interaction_unlocked():
@@ -550,6 +608,7 @@ class MainWidget(QWidget):
 if __name__ == '__main__':
     settings = load_settings()
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     
     selected_theme = settings.get("theme", "dark")
     try:

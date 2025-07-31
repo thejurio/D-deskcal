@@ -1,7 +1,7 @@
 {
     "geometry": [
-        922,
-        0,
+        465,
+        50,
         613,
         603
     ],
@@ -32,6 +32,6 @@
     "start_day_of_week": 6,
     "hide_weekends": false,
     "window_mode": "Normal",
-    "lock_mode_enabled": false,
+    "lock_mode_enabled": true,
     "lock_mode_key": "z"
 }
