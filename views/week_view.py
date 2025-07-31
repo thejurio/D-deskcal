@@ -95,7 +95,7 @@ class HeaderCanvas(QWidget):
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
             col_idx += 1
         painter.restore()
-
+# views/week_view.py의 AllDayCanvas 클래스
 class AllDayCanvas(QWidget):
     """종일 이벤트를 그리는 위젯"""
     def __init__(self, parent_view):
@@ -105,8 +105,25 @@ class AllDayCanvas(QWidget):
         self.event_positions = []
         self.column_x_coords = []
         self.event_rects = []
-        self.hovered_event_id = None
+        self.hovered_event = None # 현재 호버된 이벤트 저장
 
+    # ▼▼▼ [추가] 마우스 이동/이탈 이벤트 핸들러 ▼▼▼
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        event_under_cursor = self.get_event_at(event.pos())
+        if self.hovered_event != event_under_cursor:
+            self.hovered_event = event_under_cursor
+            if self.hovered_event:
+                self.parent_view.handle_hover_enter(self, self.hovered_event)
+            else:
+                self.parent_view.handle_hover_leave(self)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.parent_view.handle_hover_leave(self)
+    # ▲▲▲
+    
+    # ... (set_data, get_event_at, paintEvent, mouseDoubleClickEvent 함수는 기존과 동일하게 유지) ...
     def set_data(self, positions, num_lanes, column_x_coords):
         self.event_positions = positions
         self.column_x_coords = column_x_coords
@@ -120,22 +137,6 @@ class AllDayCanvas(QWidget):
             if rect.contains(pos):
                 return event_data
         return None
-
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        if not self.parent_view.main_widget.is_interaction_unlocked():
-            QToolTip.hideText()
-            return
-            
-        event_under_mouse = self.get_event_at(event.pos())
-        current_event_id = event_under_mouse.get('id') if event_under_mouse else None
-        
-        if self.hovered_event_id != current_event_id:
-            self.hovered_event_id = current_event_id
-            if current_event_id:
-                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
-            else:
-                QToolTip.hideText()
 
     def paintEvent(self, event):
         if not self.column_x_coords:
@@ -175,7 +176,7 @@ class AllDayCanvas(QWidget):
         if clicked_event:
             self.parent_view.edit_event_requested.emit(clicked_event)
 
-
+# views/week_view.py의 TimeGridCanvas 클래스
 class TimeGridCanvas(QWidget):
     """시간 그리드와 시간별 이벤트를 그리는 위젯"""
     def __init__(self, parent_view):
@@ -185,10 +186,27 @@ class TimeGridCanvas(QWidget):
         self.event_positions = []
         self.column_x_coords = []
         self.event_rects = []
-        self.hovered_event_id = None
         min_height = self.parent_view.total_hours * self.parent_view.hour_height
         self.setMinimumHeight(min_height)
+        self.hovered_event = None # 현재 호버된 이벤트 저장
+        
+    # ▼▼▼ [추가] 마우스 이동/이탈 이벤트 핸들러 ▼▼▼
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        event_under_cursor = self.get_event_at(event.pos())
+        if self.hovered_event != event_under_cursor:
+            self.hovered_event = event_under_cursor
+            if self.hovered_event:
+                self.parent_view.handle_hover_enter(self, self.hovered_event)
+            else:
+                self.parent_view.handle_hover_leave(self)
 
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.parent_view.handle_hover_leave(self)
+    # ▲▲▲
+    
+    # ... (set_data, get_event_at, paintEvent, _draw_time_grid, _draw_timed_events, mouseDoubleClickEvent 함수는 기존과 동일하게 유지) ...
     def set_data(self, positions, column_x_coords):
         self.event_positions = positions
         self.column_x_coords = column_x_coords
@@ -199,22 +217,6 @@ class TimeGridCanvas(QWidget):
             if rect.contains(pos):
                 return event_data
         return None
-
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        if not self.parent_view.main_widget.is_interaction_unlocked():
-            QToolTip.hideText()
-            return
-            
-        event_under_mouse = self.get_event_at(event.pos())
-        current_event_id = event_under_mouse.get('id') if event_under_mouse else None
-        
-        if self.hovered_event_id != current_event_id:
-            self.hovered_event_id = current_event_id
-            if current_event_id:
-                QToolTip.showText(QCursor.pos(), event_under_mouse.get('summary', ''))
-            else:
-                QToolTip.hideText()
 
     def paintEvent(self, event):
         if not self.column_x_coords:
@@ -236,7 +238,9 @@ class TimeGridCanvas(QWidget):
         hide_weekends = self.parent_view.main_widget.settings.get("hide_weekends", False)
         
         if not hide_weekends and start_of_week <= today < start_of_week + datetime.timedelta(days=7):
-            highlight_color = QColor("#FFFFAA") if not is_dark else QColor("#4A4A26")
+                       # ▼▼▼ highlight_color 값을 수정합니다. ▼▼▼
+            highlight_color = QColor("#CCE5FF") # 연한 파란색
+            # ▲▲▲ 여기까지 수정 ▲▲▲
             day_offset = (today - start_of_week).days
             x = self.column_x_coords[day_offset]
             width = self.column_x_coords[day_offset+1] - x
@@ -450,22 +454,6 @@ class WeekViewWidget(BaseViewWidget):
     def set_tooltips_enabled(self, enabled):
         self.tooltips_enabled = enabled
         if not enabled:
-            QToolTip.hideText()
-
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        if not self.tooltips_enabled:
-            return
-
-        # 마우스 위치에 따라 올바른 자식 위젯(Canvas)을 찾아서 툴팁 로직 실행
-        target_widget = self.childAt(event.pos())
-        if isinstance(target_widget, (AllDayCanvas, TimeGridCanvas)):
-            local_pos = target_widget.mapFrom(self, event.pos())
-            # 각 캔버스가 자체적으로 mouseMoveEvent를 처리하도록 호출
-            target_widget.mouseMoveEvent(
-                event.__class__(local_pos, event.globalPosition(), event.button(), event.buttons(), event.modifiers())
-            )
-        else:
             QToolTip.hideText()
 
     def update_timeline(self):

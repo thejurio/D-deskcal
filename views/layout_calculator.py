@@ -102,10 +102,11 @@ class WeekLayoutCalculator:
             return (date_obj - self.start_of_week).days
 
     def calculate_time_events(self, day_column_width):
-        """시간대별 이벤트의 위치와 크기를 계산합니다. (겹침 처리 및 간격 포함)"""
+        """시간대별 이벤트의 위치와 크기를 계산합니다. (가운데 정렬 적용)"""
         positions = []
         events_by_day = defaultdict(list)
-        HORIZONTAL_EVENT_GAP = 0
+        HORIZONTAL_EVENT_GAP = 2
+        GROUP_WIDTH_RATIO = 0.9 # 열 너비의 90%를 이벤트 그룹이 사용
 
         for event in self.time_events:
             start_dt = datetime.datetime.fromisoformat(self._get_start_str(event)).replace(tzinfo=None)
@@ -122,8 +123,12 @@ class WeekLayoutCalculator:
                 num_columns = len(columns)
                 if num_columns == 0: continue
 
+                # 그룹 전체가 사용할 너비와 시작점을 계산
+                group_total_width = day_column_width * GROUP_WIDTH_RATIO
+                group_start_x_offset = (day_column_width * (1 - GROUP_WIDTH_RATIO)) / 2
+                
                 total_gap = (num_columns - 1) * HORIZONTAL_EVENT_GAP
-                sub_col_width = (day_column_width - total_gap) / num_columns
+                sub_col_width = (group_total_width - total_gap) / num_columns
 
                 for i, column in enumerate(columns):
                     for event in column:
@@ -134,7 +139,10 @@ class WeekLayoutCalculator:
                         duration_seconds = (end_dt - start_dt).total_seconds()
                         height = max(20, (duration_seconds / 3600) * self.hour_height)
                         
-                        x = col_index * day_column_width + i * (sub_col_width + HORIZONTAL_EVENT_GAP)
+                        # 최종 x 위치 계산
+                        base_col_x = col_index * day_column_width
+                        x_in_group = i * (sub_col_width + HORIZONTAL_EVENT_GAP)
+                        x = base_col_x + group_start_x_offset + x_in_group
 
                         positions.append({'event': event, 'rect': (int(x), int(y), int(sub_col_width), int(height))})
         

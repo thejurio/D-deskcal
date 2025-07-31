@@ -9,7 +9,7 @@ if sys.platform == "win32":
     import win32api
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
-                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon)
+                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QAction, QCursor, QIcon
 
@@ -183,6 +183,12 @@ class MainWidget(QWidget):
         geometry = self.settings.get("geometry", DEFAULT_WINDOW_GEOMETRY)
         self.setGeometry(*geometry)
         
+        # 화면 크기에 비례하여 최소 크기 설정
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        min_width = int(screen_geometry.width() * 0.20)
+        min_height = int(screen_geometry.height() * 0.25)
+        self.setMinimumSize(min_width, min_height)
+        
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -213,6 +219,7 @@ class MainWidget(QWidget):
         main_layout.addWidget(self.background_widget)
 
         self.data_manager.data_updated.connect(self.on_data_updated)
+        self.data_manager.error_occurred.connect(self.show_error_message)
         
         view_mode_layout = QHBoxLayout()
         month_button, week_button = QPushButton("월력"), QPushButton("주간")
@@ -501,6 +508,26 @@ class MainWidget(QWidget):
                 elif result == EventEditorWindow.DeleteRole:
                     event_to_delete = editor.get_event_data()
                     self.data_manager.delete_event(event_to_delete)
+
+    def show_error_message(self, message):
+        """사용자에게 오류 메시지 대화상자를 표시합니다."""
+        if not self.is_interaction_unlocked():
+            # 잠금 모드일 경우 상호작용이 불가능하므로, 트레이 아이콘 메시지로 대체
+            self.tray_icon.showMessage(
+                "오류 발생",
+                message,
+                QSystemTrayIcon.MessageIcon.Warning,
+                5000
+            )
+        else:
+            # 일반 모드에서는 메시지 박스 사용
+            error_dialog = QMessageBox(self)
+            error_dialog.setIcon(QMessageBox.Icon.Warning)
+            error_dialog.setText("오류가 발생했습니다.")
+            error_dialog.setInformativeText(message)
+            error_dialog.setWindowTitle("오류")
+            error_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+            error_dialog.exec()
 
     def add_common_context_menu_actions(self, menu):
         if menu.actions(): menu.addSeparator()

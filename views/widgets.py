@@ -3,15 +3,92 @@ from PyQt6.QtWidgets import QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics, QTextDocument, QPainterPath
 
+# views/widgets.py
+from PyQt6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
+from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics, QTextDocument, QPainterPath
+# views/widgets.py 의 EventLabelWidget 클래스
 class EventLabelWidget(QLabel):
     edit_requested = pyqtSignal(dict)
-    def __init__(self, event, parent=None):
+
+    def __init__(self, event, is_completed=False, main_widget=None, parent=None):
         super().__init__(parent)
         self.event_data = event
+        self.is_completed = is_completed
+        self.main_widget = main_widget
+        # ▼▼▼ [수정] 마우스 추적 활성화 및 부모 뷰 참조 저장 ▼▼▼
+        self.setMouseTracking(True) 
+        self.parent_view = self.main_widget.stacked_widget.currentWidget()
+        # ▲▲▲
+
+        summary = event.get('summary', '제목 없음')
+        if 'recurrence' in event:
+            summary = f"🔄 {summary}"
+        
+        self.setText(summary)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        
+        self.set_styles()
+
+    # ▼▼▼ [추가] 마우스 진입/이탈 이벤트 핸들러 ▼▼▼
+    def enterEvent(self, event):
+        """마우스가 위젯에 진입하면 부모 뷰의 핸들러를 호출합니다."""
+        super().enterEvent(event)
+        if self.parent_view:
+            self.parent_view.handle_hover_enter(self, self.event_data)
+
+    def leaveEvent(self, event):
+        """마우스가 위젯에서 이탈하면 부모 뷰의 핸들러를 호출합니다."""
+        super().leaveEvent(event)
+        if self.parent_view:
+            self.parent_view.handle_hover_leave(self)
+    # ▲▲▲
+
+    def set_styles(self):
+        bg_color = self.event_data.get('color', '#555555')
+        text_color = get_text_color_for_background(bg_color)
+        
+        style = f"""
+            QLabel {{
+                background-color: {bg_color};
+                color: {text_color};
+                border-radius: 3px;
+                padding: 0px 4px;
+            }}
+        """
+        if self.is_completed:
+            style += "QLabel { text-decoration: line-through; }"
+
+        self.setStyleSheet(style)
+        
+        if self.is_completed:
+            opacity_effect = QGraphicsOpacityEffect(self)
+            opacity_effect.setOpacity(0.6)
+            self.setGraphicsEffect(opacity_effect)
+        else:
+            self.setGraphicsEffect(None)
+    
+    # ▼▼▼ [수정] resizeEvent 로직을 원래대로 또는 개선된 버전으로 유지 ▼▼▼
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        font_metrics = QFontMetrics(self.font())
+
+        original_text = self.event_data.get('summary', '제목 없음')
+        if 'recurrence' in self.event_data:
+            original_text = f"🔄 {original_text}"
+
+        elided_text = font_metrics.elidedText(original_text, Qt.TextElideMode.ElideRight, self.width())
+        super().setText(elided_text)
+
+
+    def setText(self, text):
+        super().setText(text)
+
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.edit_requested.emit(self.event_data)
-            event.accept()
+            if self.main_widget and self.main_widget.is_interaction_unlocked():
+                self.edit_requested.emit(self.event_data)
+                event.accept() 
         else:
             super().mouseDoubleClickEvent(event)
 

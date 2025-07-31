@@ -532,3 +532,68 @@ class MoreEventsDialog(BaseDialog):
         
         sender_button = self.sender()
         menu.exec(sender_button.mapToGlobal(pos))
+
+class EventPopover(QDialog):
+    """
+    이벤트 위에 마우스를 올렸을 때 상세 정보를 보여주는 팝오버 위젯.
+    """
+# custom_dialogs.py 파일의 EventPopover 클래스
+
+    def __init__(self, event_data, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        background_widget = QWidget()
+        # ▼▼▼ [수정] popover_background -> main_background로 변경 ▼▼▼
+        background_widget.setObjectName("main_background")
+        # ▲▲▲ 테마의 메인 배경 스타일을 그대로 사용하도록 이름 변경
+        main_layout.addWidget(background_widget)
+
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(12, 10, 12, 10)
+        content_layout.setSpacing(5)
+
+        # 1. 이벤트 제목
+        summary = event_data.get('summary', '(제목 없음)')
+        summary_label = QLabel(summary)
+        summary_label.setWordWrap(True)
+        summary_label.setStyleSheet("font-weight: bold; font-size: 10pt;")
+        content_layout.addWidget(summary_label)
+
+        # 2. 이벤트 시간
+        time_text = self.format_event_time(event_data)
+        if time_text:
+            time_label = QLabel(time_text)
+            time_label.setStyleSheet("font-size: 9pt; color: #B0B0B0;")
+            content_layout.addWidget(time_label)
+
+    def format_event_time(self, event_data):
+        """이벤트 데이터로부터 시간 문자열을 포맷팅합니다."""
+        start = event_data.get('start', {})
+        end = event_data.get('end', {})
+
+        if 'dateTime' in start: # 시간 지정 이벤트
+            start_dt = datetime.datetime.fromisoformat(start['dateTime'])
+            end_dt = datetime.datetime.fromisoformat(end['dateTime'])
+            
+            if start_dt.date() == end_dt.date():
+                return f"{start_dt.strftime('%p %I:%M')} - {end_dt.strftime('%p %I:%M')}"
+            else:
+                return f"{start_dt.strftime('%m/%d %p %I:%M')} - {end_dt.strftime('%m/%d %p %I:%M')}"
+        
+        elif 'date' in start: # 종일 이벤트
+            start_date = datetime.date.fromisoformat(start['date'])
+            end_date = datetime.date.fromisoformat(end['date'])
+            
+            # Google Calendar API는 종일 이벤트의 end.date를 실제 종료일+1일로 주므로, -1일 해줘야 함
+            if (end_date - start_date).days == 1:
+                 return f"{start_date.strftime('%Y년 %m월 %d일')} (하루 종일)"
+            else:
+                 end_date_adjusted = end_date - datetime.timedelta(days=1)
+                 return f"{start_date.strftime('%m월 %d일')} - {end_date_adjusted.strftime('%m월 %d일')}"
+        return ""

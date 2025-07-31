@@ -168,6 +168,11 @@ class DataManager(QObject):
     data_updated = pyqtSignal(int, int)
     calendar_list_changed = pyqtSignal()
     event_completion_changed = pyqtSignal() # 완료 상태 변경 시그널 추가
+    error_occurred = pyqtSignal(str) # 오류 발생 시그널 추가
+
+    def report_error(self, message):
+        """오류를 UI 스레드로 안전하게 전달하기 위한 메서드."""
+        self.error_occurred.emit(message)
 
     def get_color_for_calendar(self, cal_id):
         """특정 캘린더 ID에 대한 현재 색상 설정을 빠르게 반환합니다."""
@@ -428,7 +433,7 @@ class DataManager(QObject):
 
         for provider in self.providers:
             try:
-                events = provider.get_events(start_date, end_date)
+                events = provider.get_events(start_date, end_date, self)
                 if events is not None:
                     # --- ▼▼▼ [추가] 가져온 이벤트에 즉시 색상 적용 ▼▼▼ ---
                     for event in events:
@@ -632,6 +637,21 @@ class DataManager(QObject):
         print("초기 데이터 로딩을 요청합니다...")
         today = datetime.date.today()
         self.get_events(today.year, today.month)
+
+    def _apply_colors_to_events(self, events):
+        """주어진 이벤트 목록에 색상 정보를 적용합니다."""
+        if not events:
+            return
+
+        all_calendars = self.get_all_calendars()
+        custom_colors = self.settings.get("calendar_colors", {})
+        default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
+
+        for event in events:
+            cal_id = event.get('calendarId')
+            if cal_id:
+                default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
+                event['color'] = custom_colors.get(cal_id, default_color)
 
     def search_events(self, query):
         """모든 Provider에서 이벤트를 검색하고 결과를 통합하여 반환합니다."""

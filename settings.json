@@ -1,9 +1,9 @@
 {
     "geometry": [
-        465,
-        50,
-        613,
-        603
+        615,
+        0,
+        920,
+        738
     ],
     "use_local_calendar": false,
     "selected_calendars": [
@@ -21,7 +21,7 @@
         "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
     },
     "sync_interval_minutes": 1,
-    "window_opacity": 1.0,
+    "window_opacity": 0.85,
     "theme": "light",
     "last_selected_calendar_id": "thejurio@gmail.com",
     "always_on_top": false,
@@ -32,6 +32,6 @@
     "start_day_of_week": 6,
     "hide_weekends": false,
     "window_mode": "Normal",
-    "lock_mode_enabled": true,
+    "lock_mode_enabled": false,
     "lock_mode_key": "z"
 }

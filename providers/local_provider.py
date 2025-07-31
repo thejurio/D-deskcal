@@ -61,7 +61,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
 
     # providers/local_provider.py 파일입니다.
 
-    def get_events(self, start_date, end_date):
+    def get_events(self, start_date, end_date, data_manager=None):
         """특정 기간 사이의 로컬 이벤트를 반환합니다. (반복 일정 포함)"""
         final_events = []
         try:
@@ -130,13 +130,9 @@ class LocalCalendarProvider(BaseCalendarProvider):
                         # 일반 이벤트는 그냥 추가
                         final_events.append(event_template)
 
-                # 공통 속성(색상, 이모지) 추가
-                calendar_colors = self.settings.get("calendar_colors", {})
-                calendar_emojis = self.settings.get("calendar_emojis", {})
+                # 모든 이벤트에 공통 속성(calendarId) 추가
                 for event in final_events:
                     event['calendarId'] = LOCAL_CALENDAR_ID
-                    event['color'] = calendar_colors.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_COLOR)
-                    event['emoji'] = calendar_emojis.get(LOCAL_CALENDAR_ID, DEFAULT_LOCAL_CALENDAR_EMOJI)
                 
                 return final_events
 

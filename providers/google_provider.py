@@ -47,16 +47,25 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 return []
         return self._calendar_list_cache
 
-    def get_events(self, start_date, end_date):
+    def get_events(self, start_date, end_date, data_manager=None):
         service = self._get_service_for_current_thread()
-        if not service: return []
+        if not service:
+            if data_manager:
+                data_manager.report_error("Google 계정 인증 정보를 찾을 수 없습니다. 설정에서 다시 로그인해주세요.")
+            return []
 
-        calendar_list = self.get_calendar_list()
+        try:
+            calendar_list = self.get_calendar_list()
+            if not calendar_list: # get_calendar_list 내부에서 오류가 발생했을 수 있음
+                if data_manager:
+                    data_manager.report_error("Google 캘린더 목록을 가져오는 데 실패했습니다. 인터넷 연결 또는 계정 권한을 확인해주세요.")
+                return []
+        except Exception as e:
+            if data_manager:
+                data_manager.report_error(f"Google 캘린더 목록 조회 중 예상치 못한 오류가 발생했습니다: {e}")
+            return []
+
         calendar_ids = [cal['id'] for cal in calendar_list]
-        custom_colors = self.settings.get("calendar_colors", {})
-        custom_emojis = self.settings.get("calendar_emojis", {})
-        calendar_color_map = {cal['id']: cal['backgroundColor'] for cal in calendar_list}
-
         all_events = []
         time_min = datetime.datetime.combine(start_date, datetime.time.min).isoformat() + 'Z'
         time_max = datetime.datetime.combine(end_date, datetime.time.max).isoformat() + 'Z'
@@ -70,13 +79,23 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 events = events_result.get("items", [])
                 
                 for event in events:
-                    event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME # Provider 정보 추가
+                    event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME
                     event['calendarId'] = cal_id
-                    # 색상과 이모지 적용 로직은 DataManager로 중앙화되었으므로 여기서는 제거
                 
                 all_events.extend(events)
             except HttpError as e:
-                print(f"캘린더({cal_id})의 이벤트를 가져오는 중 오류 발생: {e}")
+                error_message = f"'{cal_id}' 캘린더의 이벤트를 가져오는 중 오류가 발생했습니다.\n\n- 원인: {e.reason}\n- 상태 코드: {e.status_code}"
+                if data_manager:
+                    data_manager.report_error(error_message)
+                else:
+                    print(error_message)
+                continue # 한 캘린더에서 오류가 나도 다른 캘린더는 계속 시도
+            except Exception as e:
+                error_message = f"'{cal_id}' 캘린더 처리 중 예상치 못한 오류: {e}"
+                if data_manager:
+                    data_manager.report_error(error_message)
+                else:
+                    print(error_message)
                 continue
                 
         return all_events
