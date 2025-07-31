@@ -18,6 +18,7 @@ CUSTOM_COLOR_TEXT = "사용자 지정..."
 class SettingsWindow(BaseDialog):
     transparency_changed = pyqtSignal(float)
     theme_changed = pyqtSignal(str)
+# settings_window.py 파일의 __init__ 함수입니다.
 
     def __init__(self, data_manager, settings, parent=None, pos=None):
         super().__init__(parent=parent, settings=settings, pos=pos)
@@ -29,8 +30,8 @@ class SettingsWindow(BaseDialog):
 
         self.setWindowTitle("설정")
         self.setModal(True)
-        self.setMinimumSize(750, 550)
-
+        # ▼▼▼ [수정] 최소 가로 사이즈를 추가로 줄입니다 (620 -> 560) ▼▼▼
+        self.setMinimumSize(560, 500)
         
         margin_widget = QWidget()
         margin_widget.setObjectName("settings_margin_background")
@@ -50,8 +51,8 @@ class SettingsWindow(BaseDialog):
         top_layout.setSpacing(0)
         self.nav_list = QListWidget()
         self.nav_list.setObjectName("settings_nav")
-        self.nav_list.setFixedWidth(180)
-        self.nav_list.setFont(QFont("Malgun Gothic", 11))
+        self.nav_list.setFixedWidth(140)
+        self.nav_list.setFont(QFont("Malgun Gothic", 10))
         self.stack = QStackedWidget()
         self.stack.setObjectName("settings_stack")
         top_layout.addWidget(self.nav_list)
@@ -89,27 +90,68 @@ class SettingsWindow(BaseDialog):
     def _mark_as_changed(self, field_name):
         self.changed_fields.add(field_name)
 
+
     def set_stylesheet(self):
         is_dark = self.temp_settings.get("theme", "dark") == "dark"
-        margin_color = "rgb(30, 30, 30)" if is_dark else "#FAFAFA"
-        content_bg = "#3C3C3C" if is_dark else "#FFFFFF"
-        nav_bg = "#2E2E2E" if is_dark else "#F5F5F5"
-        nav_border = "#444" if is_dark else "#DCDCDC"
+
+        if is_dark:
+            margin_color = "rgb(30, 30, 30)"
+            content_bg = "#3C3C3C"
+            nav_bg = "#2E2E2E"
+            nav_border = "#444"
+            bottom_bg = nav_bg
+            nav_item_hover_bg = "#4A4A4A"
+            section_title_fg = "#E0E0E0"
+            general_text_color = "#E0E0E0"
+        else:
+            margin_color = "#FAFAFA"
+            content_bg = "#FFFFFF"
+            nav_bg = "#FFFFFF"
+            nav_border = "#E0E0E0"
+            bottom_bg = "#FFFFFF"
+            nav_item_hover_bg = "#F0F0F0"
+            section_title_fg = "#111111"
+            general_text_color = "#222222"
+        
         nav_item_selected_bg = "#0078D7"
         nav_item_selected_fg = "#FFFFFF"
-        nav_item_hover_bg = "#4A4A4A" if is_dark else "#E0E0E0"
-        bottom_bg = nav_bg
-        section_title_fg = "#E0E0E0" if is_dark else "#111111"
+
         qss = f"""
             QWidget#settings_margin_background {{ background-color: {margin_color}; border-radius: 12px; }}
             QWidget#settings_content_background {{ border-radius: 8px; }}
-            QListWidget#settings_nav {{ background-color: {nav_bg}; border-right: 1px solid {nav_border}; outline: 0px; border-top-left-radius: 8px; border-bottom-left-radius: 8px; }}
+            QListWidget#settings_nav {{ 
+                background-color: {nav_bg}; 
+                border-right: 1px solid {nav_border}; 
+                outline: 0px; 
+                border-top-left-radius: 8px; 
+                border-bottom-left-radius: 8px;
+                color: {general_text_color}; /* [추가] 탭 메뉴 기본 글자색 */
+            }}
             QListWidget#settings_nav::item {{ padding: 15px; border: none; }}
             QListWidget#settings_nav::item:selected {{ background-color: {nav_item_selected_bg}; color: {nav_item_selected_fg}; font-weight: bold; }}
             QListWidget#settings_nav::item:hover:!selected {{ background-color: {nav_item_hover_bg}; }}
-            QWidget#settings_page {{ background-color: {content_bg}; border-top-right-radius: 8px; }}
+            
+            QWidget#settings_page {{ 
+                background-color: {content_bg}; 
+                color: {general_text_color};
+                border-top-right-radius: 8px; 
+            }}
+            
             QWidget#bottom_container {{ background-color: {bottom_bg}; border-top: 1px solid {nav_border}; border-bottom-right-radius: 8px; }}
             QLabel#section_title {{ font-size: 18px; font-weight: bold; padding-top: 10px; padding-bottom: 15px; color: {section_title_fg}; }}
+            
+            QWidget#settings_page QScrollArea,
+            QWidget#transparent_container {{ 
+                background-color: transparent; 
+            }}
+
+            /* ▼▼▼ [추가] 일반 라벨과 체크박스의 글자색을 명시적으로 지정합니다. ▼▼▼ */
+            QWidget#settings_page QLabel:!#section_title {{
+                color: {general_text_color};
+            }}
+            QWidget#settings_page QCheckBox {{
+                color: {general_text_color};
+            }}
         """
         self.setStyleSheet(qss)
 
@@ -136,11 +178,13 @@ class SettingsWindow(BaseDialog):
         layout.addWidget(self._create_section_label("캘린더 표시 및 색상 설정"))
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
         layout.addWidget(scroll_area)
-        self.calendar_list_widget = QWidget(); self.calendar_list_layout = QVBoxLayout(self.calendar_list_widget)
+        self.calendar_list_widget = QWidget()
+        self.calendar_list_widget.setObjectName("transparent_container")
+        self.calendar_list_layout = QVBoxLayout(self.calendar_list_widget)
         self.calendar_list_layout.setContentsMargins(0,0,0,0); self.calendar_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll_area.setWidget(self.calendar_list_widget)
         self.stack.addWidget(page)
-
+        
     def on_lock_mode_toggled(self, state):
         """잠금 모드 체크박스 상태 변경 시 호출됩니다."""
         self._mark_as_changed("lock_mode_enabled")
@@ -150,97 +194,149 @@ class SettingsWindow(BaseDialog):
         if not is_checked:
             self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData("Normal"))
             self._mark_as_changed("window_mode")
+# settings_window.py 파일입니다.
 
     def create_appearance_page(self):
-        page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop); layout.setContentsMargins(25, 15, 25, 25)
+        page = QWidget()
+        page.setObjectName("settings_page")
+        layout = QVBoxLayout(page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(25, 15, 25, 25)
         self.nav_list.addItem(QListWidgetItem("🎨 화면"))
+
+        container = QWidget()
+        container.setObjectName("transparent_container")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(container)
         
-        layout.addWidget(self._create_section_label("테마"))
-        form_layout_theme = QFormLayout(); self.theme_combo = QComboBox()
+        container_layout.addWidget(self._create_section_label("테마"))
+        form_layout_theme = QFormLayout()
+        self.theme_combo = QComboBox()
         self.theme_options = { "dark": "어두운 테마", "light": "밝은 테마" }
         for value, text in self.theme_options.items(): self.theme_combo.addItem(text, value)
         self.theme_combo.setCurrentIndex(self.theme_combo.findData(self.temp_settings.get("theme", "dark")))
         self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
-        form_layout_theme.addRow("테마 선택:", self.theme_combo); layout.addLayout(form_layout_theme)
+        form_layout_theme.addRow("테마 선택:", self.theme_combo)
+        container_layout.addLayout(form_layout_theme)
         
-        layout.addWidget(self._create_section_label("투명도"))
-        form_layout_opacity = QFormLayout(); opacity_widget = QWidget(); opacity_layout = QHBoxLayout(opacity_widget)
-        opacity_layout.setContentsMargins(0,0,0,0); self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.opacity_slider.setRange(20, 100); self.opacity_slider.setValue(int(self.temp_settings.get("window_opacity", 0.95) * 100))
-        self.opacity_label = QLabel(f"{self.opacity_slider.value()}%"); self.opacity_label.setMinimumWidth(40)
+        container_layout.addWidget(self._create_section_label("투명도"))
+        form_layout_opacity = QFormLayout()
+        opacity_widget = QWidget()
+        opacity_layout = QHBoxLayout(opacity_widget)
+        opacity_layout.setContentsMargins(0,0,0,0)
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(20, 100)
+        self.opacity_slider.setValue(int(self.temp_settings.get("window_opacity", 0.95) * 100))
+        self.opacity_label = QLabel(f"{self.opacity_slider.value()}%")
+        self.opacity_label.setMinimumWidth(40)
         self.opacity_slider.valueChanged.connect(self.on_opacity_changed)
-        opacity_layout.addWidget(self.opacity_slider); opacity_layout.addWidget(self.opacity_label)
-        form_layout_opacity.addRow("전체 투명도:", opacity_widget); layout.addLayout(form_layout_opacity)
 
-        # ▼▼▼ [수정] 창 동작(Window Behavior) 섹션 추가 ▼▼▼
-        layout.addWidget(self._create_section_label("창 동작"))
-        form_layout_behavior = QFormLayout()
+        is_dark = self.temp_settings.get("theme", "dark") == "dark"
+        theme_color = "#0078D7"
+        groove_bg = "#555" if is_dark else "#DDD"
+        handle_bg = "#FFF" if is_dark else "#F0F0F0"
+        handle_border = "#555" if is_dark else "#999"
 
-        # 창 위치 모드
-        self.window_mode_combo = QComboBox()
-        self.window_mode_options = {"AlwaysOnTop": "항상 위에", "Normal": "일반", "AlwaysOnBottom": "항상 아래에"}
-        for value, text in self.window_mode_options.items():
-            self.window_mode_combo.addItem(text, value)
-        current_window_mode = self.temp_settings.get("window_mode", DEFAULT_WINDOW_MODE)
-        self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData(current_window_mode))
-        self.window_mode_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("window_mode"))
-        form_layout_behavior.addRow("창 위치:", self.window_mode_combo)
+        self.opacity_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                background: {groove_bg}; height: 4px; border-radius: 2px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {theme_color}; height: 4px; border-radius: 2px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {handle_bg}; border: 1px solid {handle_border};
+                width: 14px; height: 14px; margin: -5px 0; border-radius: 7px;
+            }}
+        """)
+        
+        opacity_layout.addWidget(self.opacity_slider)
+        opacity_layout.addWidget(self.opacity_label)
+        form_layout_opacity.addRow("전체 투명도:", opacity_widget)
+        container_layout.addLayout(form_layout_opacity)
 
-        # 잠금 모드 활성화
-        self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
-        is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
-        self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
-        self.lock_mode_checkbox.stateChanged.connect(self.on_lock_mode_toggled)
-        form_layout_behavior.addRow(self.lock_mode_checkbox)
-
-        # 잠금 해제 키 선택
-        self.lock_key_combo = QComboBox()
-        self.lock_key_options = {
-            "Ctrl": "Ctrl", "Alt": "Alt", "Shift": "Shift",
-            "z": "Z", "a": "A", "q": "Q" # 필요한 키 추가 가능
-        }
-        for value, text in self.lock_key_options.items():
-            self.lock_key_combo.addItem(text, value)
-        current_lock_key = self.temp_settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY)
-        self.lock_key_combo.setCurrentIndex(self.lock_key_combo.findData(current_lock_key))
-        self.lock_key_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("lock_mode_key"))
-        self.lock_key_combo.setEnabled(is_lock_mode_enabled) # 잠금 모드가 켜져 있을 때만 활성화
-        form_layout_behavior.addRow("잠금 해제 키:", self.lock_key_combo)
-
-        layout.addLayout(form_layout_behavior)
-
-
-        layout.addWidget(self._create_section_label("달력 표시"))
-        form_layout_display = QFormLayout(); self.start_day_combo = QComboBox()
-        self.start_day_combo.addItem("일요일", 6); self.start_day_combo.addItem("월요일", 0)
-        self.start_day_combo.setCurrentIndex(self.start_day_combo.findData(self.temp_settings.get("start_day_of_week", 6)))
-        self.start_day_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("start_day_of_week"))
-        form_layout_display.addRow("한 주의 시작:", self.start_day_combo)
-        self.hide_weekends_checkbox = QCheckBox("주말(토, 일) 숨기기")
-        self.hide_weekends_checkbox.setChecked(self.temp_settings.get("hide_weekends", False))
-        self.hide_weekends_checkbox.stateChanged.connect(lambda: self._mark_as_changed("hide_weekends"))
-        form_layout_display.addRow(self.hide_weekends_checkbox)
-        layout.addLayout(form_layout_display)
         self.stack.addWidget(page)
+# settings_window.py 파일입니다.
 
     def create_general_page(self):
         page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
         layout.setContentsMargins(25, 15, 25, 25); layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.nav_list.addItem(QListWidgetItem("⚙️ 일반"))
-        layout.addWidget(self._create_section_label("데이터 소스"))
-        self.local_calendar_checkbox = QCheckBox("로컬 캘린더 사용 (calendar.db)")
-        self.local_calendar_checkbox.setChecked(self.temp_settings.get("use_local_calendar", True))
-        self.local_calendar_checkbox.stateChanged.connect(lambda: self._mark_as_changed("use_local_calendar"))
-        layout.addWidget(self.local_calendar_checkbox)
-        layout.addWidget(self._create_section_label("동기화"))
-        form_layout_sync = QFormLayout(); self.sync_interval_combo = QComboBox()
+
+        container = QWidget()
+        container.setObjectName("transparent_container")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(container)
+
+        # --- 동기화 섹션 ---
+        container_layout.addWidget(self._create_section_label("동기화"))
+        form_layout_sync = QFormLayout()
+        self.sync_interval_combo = QComboBox()
         self.sync_options = { 0: "사용 안 함", 1: "1분", 5: "5분", 15: "15분", 30: "30분", 60: "1시간" }
         for minutes, text in self.sync_options.items(): self.sync_interval_combo.addItem(text, minutes)
         self.sync_interval_combo.setCurrentIndex(self.sync_interval_combo.findData(self.temp_settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)))
         self.sync_interval_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("sync_interval_minutes"))
         form_layout_sync.addRow("자동 동기화 주기:", self.sync_interval_combo)
-        layout.addLayout(form_layout_sync)
+        container_layout.addLayout(form_layout_sync)
+        
+        # ▼▼▼ [추가] 섹션 사이에 여백을 추가합니다. ▼▼▼
+        container_layout.addSpacing(25)
+
+        # --- 창 동작 섹션 ---
+        container_layout.addWidget(self._create_section_label("창 동작"))
+        form_layout_behavior = QFormLayout()
+
+        self.window_mode_combo = QComboBox()
+        self.window_mode_options = {"AlwaysOnTop": "항상 위에", "Normal": "일반", "AlwaysOnBottom": "항상 아래에"}
+        for value, text in self.window_mode_options.items(): self.window_mode_combo.addItem(text, value)
+        current_window_mode = self.temp_settings.get("window_mode", DEFAULT_WINDOW_MODE)
+        self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData(current_window_mode))
+        self.window_mode_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("window_mode"))
+        form_layout_behavior.addRow("창 위치:", self.window_mode_combo)
+
+        self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
+        is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
+        self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
+        self.lock_mode_checkbox.stateChanged.connect(self.on_lock_mode_toggled)
+        # ▼▼▼ [수정] 체크박스 정렬을 위해 빈 라벨과 함께 추가합니다. ▼▼▼
+        form_layout_behavior.addRow("", self.lock_mode_checkbox)
+
+        self.lock_key_combo = QComboBox()
+        self.lock_key_options = { "Ctrl": "Ctrl", "Alt": "Alt", "Shift": "Shift", "z": "Z", "a": "A", "q": "Q" }
+        for value, text in self.lock_key_options.items(): self.lock_key_combo.addItem(text, value)
+        current_lock_key = self.temp_settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY)
+        self.lock_key_combo.setCurrentIndex(self.lock_key_combo.findData(current_lock_key))
+        self.lock_key_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("lock_mode_key"))
+        self.lock_key_combo.setEnabled(is_lock_mode_enabled)
+        form_layout_behavior.addRow("잠금 해제 키:", self.lock_key_combo)
+        container_layout.addLayout(form_layout_behavior)
+
+        # ▼▼▼ [추가] 섹션 사이에 여백을 추가합니다. ▼▼▼
+        container_layout.addSpacing(25)
+
+        # --- 달력 표시 섹션 ---
+        container_layout.addWidget(self._create_section_label("달력 표시"))
+        form_layout_display = QFormLayout()
+        self.start_day_combo = QComboBox()
+        self.start_day_combo.addItem("일요일", 6); self.start_day_combo.addItem("월요일", 0)
+        self.start_day_combo.setCurrentIndex(self.start_day_combo.findData(self.temp_settings.get("start_day_of_week", 6)))
+        self.start_day_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("start_day_of_week"))
+        form_layout_display.addRow("한 주의 시작:", self.start_day_combo)
+        
+        self.hide_weekends_checkbox = QCheckBox("주말(토, 일) 숨기기")
+        self.hide_weekends_checkbox.setChecked(self.temp_settings.get("hide_weekends", False))
+        self.hide_weekends_checkbox.stateChanged.connect(lambda: self._mark_as_changed("hide_weekends"))
+        # ▼▼▼ [수정] 체크박스 정렬을 위해 빈 라벨과 함께 추가합니다. ▼▼▼
+        form_layout_display.addRow("", self.hide_weekends_checkbox)
+        container_layout.addLayout(form_layout_display)
+
+        # ▼▼▼ [추가] 모든 요소를 위쪽으로 밀어 올립니다. ▼▼▼
+        container_layout.addStretch(1)
+
         self.stack.addWidget(page)
 
     def rebuild_ui(self):
@@ -304,7 +400,9 @@ class SettingsWindow(BaseDialog):
         pixmap = QPixmap(16, 16); pixmap.fill(QColor(color_hex)); return QIcon(pixmap)
 
     def create_color_combo(self, cal_id, default_color):
-        combo = QComboBox(); combo.setIconSize(QSize(16, 16)); combo.setMinimumWidth(20); combo.setMaxVisibleItems(5)
+        combo = QComboBox(); combo.setIconSize(QSize(16, 16));
+        combo.setFixedWidth(45)
+        combo.setMaxVisibleItems(5)
         current_color = self.temp_settings.get("calendar_colors", {}).get(cal_id, default_color)
         for color in PASTEL_COLORS["기본"]: combo.addItem(self.create_color_icon(color), "", userData=color)
         if current_color not in PASTEL_COLORS["기본"]: combo.insertItem(0, self.create_color_icon(current_color), "", userData=current_color)
@@ -327,8 +425,6 @@ class SettingsWindow(BaseDialog):
         self.temp_settings.setdefault("calendar_colors", {})[cal_id] = combo.currentData()
 
     def save_and_close(self):
-        # 변경된 값들을 temp_settings에 최종적으로 반영
-        self.temp_settings["use_local_calendar"] = self.local_calendar_checkbox.isChecked()
         self.temp_settings["selected_calendars"] = [cal_id for cal_id, cb in self.checkboxes.items() if cb.isChecked()]
         self.temp_settings.setdefault("calendar_colors", {}).update({cal_id: combo.currentData() for cal_id, combo in self.color_combos.items() if combo.currentData()})
         if "calendar_emojis" in self.temp_settings: del self.temp_settings["calendar_emojis"]

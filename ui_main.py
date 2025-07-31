@@ -51,6 +51,7 @@ class MainWidget(QWidget):
         self.is_resizing = False
         self.is_moving = False
         self.border_width = 5
+        self.active_dialog = None # [추가] 현재 활성화된 다이얼로그를 추적
 
         self._interaction_unlocked = False
         self.lock_key_is_pressed = False
@@ -408,14 +409,19 @@ class MainWidget(QWidget):
             current_widget.update()
 
     def open_settings_window(self):
+        if self.active_dialog is not None:
+            self.active_dialog.activateWindow() # 이미 열려있으면 해당 창을 활성화
+            return
         with self.data_manager.user_action_priority():
             original_settings_snapshot = copy.deepcopy(self.settings)
 
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=QCursor.pos())
+            self.active_dialog = settings_dialog
             settings_dialog.transparency_changed.connect(self.set_window_opacity)
             settings_dialog.theme_changed.connect(self.apply_theme)
             
             result = settings_dialog.exec()
+            self.active_dialog = None # 다이얼로그가 닫히면 초기화
             
             if result == QDialog.DialogCode.Accepted:
                 changed_fields = settings_dialog.get_changed_fields()
@@ -481,6 +487,11 @@ class MainWidget(QWidget):
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
     def open_event_editor(self, data):
+                # ▼▼▼ [수정] 다른 다이얼로그가 열려있는지 확인합니다. ▼▼▼
+        if self.active_dialog is not None:
+            self.active_dialog.activateWindow()
+            return
+        # ▲▲▲ 여기까지 수정 ▲▲▲
         with self.data_manager.user_action_priority():
             all_calendars = self.data_manager.get_all_calendars()
             if not all_calendars:
@@ -494,7 +505,11 @@ class MainWidget(QWidget):
                 editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             
             if editor:
+                 # ▼▼▼ [추가] 활성화된 다이얼로그로 등록하고, 닫힐 때 초기화합니다. ▼▼▼
+                self.active_dialog = editor
                 result = editor.exec()
+                self.active_dialog = None # 다이얼로그가 닫히면 초기화
+                # ▲▲▲ 여기까지 추가 ▲▲▲
                 if result == QDialog.DialogCode.Accepted:
                     event_data = editor.get_event_data()
                     is_recurring = 'recurrence' in event_data.get('body', {})

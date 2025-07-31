@@ -22,7 +22,7 @@
     },
     "sync_interval_minutes": 1,
     "window_opacity": 0.85,
-    "theme": "light",
+    "theme": "dark",
     "last_selected_calendar_id": "thejurio@gmail.com",
     "always_on_top": false,
     "window_position": null,
@@ -31,7 +31,7 @@
     "default_notification_time": 10,
     "start_day_of_week": 6,
     "hide_weekends": false,
-    "window_mode": "Normal",
+    "window_mode": "AlwaysOnBottom",
     "lock_mode_enabled": false,
     "lock_mode_key": "z"
 }

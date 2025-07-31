@@ -1,6 +1,6 @@
 
     /* ... (기존 스타일시트 내용은 변경 없음) ... */
-    QWidget { background-color: #2E2E2E; color: #FFFFFF; border: none; font-family: "Malgun Gothic"; font-size: 10pt; }
+    QWidget { background-color:transparent;  color: #FFFFFF; border: none; font-family: "Malgun Gothic"; font-size: 10pt; }
     QWidget#main_background {
         background-color: rgb(30, 30, 30);
         border-radius: 10px;

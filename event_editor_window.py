@@ -4,7 +4,7 @@ from dateutil.rrule import rrulestr, rrule, YEARLY, MONTHLY, WEEKLY, DAILY # 임
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox, QWidget, QStackedWidget)
-from PyQt6.QtCore import QDateTime, Qt
+from PyQt6.QtCore import QDateTime, Qt, QTimer
 
 from custom_dialogs import CustomMessageBox, BaseDialog
 from config import GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME
@@ -33,7 +33,6 @@ class EventEditorWindow(BaseDialog):
         self.populate_data()
 
     def initUI(self):
-        # ... (기존 initUI 상단 부분은 동일) ...
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         background_widget = QWidget()
@@ -273,8 +272,14 @@ class EventEditorWindow(BaseDialog):
 
     def toggle_time_edit(self, state):
         is_all_day = (state == Qt.CheckState.Checked.value)
-        self.start_time_edit.setDisplayFormat("yyyy-MM-dd" if is_all_day else "yyyy-MM-dd hh:mm")
-        self.end_time_edit.setDisplayFormat("yyyy-MM-dd" if is_all_day else "yyyy-MM-dd hh:mm")
+        new_format = "yyyy-MM-dd" if is_all_day else "yyyy-MM-dd hh:mm"
+        
+        self.start_time_edit.setDisplayFormat(new_format)
+        self.end_time_edit.setDisplayFormat(new_format)
+        
+        # ▼▼▼ [수정] 창 크기를 내용물에 맞게 강제로 다시 조정합니다. ▼▼▼
+        QTimer.singleShot(0, self.adjustSize)
+        
 
     def populate_data(self):
         """기존 데이터를 UI에 채웁니다."""
