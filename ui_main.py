@@ -1,12 +1,13 @@
 import sys
 import datetime
 import copy
+import os
 
-# ▼▼▼ [수정] win32gui, win32con, QSystemTrayIcon 임포트 추가 ▼▼▼
 if sys.platform == "win32":
     import win32gui
     import win32con
     import win32api
+    import windows_startup
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon, QMessageBox)
@@ -64,6 +65,24 @@ class MainWidget(QWidget):
             self.set_as_desktop_child()
         
         self.apply_window_settings()
+        self.sync_startup_setting()
+
+    def sync_startup_setting(self):
+        """설정 파일과 레지스트리의 자동 시작 상태를 동기화합니다."""
+        if sys.platform != "win32":
+            return
+
+        should_start_on_boot = self.settings.get("start_on_boot", False)
+        is_currently_in_startup = windows_startup.is_in_startup()
+
+        try:
+            if should_start_on_boot and not is_currently_in_startup:
+                windows_startup.add_to_startup()
+            elif not should_start_on_boot and is_currently_in_startup:
+                windows_startup.remove_from_startup()
+        except Exception as e:
+            # 사용자에게 오류를 알릴 수 있는 방법을 고려 (예: 상태 표시줄, 대화상자)
+            print(f"자동 시작 설정 동기화 중 오류 발생: {e}")
 
     def set_as_desktop_child(self):
         try:
@@ -435,6 +454,9 @@ class MainWidget(QWidget):
                 
                 if any(field in changed_fields for field in ["window_mode", "lock_mode_enabled", "lock_mode_key"]):
                     self.apply_window_settings()
+                
+                if "start_on_boot" in changed_fields:
+                    self.sync_startup_setting()
 
                 grid_structure_changes = {"start_day_of_week", "hide_weekends"}
                 if any(field in changed_fields for field in grid_structure_changes):

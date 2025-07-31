@@ -313,6 +313,12 @@ class SettingsWindow(BaseDialog):
         self.lock_key_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("lock_mode_key"))
         self.lock_key_combo.setEnabled(is_lock_mode_enabled)
         form_layout_behavior.addRow("잠금 해제 키:", self.lock_key_combo)
+
+        self.startup_checkbox = QCheckBox("Windows 시작 시 자동 실행")
+        self.startup_checkbox.setChecked(self.temp_settings.get("start_on_boot", False))
+        self.startup_checkbox.stateChanged.connect(lambda: self._mark_as_changed("start_on_boot"))
+        form_layout_behavior.addRow("", self.startup_checkbox)
+        
         container_layout.addLayout(form_layout_behavior)
 
         # ▼▼▼ [추가] 섹션 사이에 여백을 추가합니다. ▼▼▼
@@ -436,6 +442,7 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["window_mode"] = self.window_mode_combo.currentData()
         self.temp_settings["lock_mode_enabled"] = self.lock_mode_checkbox.isChecked()
         self.temp_settings["lock_mode_key"] = self.lock_key_combo.currentData()
+        self.temp_settings["start_on_boot"] = self.startup_checkbox.isChecked()
 
         # 원본 설정 업데이트
         self.original_settings.clear()
