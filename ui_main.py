@@ -506,15 +506,46 @@ class MainWidget(QWidget):
     def mouseReleaseEvent(self, event):
         if not self.is_interaction_unlocked() and not self.lock_key_is_pressed:
             return
+        
         if event.button() == Qt.MouseButton.LeftButton:
+            if self.is_moving:
+                self.snap_to_screen_edges()
+
             if self.is_resizing:
                 self.end_resize()
+
             self.is_moving = False
             self.is_resizing = False
             self.oldPos = None
             self.unsetCursor()
+
         if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED) and not self.lock_key_is_pressed:
             QTimer.singleShot(50, self.lock_interactions)
+
+    def snap_to_screen_edges(self):
+        """창을 화면 가장자리에 스냅합니다."""
+        snap_threshold = 45
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        win_rect = self.frameGeometry()
+
+        new_pos = win_rect.topLeft()
+
+        # 왼쪽 가장자리
+        if abs(win_rect.left() - screen_geometry.left()) < snap_threshold:
+            new_pos.setX(screen_geometry.left())
+        # 오른쪽 가장자리
+        elif abs(win_rect.right() - screen_geometry.right()) < snap_threshold:
+            new_pos.setX(screen_geometry.right() - win_rect.width())
+        
+        # 위쪽 가장자리
+        if abs(win_rect.top() - screen_geometry.top()) < snap_threshold:
+            new_pos.setY(screen_geometry.top())
+        # 아래쪽 가장자리
+        elif abs(win_rect.bottom() - screen_geometry.bottom()) < snap_threshold:
+            new_pos.setY(screen_geometry.bottom() - win_rect.height())
+
+        if new_pos != win_rect.topLeft():
+            self.move(new_pos)
 
 if __name__ == '__main__':
     settings = load_settings()

@@ -13,10 +13,17 @@ class ClickableLabel(QLabel):
     """클릭 이벤트를 처리할 수 있는 커스텀 QLabel"""
     clicked = pyqtSignal()
 
-    def __init__(self, parent=None):
+    # ▼▼▼ [수정] main_widget 참조를 받도록 __init__ 변경 ▼▼▼
+    def __init__(self, main_widget, parent=None):
         super().__init__(parent)
+        self.main_widget = main_widget
+    # ▲▲▲ 여기까지 수정 ▲▲▲
 
     def mousePressEvent(self, event):
+        # ▼▼▼ [수정] 잠금 상태 확인 ▼▼▼
+        if not self.main_widget.is_interaction_unlocked():
+            return
+        # ▲▲▲ 여기까지 수정 ▲▲▲
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
@@ -116,6 +123,10 @@ class AllDayCanvas(QWidget):
 
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            QToolTip.hideText()
+            return
+            
         event_under_mouse = self.get_event_at(event.pos())
         current_event_id = event_under_mouse.get('id') if event_under_mouse else None
         
@@ -157,6 +168,9 @@ class AllDayCanvas(QWidget):
             draw_event(painter, rect, event_data, time_text="", summary_text=summary, is_completed=is_completed)
 
     def mouseDoubleClickEvent(self, event):
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            return
+            
         clicked_event = self.get_event_at(event.pos())
         if clicked_event:
             self.parent_view.edit_event_requested.emit(clicked_event)
@@ -188,6 +202,10 @@ class TimeGridCanvas(QWidget):
 
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            QToolTip.hideText()
+            return
+            
         event_under_mouse = self.get_event_at(event.pos())
         current_event_id = event_under_mouse.get('id') if event_under_mouse else None
         
@@ -267,6 +285,9 @@ class TimeGridCanvas(QWidget):
         painter.restore()
 
     def mouseDoubleClickEvent(self, event):
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            return
+            
         clicked_event = self.get_event_at(event.pos())
         if clicked_event:
             self.parent_view.edit_event_requested.emit(clicked_event)
@@ -299,7 +320,10 @@ class WeekViewWidget(BaseViewWidget):
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
         
-        self.week_range_label = ClickableLabel()
+        # ▼▼▼ [수정] ClickableLabel 생성 시 main_widget 전달 ▼▼▼
+        self.week_range_label = ClickableLabel(self.main_widget)
+        # ▲▲▲ 여기까지 수정 ▲▲▲
+        
         self.week_range_label.setObjectName("week_range_label")
         self.week_range_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.week_range_label.clicked.connect(self.open_week_selection_dialog)
@@ -338,16 +362,31 @@ class WeekViewWidget(BaseViewWidget):
         self.timeline.setStyleSheet("background-color: #FF3333;")
 
     def open_week_selection_dialog(self):
+        if not self.main_widget.is_interaction_unlocked():
+            return
         dialog = WeekSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
         if dialog.exec():
             new_date = dialog.get_selected_date()
             self.date_selected.emit(new_date)
 
     def go_to_previous_week(self):
+        if not self.main_widget.is_interaction_unlocked():
+            return
         self.navigation_requested.emit("backward")
 
     def go_to_next_week(self):
+        if not self.main_widget.is_interaction_unlocked():
+            return
         self.navigation_requested.emit("forward")
+            
+    def contextMenuEvent(self, event):
+        if not self.main_widget.is_interaction_unlocked():
+            return
+            
+        # context menu 로직은 MainWidget에서 처리하므로 여기서는 전달만 함
+        # MainWidget의 contextMenuEvent가 호출되도록 이벤트를 상위로 전달
+        # 혹은, BaseViewWidget에 공통 로직을 만들고 호출
+        super().contextMenuEvent(event)
 
     def _get_start_of_week(self):
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)
@@ -408,45 +447,26 @@ class WeekViewWidget(BaseViewWidget):
             
         return datetime.datetime(target_date.year, target_date.month, target_date.day, hour, minute)
 
-    def show_context_menu(self, global_pos, target_event):
-        menu = QMenu(self)
-        main_opacity = self.main_widget.settings.get("window_opacity", 0.95)
-        menu_opacity = main_opacity + (1 - main_opacity) * 0.85
-        menu.setWindowOpacity(menu_opacity)
+    def set_tooltips_enabled(self, enabled):
+        self.tooltips_enabled = enabled
+        if not enabled:
+            QToolTip.hideText()
 
-        if target_event:
-            event_id = target_event.get('id')
-            is_completed = self.data_manager.is_event_completed(event_id)
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        if not self.tooltips_enabled:
+            return
 
-            edit_action = QAction("수정", self)
-            edit_action.triggered.connect(lambda: self.edit_event_requested.emit(target_event))
-            menu.addAction(edit_action)
-
-            if is_completed:
-                reopen_action = QAction("진행", self)
-                reopen_action.triggered.connect(lambda: self.data_manager.unmark_event_as_completed(event_id))
-                menu.addAction(reopen_action)
-            else:
-                complete_action = QAction("완료", self)
-                complete_action.triggered.connect(lambda: self.data_manager.mark_event_as_completed(event_id))
-                menu.addAction(complete_action)
-
-            delete_action = QAction("삭제", self)
-            delete_action.triggered.connect(lambda: self.confirm_delete_event(target_event))
-            menu.addAction(delete_action)
+        # 마우스 위치에 따라 올바른 자식 위젯(Canvas)을 찾아서 툴팁 로직 실행
+        target_widget = self.childAt(event.pos())
+        if isinstance(target_widget, (AllDayCanvas, TimeGridCanvas)):
+            local_pos = target_widget.mapFrom(self, event.pos())
+            # 각 캔버스가 자체적으로 mouseMoveEvent를 처리하도록 호출
+            target_widget.mouseMoveEvent(
+                event.__class__(local_pos, event.globalPosition(), event.button(), event.buttons(), event.modifiers())
+            )
         else:
-            clicked_widget = self.childAt(self.mapFromGlobal(global_pos))
-            if isinstance(clicked_widget, (TimeGridCanvas, AllDayCanvas)):
-                 local_pos = clicked_widget.mapFromGlobal(global_pos)
-                 if isinstance(clicked_widget, TimeGridCanvas):
-                    target_datetime = self._get_datetime_from_pos(local_pos)
-                    if target_datetime:
-                        add_action = QAction("일정 추가", self)
-                        add_action.triggered.connect(lambda: self.add_event_requested.emit(target_datetime))
-                        menu.addAction(add_action)
-
-        self.main_widget.add_common_context_menu_actions(menu)
-        menu.exec(global_pos)
+            QToolTip.hideText()
 
     def update_timeline(self):
         now = datetime.datetime.now()

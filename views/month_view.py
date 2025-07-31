@@ -26,6 +26,11 @@ class DayCellWidget(QWidget):
         self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
     def mouseDoubleClickEvent(self, event):
+        # ▼▼▼ [수정] 잠금 상태 확인 ▼▼▼
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            return
+        # ▲▲▲ 여기까지 수정 ▲▲▲
+        
         # MonthViewWidget에서 직접 처리하므로, 여기서는 단순 요청만 보냄
         self.add_event_requested.emit(self.date_obj)
 
@@ -37,6 +42,7 @@ class MonthViewWidget(BaseViewWidget):
         self.event_rects = []  # (QRect, event_data) 튜플 저장
         self.more_buttons = {} # {date: QRect} 딕셔너리 저장
         self.hovered_event_id = None
+        self.tooltips_enabled = True
         self.setMouseTracking(True)
         self.initUI()
         self.refresh()
@@ -62,6 +68,9 @@ class MonthViewWidget(BaseViewWidget):
         main_layout.addLayout(self.calendar_grid)
 
     def open_date_selection_dialog(self):
+        if not self.main_widget.is_interaction_unlocked():
+            return
+            
         dialog = NewDateSelectionDialog(self.current_date, self, settings=self.main_widget.settings, pos=QCursor.pos())
         if dialog.exec():
             year, month = dialog.get_selected_date()
@@ -69,6 +78,9 @@ class MonthViewWidget(BaseViewWidget):
             self.date_selected.emit(new_date)
 
     def show_more_events_popup(self, date_obj, events):
+        if not self.main_widget.is_interaction_unlocked():
+            return
+            
         dialog = MoreEventsDialog(date_obj, events, self, settings=self.main_widget.settings, pos=QCursor.pos(), data_manager=self.data_manager)
         dialog.edit_requested.connect(self.edit_event_requested)
         dialog.delete_requested.connect(self.confirm_delete_event)
@@ -175,41 +187,6 @@ class MonthViewWidget(BaseViewWidget):
         QTimer.singleShot(0, self.redraw_events_with_current_data)
 
     def redraw_events_with_current_data(self):
-        all_events = self.data_manager.get_events(self.current_date.year, self.current_date.month)
-        selected_ids = self.main_widget.settings.get("selected_calendars", [])
-        filtered_events = [event for event in all_events if event.get('calendarId') in selected_ids]
-        
-        # 1. 레이아웃 계산
-        calculator = MonthLayoutCalculator(filtered_events, self.date_to_cell_map.keys())
-        event_positions, _ = calculator.calculate()
-
-        # 2. 날짜별로 이벤트 레이아웃 정보 그룹화
-        events_by_day = defaultdict(list)
-        y_offset, event_height, event_spacing = 25, 20, 2
-
-        for pos_info in event_positions:
-            event = pos_info['event']
-            y_level = pos_info['y_level']
-            
-            for day in pos_info['days_in_view']:
-                start_cell_info = self.date_to_cell_map.get(day)
-                if not start_cell_info: continue
-                
-                # 셀 안에서의 y 좌표 계산
-                y = y_offset + (y_level * (event_height + event_spacing))
-                
-                # 여러 날에 걸친 이벤트의 스타일 정보 계산 (왼쪽/오른쪽 모서리 둥글게)
-                is_start = day == pos_info['start_date']
-                is_end = day == pos_info['end_date']
-                style_info = {'is_start': is_start, 'is_end': is_end}
-                
-                rect = QRect(0, y, start_cell_info.width(), event_height) # DayCellWidget 내부 좌표
-                events_by_day[day].append((rect, event, style_info))
-        
-        # 3. 각 DayCellWidget에 그릴 데이터 전달 -> 이제 MonthViewWidget이 직접 그림
-        self.update() # paintEvent 호출
-
-    def redraw_events_with_current_data(self):
         # 데이터 변경 시 전체 그리드를 다시 만들 필요 없이, paintEvent만 다시 호출합니다.
         self.update()
 
@@ -279,12 +256,10 @@ class MonthViewWidget(BaseViewWidget):
                 adjusted_rect = rect.adjusted(2, 0, -2, 0)
                 is_completed = self.data_manager.is_event_completed(event_data.get('id'))
                 
-                # ▼▼▼ [수정] 그리는 순간에 최신 색상 가져와 적용 ▼▼▼
                 event_data_copy = event_data.copy()
                 event_data_copy['color'] = self.data_manager.get_color_for_calendar(event_data.get('calendarId'))
                 
                 draw_event(painter, adjusted_rect, event_data_copy, time_text=None, summary_text=summary, is_completed=is_completed)
-                # ▲▲▲ 여기까지 수정 ▲▲▲
                 self.event_rects.append((rect, event_data))
 
             if more_events_data:
@@ -304,6 +279,9 @@ class MonthViewWidget(BaseViewWidget):
         return None
 
     def mouseDoubleClickEvent(self, event):
+        if not self.main_widget.is_interaction_unlocked():
+            return
+            
         clicked_event = self.get_event_at(event.pos())
         if clicked_event:
             self.edit_event_requested.emit(clicked_event)
@@ -313,6 +291,9 @@ class MonthViewWidget(BaseViewWidget):
                 self.add_event_requested.emit(target_widget.date_obj)
 
     def mousePressEvent(self, event):
+        if not self.main_widget.is_interaction_unlocked():
+            return
+            
         for date, (rect, data) in self.more_buttons.items():
             if rect.contains(event.pos()):
                 self.show_more_events_popup(date, data)
@@ -320,6 +301,11 @@ class MonthViewWidget(BaseViewWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if not self.tooltips_enabled or not self.main_widget.is_interaction_unlocked():
+            QToolTip.hideText()
+            super().mouseMoveEvent(event)
+            return
+
         event_under_mouse = self.get_event_at(event.pos())
         current_event_id = event_under_mouse.get('id') if event_under_mouse else None
         
@@ -332,12 +318,18 @@ class MonthViewWidget(BaseViewWidget):
         super().mouseMoveEvent(event)
 
     def go_to_previous_month(self):
+        if not self.main_widget.is_interaction_unlocked():
+            return
         self.navigation_requested.emit("backward")
 
     def go_to_next_month(self):
+        if not self.main_widget.is_interaction_unlocked():
+            return
         self.navigation_requested.emit("forward")
 
     def contextMenuEvent(self, event):
+        if not self.main_widget.is_interaction_unlocked():
+            return
         pos = event.pos()
         target_event = self.get_event_at(pos)
         

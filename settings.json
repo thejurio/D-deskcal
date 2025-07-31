@@ -1,16 +1,16 @@
 {
     "geometry": [
-        675,
-        111,
-        1127,
-        680
+        922,
+        0,
+        613,
+        603
     ],
     "use_local_calendar": false,
     "selected_calendars": [
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "family01556510902891015712@group.calendar.google.com",
         "thejurio@gmail.com",
         "ko.south_korea#holiday@group.v.calendar.google.com",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
@@ -30,5 +30,8 @@
     "notifications_enabled": true,
     "default_notification_time": 10,
     "start_day_of_week": 6,
-    "hide_weekends": false
+    "hide_weekends": false,
+    "window_mode": "Normal",
+    "lock_mode_enabled": false,
+    "lock_mode_key": "z"
 }
