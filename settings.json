@@ -16,7 +16,7 @@
     "sync_interval_minutes": 5,
     "start_day_of_week": 6,
     "hide_weekends": false,
-    "window_opacity": 0.6,
+    "window_opacity": 0.9,
     "theme": "dark",
     "window_mode": "AlwaysOnBottom",
     "lock_mode_enabled": false,
@@ -34,5 +34,6 @@
     "user_timezone": "Asia/Seoul",
     "notification_duration": 10,
     "all_day_notification_enabled": true,
-    "all_day_notification_time": "09:00"
+    "all_day_notification_time": "09:00",
+    "gemini_api_key": "AIzaSyDoU23UxiSeeDKse-ENESPZ8oNFMxi56d8"
 }

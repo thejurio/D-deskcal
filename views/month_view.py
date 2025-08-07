@@ -4,7 +4,7 @@ import calendar
 from collections import defaultdict
 from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, 
                              QPushButton, QMenu, QSizePolicy, QApplication, QStackedWidget)
-from PyQt6.QtGui import QFont, QCursor, QPainter, QColor, QAction, QFontMetrics, QPixmap, QTransform
+from PyQt6.QtGui import QFont, QCursor, QPainter, QColor, QAction, QFontMetrics, QPixmap, QTransform, QIcon
 from PyQt6.QtCore import (Qt, pyqtSignal, QTimer, QRect, QSize, QPropertyAnimation, 
                           pyqtProperty, QSequentialAnimationGroup)
 from PyQt6.QtSvg import QSvgRenderer
@@ -130,11 +130,20 @@ class MonthViewWidget(BaseViewWidget):
         self.sync_status_container.addWidget(QWidget()) # 0번 페이지: 빈 위젯
         self.sync_status_container.addWidget(self.sync_icon) # 1번 페이지: 회전 아이콘
 
+        ai_add_button = QPushButton()
+        ai_add_button.setIcon(QIcon("icons/search.svg")) # 임시 아이콘
+        ai_add_button.setIconSize(QSize(20, 20))
+        ai_add_button.setObjectName("ai_add_button")
+        ai_add_button.setFixedSize(30, 28)
+        ai_add_button.setToolTip("AI로 일정 추가")
+        ai_add_button.clicked.connect(self.main_widget.open_ai_input_dialog)
+
         nav_layout.addWidget(prev_button)
-        nav_layout.addStretch(11) # 왼쪽 공간을 11의 비율로 설정
+        nav_layout.addStretch(1)
         nav_layout.addWidget(self.month_button)
         nav_layout.addWidget(self.sync_status_container)
-        nav_layout.addStretch(10) # 오른쪽 공간을 10의 비율로 설정
+        nav_layout.addWidget(ai_add_button)
+        nav_layout.addStretch(1)
         nav_layout.addWidget(next_button)
         # --- 여기까지 수정 ---
         

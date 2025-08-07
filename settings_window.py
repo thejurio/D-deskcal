@@ -3,11 +3,12 @@ import copy
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QHBoxLayout,
                              QColorDialog, QComboBox, QSlider, QSizePolicy,
-                             QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit)
+                             QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit, QLineEdit)
 from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime, QObject, QThread
 
 from custom_dialogs import BaseDialog
+import gemini_parser
 from config import (DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, 
                     DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE,
                     DEFAULT_NOTIFICATIONS_ENABLED, DEFAULT_NOTIFICATION_MINUTES,
@@ -18,6 +19,14 @@ PASTEL_COLORS = {
     "기본": ["#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", "#a0c4ff", "#bdb2ff", "#ffc6ff", "#e4e4e4", "#f1f1f1"]
 }
 CUSTOM_COLOR_TEXT = "사용자 지정..."
+
+class ApiKeyVerifier(QObject):
+    """API 키 유효성 검사를 백그라운드 스레드에서 실행하는 워커"""
+    verification_finished = pyqtSignal(bool, str)
+
+    def run(self, api_key):
+        is_valid, message = gemini_parser.verify_api_key(api_key)
+        self.verification_finished.emit(is_valid, message)
 
 class SettingsWindow(BaseDialog):
     transparency_changed = pyqtSignal(float)
@@ -172,9 +181,77 @@ class SettingsWindow(BaseDialog):
         layout.addWidget(self._create_section_label("Google 계정 연동"))
         account_layout = QHBoxLayout(); self.account_status_label = QLabel("상태 확인 중..."); self.account_button = QPushButton("로그인")
         account_layout.addWidget(self.account_status_label, 1); account_layout.addWidget(self.account_button)
-        layout.addLayout(account_layout)
         self.account_button.clicked.connect(self.handle_account_button_click)
+        layout.addLayout(account_layout)
+
+        layout.addSpacing(20)
+        layout.addWidget(self._create_section_label("Gemini AI 연동"))
+        
+        # API 키 입력 필드와 확인 버튼을 위한 레이아웃
+        api_key_layout = QHBoxLayout()
+        self.gemini_api_key_input = QLineEdit()
+        self.gemini_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.gemini_api_key_input.setPlaceholderText("Gemini API 키를 여기에 붙여넣으세요")
+        self.verify_api_key_button = QPushButton("확인")
+        api_key_layout.addWidget(self.gemini_api_key_input)
+        api_key_layout.addWidget(self.verify_api_key_button)
+        
+        # API 키 확인 결과 표시 라벨
+        self.api_key_status_label = QLabel("")
+        self.api_key_status_label.setStyleSheet("font-size: 8pt; padding-left: 5px;")
+
+        gemini_form_layout = QFormLayout()
+        gemini_form_layout.addRow("API 키:", api_key_layout)
+        gemini_form_layout.addRow("", self.api_key_status_label)
+        layout.addLayout(gemini_form_layout)
+        
+        current_api_key = self.temp_settings.get("gemini_api_key")
+        if current_api_key:
+            self.gemini_api_key_input.setPlaceholderText(f"저장된 키 유지 (마지막 4자리: {current_api_key[-4:]})")
+            
+        # 시그널 연결
+        self.gemini_api_key_input.textChanged.connect(self.on_api_key_text_changed)
+        self.verify_api_key_button.clicked.connect(self.on_verify_api_key_clicked)
+        
         self.stack.addWidget(page)
+
+    def on_api_key_text_changed(self):
+        self._mark_as_changed("gemini_api_key")
+        self.api_key_status_label.setText("") # 키가 변경되면 확인 상태 초기화
+
+    def on_verify_api_key_clicked(self):
+        api_key = self.gemini_api_key_input.text().strip()
+        if not api_key:
+            # 입력 필드가 비어있으면 기존 키로 확인 시도
+            api_key = self.temp_settings.get("gemini_api_key")
+            if not api_key:
+                self.api_key_status_label.setText("오류: 확인할 API 키가 없습니다.")
+                self.api_key_status_label.setStyleSheet("color: #E57373;")
+                return
+
+        self.api_key_status_label.setText("확인 중...")
+        self.api_key_status_label.setStyleSheet("color: #9E9E9E;")
+        self.verify_api_key_button.setEnabled(False)
+
+        # 백그라운드 스레드에서 API 키 확인 실행
+        self.worker = ApiKeyVerifier()
+        self.thread = QThread()
+        self.worker.moveToThread(self.thread)
+        self.worker.verification_finished.connect(self.on_verification_finished)
+        self.thread.started.connect(lambda: self.worker.run(api_key))
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def on_verification_finished(self, is_valid, message):
+        self.api_key_status_label.setText(message)
+        if is_valid:
+            self.api_key_status_label.setStyleSheet("color: #81C784;") # Green
+        else:
+            self.api_key_status_label.setStyleSheet("color: #E57373;") # Red
+        
+        self.verify_api_key_button.setEnabled(True)
+        self.thread.quit()
+        self.worker.deleteLater()
     
     def create_calendars_page(self):
         page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
@@ -554,6 +631,11 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["notification_duration"] = self.notification_duration_combo.currentData()
         self.temp_settings["all_day_notification_enabled"] = self.all_day_notification_checkbox.isChecked()
         self.temp_settings["all_day_notification_time"] = self.all_day_notification_time_edit.time().toString("HH:mm")
+
+        # Gemini API 키 저장 로직 추가
+        new_api_key = self.gemini_api_key_input.text().strip()
+        if new_api_key:
+            self.temp_settings["gemini_api_key"] = new_api_key
 
         # 원본 설정 업데이트
         self.original_settings.clear()

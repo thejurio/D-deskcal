@@ -1,6 +1,6 @@
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect)
+                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QAction
 
@@ -39,7 +39,7 @@ class CustomMessageBox(BaseDialog):
         super().__init__(parent, settings, pos)
         self.setWindowTitle(title)
         self.setModal(True)
-        self.setMinimumWidth(350)
+        self.setMinimumWidth(400)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         background_widget = QWidget()
@@ -565,3 +565,41 @@ class EventPopover(BaseDialog):
                  end_date_adjusted = end_date - datetime.timedelta(days=1)
                  return f"{start_date.strftime('%m월 %d일')} - {end_date_adjusted.strftime('%m월 %d일')}"
         return ""
+
+class AIEventInputDialog(BaseDialog):
+    def __init__(self, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
+        self.setWindowTitle("AI로 일정 추가")
+        self.setModal(True)
+        self.setMinimumSize(450, 300)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+
+        title_label = QLabel("분석할 텍스트를 입력하세요")
+        title_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
+        content_layout.addWidget(title_label)
+
+        self.text_input = QTextEdit()
+        self.text_input.setPlaceholderText("여기에 이메일, 메신저 대화 내용 등을 붙여넣으세요...")
+        content_layout.addWidget(self.text_input)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        self.analyze_button = QPushButton("분석 시작")
+        self.analyze_button.setDefault(True)
+        self.analyze_button.clicked.connect(self.accept)
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.analyze_button)
+        content_layout.addLayout(button_layout)
+
+    def get_text(self):
+        return self.text_input.toPlainText()

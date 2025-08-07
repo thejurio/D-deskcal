@@ -29,6 +29,9 @@ from event_editor_window import EventEditorWindow
 from search_dialog import SearchDialog
 from notification_manager import NotificationPopup
 from timezone_helper import get_timezone_from_ip
+from custom_dialogs import AIEventInputDialog, CustomMessageBox
+from ai_confirmation_dialog import AIConfirmationDialog
+import gemini_parser
 
 def load_stylesheet(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
@@ -294,6 +297,14 @@ class MainWidget(QWidget):
         self.lock_button.setStyleSheet("padding-bottom: 2px;")
         self.lock_button.clicked.connect(self.toggle_lock_mode)
 
+        ai_add_button = QPushButton()
+        ai_add_button.setIcon(QIcon("icons/search.svg")) # 임시 아이콘
+        ai_add_button.setIconSize(QSize(20, 20))
+        ai_add_button.setObjectName("ai_add_button")
+        ai_add_button.setFixedSize(30, 28)
+        ai_add_button.setToolTip("AI로 일정 추가")
+        ai_add_button.clicked.connect(self.open_ai_input_dialog)
+
         view_mode_layout = QHBoxLayout()
         view_mode_layout.setSpacing(5)
 
@@ -305,6 +316,7 @@ class MainWidget(QWidget):
         right_half = QHBoxLayout()
         right_half.addWidget(week_button)
         right_half.addStretch(1)
+        right_half.addWidget(ai_add_button)
         right_half.addWidget(self.lock_button)
         right_half.addWidget(today_button)
 
@@ -547,6 +559,84 @@ class MainWidget(QWidget):
                 self.apply_window_settings()
                 self.refresh_current_view()
 
+    def open_ai_input_dialog(self):
+        if not self.is_interaction_unlocked():
+            return
+            
+        input_dialog = AIEventInputDialog(self, self.settings, pos=self._get_dialog_pos())
+        if not input_dialog.exec():
+            return
+
+        text_to_analyze = input_dialog.get_text()
+        if not text_to_analyze:
+            self.show_error_message("분석할 텍스트가 입력되지 않았습니다.")
+            return
+
+        api_key = self.settings.get("gemini_api_key")
+        if not api_key:
+            self.show_error_message("Gemini API 키가 설정되지 않았습니다.\n[설정 > 계정] 탭에서 API 키를 먼저 등록해주세요.")
+            return
+
+        try:
+            # TODO: 로딩 스피너 표시
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            parsed_events = gemini_parser.parse_events_with_gemini(api_key, text_to_analyze)
+            QApplication.restoreOverrideCursor()
+            
+            if not parsed_events:
+                self.show_error_message("텍스트에서 유효한 일정 정보를 찾지 못했습니다.")
+                return
+            
+            confirmation_dialog = AIConfirmationDialog(parsed_events, self.data_manager, self, self.settings, pos=self._get_dialog_pos())
+            if confirmation_dialog.exec():
+                final_events, calendar_id, provider_name = confirmation_dialog.get_final_events_and_calendar()
+                
+                if not calendar_id:
+                    self.show_error_message("일정을 추가할 캘린더를 선택해주세요.")
+                    return
+
+                for event in final_events:
+                    # DataManager가 요구하는 형식으로 변환
+                    is_deadline_only = event.get('isDeadlineOnly', False)
+                    is_all_day = event.get('isAllDay', False)
+                    
+                    event_body = {
+                        'summary': event['title'],
+                        'start': {},
+                        'end': {},
+                        'location': event.get('location', ''),
+                        'description': event.get('description', '')
+                    }
+
+                    if is_deadline_only:
+                        event_body['summary'] = f"[마감] {event['title']}"
+                        event_body['start']['date'] = event['endDate']
+                        end_date_obj = datetime.date.fromisoformat(event['endDate']) + datetime.timedelta(days=1)
+                        event_body['end']['date'] = end_date_obj.isoformat()
+                    
+                    elif is_all_day:
+                        event_body['start']['date'] = event['startDate']
+                        end_date_obj = datetime.date.fromisoformat(event['endDate']) + datetime.timedelta(days=1)
+                        event_body['end']['date'] = end_date_obj.isoformat()
+
+                    else: # 시간 지정 이벤트
+                        event_body['start']['dateTime'] = f"{event['startDate']}T{event['startTime']}:00"
+                        event_body['end']['dateTime'] = f"{event['endDate']}T{event['endTime']}:00"
+
+                    event_to_add = {
+                        'calendarId': calendar_id,
+                        'provider': provider_name,
+                        'body': event_body
+                    }
+                    self.data_manager.add_event(event_to_add)
+                
+                self.settings['last_selected_calendar_id'] = calendar_id
+                self.show_error_message(f"{len(final_events)}개의 일정을 성공적으로 추가했습니다.", ok_only=True, title="알림")
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            self.show_error_message(f"AI 분석 중 오류가 발생했습니다:\n{e}")
+
     def open_search_dialog(self):
         with self.data_manager.user_action_priority():
             dialog = SearchDialog(self.data_manager, self, self.settings, pos=self._get_dialog_pos())
@@ -623,22 +713,24 @@ class MainWidget(QWidget):
                     event_to_delete = editor.get_event_data()
                     self.data_manager.delete_event(event_to_delete)
 
-    def show_error_message(self, message):
+    def show_error_message(self, message, ok_only=False, title="오류"):
         if not self.is_interaction_unlocked():
             self.tray_icon.showMessage(
-                "오류 발생",
+                title,
                 message,
-                QSystemTrayIcon.MessageIcon.Warning,
+                QSystemTrayIcon.MessageIcon.Warning if title == "오류" else QSystemTrayIcon.MessageIcon.Information,
                 5000
             )
         else:
-            error_dialog = QMessageBox(self)
-            error_dialog.setIcon(QMessageBox.Icon.Warning)
-            error_dialog.setText("오류가 발생했습니다.")
-            error_dialog.setInformativeText(message)
-            error_dialog.setWindowTitle("오류")
-            error_dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
-            error_dialog.exec()
+            dialog = CustomMessageBox(
+                parent=self,
+                title=title,
+                text=message,
+                settings=self.settings,
+                pos=self._get_dialog_pos(),
+                ok_only=ok_only
+            )
+            dialog.exec()
 
     def add_common_context_menu_actions(self, menu):
         if menu.actions(): menu.addSeparator()

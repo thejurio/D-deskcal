@@ -32,3 +32,4 @@ Pillow==10.4.0
 pytz==2024.1
 win10toast==0.9
 tzdata
+google-generativeai 
