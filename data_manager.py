@@ -14,7 +14,7 @@ from providers.local_provider import LocalCalendarProvider
 from config import (DB_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL, 
                     GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_EVENT_COLOR)
-# ... (CachingManager 클래스는 변경 없음) ...
+
 class CachingManager(QObject):
     finished = pyqtSignal()
     def __init__(self, data_manager):
@@ -164,27 +164,45 @@ class CachingManager(QObject):
             self._resume_condition.wait(self._activity_lock)
         locker.unlock()
 
+class ImmediateSyncWorker(QObject):
+    """특정 월의 데이터를 즉시 가져오는 작업을 처리하는 워커"""
+    data_fetched = pyqtSignal(int, int, list)
+    error_occurred = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(self, data_manager, year, month):
+        super().__init__()
+        self.data_manager = data_manager
+        self.year = year
+        self.month = month
+        self._is_running = True
+
+    def run(self):
+        if not self._is_running:
+            self.finished.emit()
+            return
+            
+        print(f"즉시 동기화 워커 시작: {self.year}년 {self.month}월")
+        try:
+            events = self.data_manager._fetch_events_from_providers(self.year, self.month)
+            if events is not None and self._is_running:
+                self.data_fetched.emit(self.year, self.month, events)
+        except Exception as e:
+            error_message = f"'{self.year}년 {self.month}월' 데이터 동기화 중 오류: {e}"
+            print(error_message)
+            self.error_occurred.emit(error_message)
+        finally:
+            self.finished.emit()
+            print(f"즉시 동기화 워커 종료: {self.year}년 {self.month}월")
+
+    def stop(self):
+        self._is_running = False
+
 class DataManager(QObject):
     data_updated = pyqtSignal(int, int)
     calendar_list_changed = pyqtSignal()
     event_completion_changed = pyqtSignal() # 완료 상태 변경 시그널 추가
     error_occurred = pyqtSignal(str) # 오류 발생 시그널 추가
-
-    def report_error(self, message):
-        """오류를 UI 스레드로 안전하게 전달하기 위한 메서드."""
-        self.error_occurred.emit(message)
-
-    def get_color_for_calendar(self, cal_id):
-        """특정 캘린더 ID에 대한 현재 색상 설정을 빠르게 반환합니다."""
-        custom_colors = self.settings.get("calendar_colors", {})
-        if cal_id in custom_colors:
-            return custom_colors[cal_id]
-
-        if not hasattr(self, '_default_color_map_cache') or self._default_color_map_cache is None:
-            all_calendars = self.get_all_calendars() # 캐시된 목록을 사용하므로 빠름
-            self._default_color_map_cache = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
-        
-        return self._default_color_map_cache.get(cal_id, DEFAULT_EVENT_COLOR)
 
     def __init__(self, settings, start_timer=True, load_cache=True):
         super().__init__()
@@ -195,10 +213,11 @@ class DataManager(QObject):
         self.event_cache = {}
         self.completed_event_ids = set() 
         
-        # ▼▼▼ [수정] 캐시 변수 2개 추가 ▼▼▼
         self.calendar_list_cache = None
         self._default_color_map_cache = None
-        # ▲▲▲ 여기까지 수정 ▲▲▲
+        
+        self.immediate_sync_thread = None
+        self.immediate_sync_worker = None
 
         if load_cache:
             self._init_cache_db()
@@ -224,23 +243,30 @@ class DataManager(QObject):
         
         self.setup_providers()
 
+    def report_error(self, message):
+        self.error_occurred.emit(message)
+
+    def get_color_for_calendar(self, cal_id):
+        custom_colors = self.settings.get("calendar_colors", {})
+        if cal_id in custom_colors:
+            return custom_colors[cal_id]
+
+        if not hasattr(self, '_default_color_map_cache') or self._default_color_map_cache is None:
+            all_calendars = self.get_all_calendars()
+            self._default_color_map_cache = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
+        
+        return self._default_color_map_cache.get(cal_id, DEFAULT_EVENT_COLOR)
 
     def _init_completed_events_db(self):
-        """완료된 이벤트 ID 저장을 위한 DB 테이블을 생성합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS completed_events (
-                        event_id TEXT PRIMARY KEY
-                    )
-                """)
+                cursor.execute("CREATE TABLE IF NOT EXISTS completed_events (event_id TEXT PRIMARY KEY)")
                 conn.commit()
         except sqlite3.Error as e:
             print(f"완료 이벤트 DB 테이블 초기화 중 오류 발생: {e}")
 
     def _load_completed_event_ids(self):
-        """DB에서 완료된 이벤트 ID 목록을 로드하여 집합에 저장합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
@@ -251,69 +277,51 @@ class DataManager(QObject):
             print(f"DB에서 완료 이벤트 로드 중 오류 발생: {e}")
 
     def is_event_completed(self, event_id):
-        """주어진 이벤트 ID가 완료되었는지 확인합니다."""
         return event_id in self.completed_event_ids
 
     def mark_event_as_completed(self, event_id):
-        """이벤트를 완료 상태로 표시하고 DB에 저장합니다."""
-        if event_id in self.completed_event_ids:
-            return
+        if event_id in self.completed_event_ids: return
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
                 cursor.execute("INSERT OR IGNORE INTO completed_events (event_id) VALUES (?)", (event_id,))
                 conn.commit()
             self.completed_event_ids.add(event_id)
-            self.event_completion_changed.emit() # UI 즉시 갱신
+            self.event_completion_changed.emit()
             print(f"이벤트 {event_id}를 완료 처리했습니다.")
         except sqlite3.Error as e:
             print(f"이벤트 완료 처리 중 DB 오류 발생: {e}")
 
     def unmark_event_as_completed(self, event_id):
-        """이벤트의 완료 상태를 해제하고 DB에서 삭제합니다."""
-        if event_id not in self.completed_event_ids:
-            return
+        if event_id not in self.completed_event_ids: return
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM completed_events WHERE event_id = ?", (event_id,))
                 conn.commit()
             self.completed_event_ids.discard(event_id)
-            self.event_completion_changed.emit() # UI 즉시 갱신
+            self.event_completion_changed.emit()
             print(f"이벤트 {event_id}를 진행 중으로 변경했습니다.")
         except sqlite3.Error as e:
             print(f"이벤트 진행 중 처리 중 DB 오류 발생: {e}")
 
-
     def _init_cache_db(self):
-        """캐시 저장을 위한 DB 테이블을 생성합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS event_cache (
-                        year INTEGER NOT NULL,
-                        month INTEGER NOT NULL,
-                        events_json TEXT NOT NULL,
-                        PRIMARY KEY (year, month)
-                    )
-                """)
+                cursor.execute("CREATE TABLE IF NOT EXISTS event_cache (year INTEGER NOT NULL, month INTEGER NOT NULL, events_json TEXT NOT NULL, PRIMARY KEY (year, month))")
                 conn.commit()
         except sqlite3.Error as e:
             print(f"캐시 DB 테이블 초기화 중 오류 발생: {e}")
 
     def setup_providers(self):
-        """인증 상태에 따라 Provider 목록을 설정합니다."""
         self.providers = []
-        # Google Provider는 로그인 상태일 때만 추가
         if self.auth_manager.is_logged_in():
             try:
                 google_provider = GoogleCalendarProvider(self.settings, self.auth_manager)
                 self.providers.append(google_provider)
             except Exception as e:
                 print(f"Google Provider 생성 중 오류 발생: {e}")
-        
-        # Local Provider는 항상 추가
         try:
             local_provider = LocalCalendarProvider(self.settings)
             self.providers.append(local_provider)
@@ -321,27 +329,18 @@ class DataManager(QObject):
             print(f"Local Provider 생성 중 오류 발생: {e}")
 
     def on_auth_state_changed(self):
-        """로그인/로그아웃 시 호출됩니다."""
         print("인증 상태 변경 감지. Provider를 재설정하고 데이터를 새로고침합니다.")
         self.setup_providers()
-        
-        # ▼▼▼ [수정] 캐시 초기화 2줄 추가 ▼▼▼
         self.calendar_list_cache = None
         if hasattr(self, '_default_color_map_cache'):
             del self._default_color_map_cache
-        # ▲▲▲ 여기까지 수정 ▲▲▲
-
         self.calendar_list_changed.emit()
-        
-        # 메모리와 DB의 모든 캐시를 삭제
         self.event_cache.clear()
         self.clear_all_cache_db()
-
-        # 현재 보고 있는 달의 데이터를 새로고침
         if self.last_requested_month:
             year, month = self.last_requested_month
-            self.get_events(year, month) # 데이터 다시 요청
-        self.request_full_sync() # 전체 동기화도 요청
+            self.get_events(year, month)
+        self.request_full_sync()
 
     def update_sync_timer(self):
         interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
@@ -356,11 +355,14 @@ class DataManager(QObject):
         self.caching_manager.request_full_sync()
 
     def notify_date_changed(self, new_date, direction="none"):
-        """UI에서 날짜 변경이 있을 때 호출되어 슬라이딩 캐시를 유발합니다."""
         self.last_requested_month = (new_date.year, new_date.month)
         self.caching_manager.request_caching_around(new_date.year, new_date.month, direction)
 
     def stop_caching_thread(self):
+        if self.immediate_sync_thread and self.immediate_sync_thread.isRunning():
+            self.immediate_sync_worker.stop()
+            self.immediate_sync_thread.quit()
+            self.immediate_sync_thread.wait()
         if self.caching_thread and self.caching_thread.isRunning():
             self.caching_manager.stop()
             self.caching_thread.quit()
@@ -375,7 +377,6 @@ class DataManager(QObject):
             self.caching_manager.resume_sync()
 
     def _load_cache_from_db(self):
-        """DB에서 월간 이벤트 캐시를 로드합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
@@ -387,20 +388,15 @@ class DataManager(QObject):
             print(f"DB에서 캐시 로드 중 오류 발생: {e}")
 
     def _save_month_to_cache_db(self, year, month, events):
-        """특정 월의 이벤트 캐시를 DB에 저장(덮어쓰기)합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT OR REPLACE INTO event_cache (year, month, events_json)
-                    VALUES (?, ?, ?)
-                """, (year, month, json.dumps(events)))
+                cursor.execute("INSERT OR REPLACE INTO event_cache (year, month, events_json) VALUES (?, ?, ?)", (year, month, json.dumps(events)))
                 conn.commit()
         except sqlite3.Error as e:
             print(f"DB에 월간 캐시 저장 중 오류 발생: {e}")
 
     def _remove_month_from_cache_db(self, year, month):
-        """특정 월의 캐시를 DB에서 삭제합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
@@ -410,7 +406,6 @@ class DataManager(QObject):
             print(f"DB에서 월간 캐시 삭제 중 오류 발생: {e}")
 
     def clear_all_cache_db(self):
-        """DB의 모든 캐시를 삭제합니다."""
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 cursor = conn.cursor()
@@ -424,48 +419,46 @@ class DataManager(QObject):
         all_events = []
         _, num_days = calendar.monthrange(year, month)
         start_date, end_date = datetime.date(year, month, 1), datetime.date(year, month, num_days)
-        
-        # --- ▼▼▼ [추가] 색상 적용을 위한 정보 미리 준비 ▼▼▼ ---
         all_calendars = self.get_all_calendars()
         custom_colors = self.settings.get("calendar_colors", {})
         default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
-        # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
-
         for provider in self.providers:
             try:
                 events = provider.get_events(start_date, end_date, self)
                 if events is not None:
-                    # --- ▼▼▼ [추가] 가져온 이벤트에 즉시 색상 적용 ▼▼▼ ---
                     for event in events:
                         cal_id = event.get('calendarId')
                         if cal_id:
                             default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
                             event['color'] = custom_colors.get(cal_id, default_color)
-                    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
                     all_events.extend(events)
             except Exception as e:
                 print(f"'{type(provider).__name__}' 이벤트 조회 오류: {e}")
         return all_events
 
-    def force_sync_month(self, year, month):
-        """
-        캐시를 무시하고 특정 월의 데이터를 즉시 동기화한 후 UI를 업데이트합니다.
-        """
-        print(f"현재 보이는 월({year}년 {month}월)을 강제로 즉시 동기화합니다...")
-        
-        # 1. Provider로부터 최신 데이터 가져오기
-        events = self._fetch_events_from_providers(year, month)
-        
-        if events is not None:
-            # 2. 메모리 캐시와 DB 캐시 업데이트
-            self.event_cache[(year, month)] = events
-            self._save_month_to_cache_db(year, month, events)
-            
-            # 3. UI에 데이터가 변경되었음을 즉시 알림
-            self.data_updated.emit(year, month)
-            print("강제 동기화 완료. UI 업데이트 신호를 보냈습니다.")
-        else:
-            print("강제 동기화 실패: Provider로부터 데이터를 가져오지 못했습니다.")
+    def _run_immediate_sync(self, year, month):
+        if self.immediate_sync_thread and self.immediate_sync_thread.isRunning():
+            print("기존 즉시 동기화 작업 중단 요청...")
+            self.immediate_sync_worker.stop()
+            self.immediate_sync_thread.quit()
+            self.immediate_sync_thread.wait()
+        self.immediate_sync_thread = QThread()
+        self.immediate_sync_worker = ImmediateSyncWorker(self, year, month)
+        self.immediate_sync_worker.moveToThread(self.immediate_sync_thread)
+        self.immediate_sync_worker.data_fetched.connect(self._on_immediate_data_fetched)
+        self.immediate_sync_worker.error_occurred.connect(self.report_error)
+        self.immediate_sync_thread.started.connect(self.immediate_sync_worker.run)
+        self.immediate_sync_worker.finished.connect(self.immediate_sync_thread.quit)
+        self.immediate_sync_worker.finished.connect(self.immediate_sync_worker.deleteLater)
+        self.immediate_sync_thread.finished.connect(self.immediate_sync_thread.deleteLater)
+        self.immediate_sync_thread.start()
+
+    def _on_immediate_data_fetched(self, year, month, events):
+        print(f"즉시 동기화 데이터 수신: {year}년 {month}월")
+        cache_key = (year, month)
+        self.event_cache[cache_key] = events
+        self._save_month_to_cache_db(year, month, events)
+        self.data_updated.emit(year, month)
 
     def get_events(self, year, month):
         cache_key = (year, month)
@@ -474,59 +467,50 @@ class DataManager(QObject):
             if (year, month) > self.last_requested_month: direction = "forward"
             elif (year, month) < self.last_requested_month: direction = "backward"
         self.last_requested_month = cache_key
-        
         if cache_key not in self.event_cache:
+            print(f"캐시 미스: {year}년 {month}월. 즉시 로딩 및 주변 캐싱을 시작합니다.")
             self.caching_manager.request_caching_around(year, month, direction)
-
+            self._run_immediate_sync(year, month)
+            return []
         return self.event_cache.get(cache_key, [])
 
+    def force_sync_month(self, year, month):
+        print(f"현재 보이는 월({year}년 {month}월)을 강제로 즉시 동기화합니다...")
+        self._run_immediate_sync(year, month)
+
     def get_events_for_period(self, start_date, end_date):
-        """주어진 기간(start_date, end_date 포함)에 걸친 모든 이벤트를 반환합니다."""
         all_events = []
-        
-        # 기간에 포함되는 모든 월을 찾습니다.
         months_to_check = set()
         current_date = start_date
         while current_date <= end_date:
             months_to_check.add((current_date.year, current_date.month))
-            # 다음 달로 이동
             if current_date.month == 12:
                 current_date = current_date.replace(year=current_date.year + 1, month=1, day=1)
             else:
                 current_date = current_date.replace(month=current_date.month + 1, day=1)
-
-        # 각 월의 이벤트를 가져와서 기간에 포함되는지 확인합니다.
         for year, month in months_to_check:
             monthly_events = self.get_events(year, month)
             for event in monthly_events:
                 try:
                     start_info = event.get('start', {})
                     end_info = event.get('end', {})
-                    
                     start_str = start_info.get('date') or start_info.get('dateTime', '')[:10]
-                    # Google Calendar 종일 일정의 end.date는 실제 종료일 + 1일이므로 -1일 해줍니다.
                     end_str = end_info.get('date') or end_info.get('dateTime', '')[:10]
-                    
                     event_start_date = datetime.date.fromisoformat(start_str)
                     event_end_date = datetime.date.fromisoformat(end_str)
                     if 'date' in end_info:
                         event_end_date -= datetime.timedelta(days=1)
-
-                    # 이벤트 기간이 주어진 기간과 겹치는지 확인
                     if not (event_end_date < start_date or event_start_date > end_date):
                         all_events.append(event)
                 except (ValueError, TypeError) as e:
                     print(f"이벤트 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
                     continue
-        
-        # 중복 제거 (다른 월에서 동일 이벤트가 포함될 수 있음)
         unique_events = {e['id']: e for e in all_events}.values()
         return list(unique_events)
 
     def get_all_calendars(self):
         if self.calendar_list_cache is not None:
             return self.calendar_list_cache
-
         all_calendars = []
         for provider in self.providers:
             if hasattr(provider, 'get_calendars'):
@@ -534,10 +518,8 @@ class DataManager(QObject):
                     all_calendars.extend(provider.get_calendars())
                 except Exception as e:
                     print(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생: {e}")
-        
         self.calendar_list_cache = all_calendars
         return all_calendars
-
 
     def add_event(self, event_data):
         provider_name = event_data.get('provider')
@@ -545,29 +527,20 @@ class DataManager(QObject):
             if provider.name == provider_name:
                 new_event = provider.add_event(event_data)
                 if new_event:
-                    if 'provider' not in new_event:
-                        new_event['provider'] = provider_name
-
-                    # --- ▼▼▼ [추가] 색상 적용 로직 중앙화 ▼▼▼ ---
+                    if 'provider' not in new_event: new_event['provider'] = provider_name
                     cal_id = new_event.get('calendarId')
                     if cal_id:
                         all_calendars = self.get_all_calendars()
                         cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
                         default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
-                        
                         new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                        # 이모지는 여기서 처리하지 않음 (필요 시 추가)
-                    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
-
                     start_str = new_event['start'].get('date') or new_event['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)
-                    
                     if cache_key in self.event_cache:
                         self.event_cache[cache_key].append(new_event)
                     else:
                         self.event_cache[cache_key] = [new_event]
-                    
                     self.data_updated.emit(event_date.year, event_date.month)
                     return True
         return False
@@ -578,33 +551,22 @@ class DataManager(QObject):
             if provider.name == provider_name:
                 updated_event = provider.update_event(event_data)
                 if updated_event:
-                    if 'provider' not in updated_event:
-                        updated_event['provider'] = provider_name
-
-                    # --- ▼▼▼ [추가] 색상 적용 로직 중앙화 ▼▼▼ ---
+                    if 'provider' not in updated_event: updated_event['provider'] = provider_name
                     cal_id = updated_event.get('calendarId')
                     if cal_id:
                         all_calendars = self.get_all_calendars()
                         cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
                         default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
-
                         updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                        # 이모지는 여기서 처리하지 않음 (필요 시 추가)
-                    # --- ▲▲▲ 여기까지 추가 ▲▲▲ ---
-
                     start_str = updated_event['start'].get('date') or updated_event['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)
-                    
                     if cache_key in self.event_cache:
                         event_id = updated_event.get('id')
-                        self.event_cache[cache_key] = [
-                            event for event in self.event_cache[cache_key] if event.get('id') != event_id
-                        ]
+                        self.event_cache[cache_key] = [e for e in self.event_cache[cache_key] if e.get('id') != event_id]
                         self.event_cache[cache_key].append(updated_event)
                     else:
                         self.event_cache[cache_key] = [updated_event]
-
                     self.data_updated.emit(event_date.year, event_date.month)
                     return True
         return False
@@ -616,19 +578,12 @@ class DataManager(QObject):
                 if provider.delete_event(event_data):
                     event_body = event_data.get('body', event_data)
                     event_id_to_delete = event_body.get('id')
-                    
-                    # 완료 목록에서도 삭제
                     self.unmark_event_as_completed(event_id_to_delete)
-
                     start_str = event_body['start'].get('date') or event_body['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
                     cache_key = (event_date.year, event_date.month)
-
                     if cache_key in self.event_cache:
-                        self.event_cache[cache_key] = [
-                            event for event in self.event_cache[cache_key] if event.get('id') != event_id_to_delete
-                        ]
-
+                        self.event_cache[cache_key] = [e for e in self.event_cache[cache_key] if e.get('id') != event_id_to_delete]
                     self.data_updated.emit(event_date.year, event_date.month)
                     return True
         return False
@@ -639,14 +594,10 @@ class DataManager(QObject):
         self.get_events(today.year, today.month)
 
     def _apply_colors_to_events(self, events):
-        """주어진 이벤트 목록에 색상 정보를 적용합니다."""
-        if not events:
-            return
-
+        if not events: return
         all_calendars = self.get_all_calendars()
         custom_colors = self.settings.get("calendar_colors", {})
         default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
-
         for event in events:
             cal_id = event.get('calendarId')
             if cal_id:
@@ -654,7 +605,6 @@ class DataManager(QObject):
                 event['color'] = custom_colors.get(cal_id, default_color)
 
     def search_events(self, query):
-        """모든 Provider에서 이벤트를 검색하고 결과를 통합하여 반환합니다."""
         all_results = []
         for provider in self.providers:
             try:
@@ -663,17 +613,10 @@ class DataManager(QObject):
                     all_results.extend(results)
             except Exception as e:
                 print(f"'{type(provider).__name__}' 이벤트 검색 오류: {e}")
-        
-        # ID를 기준으로 중복 제거
         unique_results = list({event['id']: event for event in all_results}.values())
-        
-        # 중앙에서 색상 적용
         self._apply_colors_to_events(unique_results)
-
-        # 시작 시간 순으로 정렬
         def get_start_time(event):
             start = event.get('start', {})
             return start.get('dateTime') or start.get('date')
         unique_results.sort(key=get_start_time)
-        
         return unique_results
