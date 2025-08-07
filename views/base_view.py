@@ -102,7 +102,7 @@ class BaseViewWidget(QWidget):
             self.current_popover.close()
             self.current_popover = None
         
-        self.current_popover = EventPopover(self.hovered_event_data, self)
+        self.current_popover = EventPopover(self.hovered_event_data, self.main_widget.settings, self)
         
         # ▼▼▼ [수정] 팝오버 위치 계산 로직 전체 변경 ▼▼▼
         popover_size = self.current_popover.sizeHint()

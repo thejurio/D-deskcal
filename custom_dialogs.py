@@ -5,12 +5,6 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint
 from PyQt6.QtGui import QAction
 
 class BaseDialog(QDialog):
-    """
-    모든 커스텀 다이얼로그의 기반이 되는 클래스.
-    - 프레임리스 윈도우, 드래그 이동
-    - 메인 윈도우와 연동된 투명도 적용
-    - PyQt 기본 중앙 정렬 위치 사용
-    """
     def __init__(self, parent=None, settings=None, pos: QPoint = None):
         super().__init__(parent)
         self.settings = settings
@@ -144,7 +138,7 @@ class NewDateSelectionDialog(BaseDialog):
         self.populate_month_grid()
         self.stacked_widget.setCurrentWidget(self.month_view)
     def populate_year_grid(self):
-        start_year = self.current_display_year - (self.current_display_year % 12)
+        start_year = self.current_display_year - 5
         self.title_label.setText(f"{start_year} - {start_year + 11}")
         grid = self.year_view.layout()
         for i in range(12):
@@ -236,7 +230,7 @@ class WeekSelectionDialog(BaseDialog):
 
         self.year_view = self.create_grid_view(self.select_year, 4)
         self.month_view = self.create_grid_view(self.select_month, 4)
-        self.week_view = self.create_list_view(self.select_week) # Week view is a list
+        self.week_view = self.create_list_view(self.select_week)
 
         self.stacked_widget.addWidget(self.year_view)
         self.stacked_widget.addWidget(self.month_view)
@@ -307,7 +301,6 @@ class WeekSelectionDialog(BaseDialog):
     def populate_week_list(self):
         self.title_label.setText(f"{self.selected_year}년 {self.selected_month}월")
         layout = self.week_view.layout()
-        # Clear previous buttons
         while layout.count():
             child = layout.takeAt(0)
             if child.widget():
@@ -354,8 +347,7 @@ class WeekSelectionDialog(BaseDialog):
         self.show_week_view()
     
     def select_week(self, button):
-        # Find the index of the button text in the combo box to get the date
-        for i in range(self.week_view.layout().count() -1): # Exclude stretch
+        for i in range(self.week_view.layout().count() -1):
             if self.week_view.layout().itemAt(i).widget() == button:
                 self.selected_date = self.weeks_in_month[i]
                 break
@@ -501,51 +493,60 @@ class MoreEventsDialog(BaseDialog):
         sender_button = self.sender()
         menu.exec(sender_button.mapToGlobal(pos))
 
-class EventPopover(QDialog):
-    """
-    이벤트 위에 마우스를 올렸을 때 상세 정보를 보여주는 팝오버 위젯.
-    """
-# custom_dialogs.py 파일의 EventPopover 클래스
-
-    def __init__(self, event_data, parent=None):
-        super().__init__(parent)
+class EventPopover(BaseDialog):
+    def __init__(self, event_data, settings, parent=None):
+        super().__init__(parent, settings)
         self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
         background_widget = QWidget()
-        # ▼▼▼ [수정] popover_background -> main_background로 변경 ▼▼▼
-        background_widget.setObjectName("main_background")
-        # ▲▲▲ 테마의 메인 배경 스타일을 그대로 사용하도록 이름 변경
+        background_widget.setObjectName("popover_background")
         main_layout.addWidget(background_widget)
 
         content_layout = QVBoxLayout(background_widget)
         content_layout.setContentsMargins(12, 10, 12, 10)
         content_layout.setSpacing(5)
 
-        # 1. 이벤트 제목
         summary = event_data.get('summary', '(제목 없음)')
         summary_label = QLabel(summary)
         summary_label.setWordWrap(True)
         summary_label.setStyleSheet("font-weight: bold; font-size: 10pt;")
         content_layout.addWidget(summary_label)
 
-        # 2. 이벤트 시간
         time_text = self.format_event_time(event_data)
         if time_text:
             time_label = QLabel(time_text)
             time_label.setStyleSheet("font-size: 9pt; color: #B0B0B0;")
             content_layout.addWidget(time_label)
+        
+        self.apply_popover_opacity()
+
+    def apply_popover_opacity(self):
+        if not self.settings: return
+        
+        main_opacity = self.settings.get("window_opacity", 0.95)
+        popover_opacity = min(1.0, main_opacity + 0.1)
+        alpha = int(popover_opacity * 255)
+        
+        theme_name = self.settings.get("theme", "dark")
+        base_color = "30, 30, 30" if theme_name == "dark" else "250, 250, 250"
+
+        style = f"""
+            QWidget#popover_background {{
+                background-color: rgba({base_color}, {alpha});
+                border-radius: 8px;
+            }}
+        """
+        self.setStyleSheet(style)
 
     def format_event_time(self, event_data):
-        """이벤트 데이터로부터 시간 문자열을 포맷팅합니다."""
         start = event_data.get('start', {})
         end = event_data.get('end', {})
 
-        if 'dateTime' in start: # 시간 지정 이벤트
+        if 'dateTime' in start:
             start_dt = datetime.datetime.fromisoformat(start['dateTime'])
             end_dt = datetime.datetime.fromisoformat(end['dateTime'])
             
@@ -554,11 +555,10 @@ class EventPopover(QDialog):
             else:
                 return f"{start_dt.strftime('%m/%d %p %I:%M')} - {end_dt.strftime('%m/%d %p %I:%M')}"
         
-        elif 'date' in start: # 종일 이벤트
+        elif 'date' in start:
             start_date = datetime.date.fromisoformat(start['date'])
             end_date = datetime.date.fromisoformat(end['date'])
             
-            # Google Calendar API는 종일 이벤트의 end.date를 실제 종료일+1일로 주므로, -1일 해줘야 함
             if (end_date - start_date).days == 1:
                  return f"{start_date.strftime('%Y년 %m월 %d일')} (하루 종일)"
             else:

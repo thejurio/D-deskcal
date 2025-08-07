@@ -58,7 +58,7 @@ class MainWidget(QWidget):
         self.is_resizing = False
         self.is_moving = False
         self.border_width = 5
-        self.active_dialog = None # [추가] 현재 활성화된 다이얼로그를 추적
+        self.active_dialog = None
 
         self._interaction_unlocked = False
         self.lock_key_is_pressed = False
@@ -67,7 +67,6 @@ class MainWidget(QWidget):
         
         self.initUI()
         
-        # DataManager의 sync_timer가 DataManager의 새로운 메서드를 호출하도록 연결
         self.data_manager.sync_timer.timeout.connect(self.data_manager.request_current_month_sync)
         self.data_manager.notification_triggered.connect(self.show_notification_popup)
 
@@ -78,17 +77,14 @@ class MainWidget(QWidget):
         self.sync_startup_setting()
 
     def show_notification_popup(self, title, message):
-        # 여러 알림이 동시에 뜰 경우를 대비하여 리스트로 관리
         if not hasattr(self, 'notification_popups'):
             self.notification_popups = []
 
-        # 이전 팝업이 있다면 새 팝업을 그 위에 쌓이도록 위치 조정
         offset = len(self.notification_popups) * 10
         
         duration = self.settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
         popup = NotificationPopup(title, message, duration_seconds=duration)
         
-        # 화면 오른쪽 하단 기준으로 위치 조정
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         popup_x = screen_geometry.width() - popup.width() - 15
         popup_y = screen_geometry.height() - popup.height() - 15 - offset
@@ -96,12 +92,10 @@ class MainWidget(QWidget):
         
         popup.show()
         
-        # 팝업이 닫힐 때 리스트에서 제거되도록 연결
         popup.destroyed.connect(lambda: self.notification_popups.remove(popup))
         self.notification_popups.append(popup)
 
     def sync_startup_setting(self):
-        """설정 파일과 레지스트리의 자동 시작 상태를 동기화합니다."""
         if sys.platform != "win32":
             return
 
@@ -114,7 +108,6 @@ class MainWidget(QWidget):
             elif not should_start_on_boot and is_currently_in_startup:
                 windows_startup.remove_from_startup()
         except Exception as e:
-            # 사용자에게 오류를 알릴 수 있는 방법을 고려 (예: 상태 표시줄, 대화상자)
             print(f"자동 시작 설정 동기화 중 오류 발생: {e}")
 
     def set_as_desktop_child(self):
@@ -133,13 +126,10 @@ class MainWidget(QWidget):
         except Exception as e:
             print(f"바탕화면 자식창 설정 실패: {e}")
 
-             # ▼▼▼ [추가] 누락된 is_interaction_unlocked 메서드 ▼▼▼
     def is_interaction_unlocked(self):
-        """현재 상호작용이 잠금 해제되었는지 여부를 반환합니다."""
         if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
-            return True # 잠금 모드가 비활성화 상태면 항상 상호작용 가능
+            return True
         return self._interaction_unlocked
-    # ▲▲▲ 여기까지 추가 ▲▲▲
 
     def _is_lock_key(self, key):
         lock_key_str = self.settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY).lower()
@@ -178,37 +168,29 @@ class MainWidget(QWidget):
             self.keyboard_listener.stop()
             self.keyboard_listener = None
 
-    # ▼▼▼ [핵심 수정] setWindowFlags 대신 SetWindowLong API 사용 ▼▼▼
     def lock_interactions(self):
-        """[Windows 전용] 클릭 통과 기능을 활성화합니다."""
         if sys.platform != "win32": return
         try:
             hwnd = self.winId()
             ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-            # WS_EX_TRANSPARENT 스타일 추가
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style | win32con.WS_EX_TRANSPARENT)
         except Exception as e:
             print(f"Lock interactions error: {e}")
 
     def unlock_interactions(self):
-        """[Windows 전용] 클릭 통과 기능을 비활성화합니다."""
         if sys.platform != "win32": return
         try:
             hwnd = self.winId()
             ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-            # WS_EX_TRANSPARENT 스타일 제거
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style & ~win32con.WS_EX_TRANSPARENT)
             self.activateWindow()
         except Exception as e:
             print(f"Unlock interactions error: {e}")
-    # ▲▲▲ 여기까지 수정 ▲▲▲
 
     def apply_window_settings(self):
-        # 1. 창 위치 설정 적용
         mode = self.settings.get("window_mode", DEFAULT_WINDOW_MODE)
         flags = self.windowFlags()
 
-        # 기존 위치 관련 플래그 초기화
         flags &= ~Qt.WindowType.WindowStaysOnTopHint
         flags &= ~Qt.WindowType.WindowStaysOnBottomHint
 
@@ -218,13 +200,11 @@ class MainWidget(QWidget):
             flags |= Qt.WindowType.WindowStaysOnBottomHint
         
         self.setWindowFlags(flags)
-        self.show() # setWindowFlags 호출 후 창이 숨겨질 수 있으므로 다시 표시
+        self.show()
 
-        # "항상 아래에" 모드일 때 Z-order를 맨 아래로 강제
         if mode == "AlwaysOnBottom" and sys.platform == "win32":
             self._push_to_desktop_bottom()
 
-        # 2. 잠금 모드 설정 적용
         if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
             self.lock_interactions()
         else:
@@ -232,14 +212,12 @@ class MainWidget(QWidget):
         self.update_lock_icon()
 
     def toggle_lock_mode(self):
-        """잠금 모드를 토글하고 설정을 저장한 뒤 UI를 업데이트합니다."""
         is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
         self.settings["lock_mode_enabled"] = not is_enabled
         save_settings(self.settings)
         self.apply_window_settings()
 
     def update_lock_icon(self):
-        """현재 잠금 설정에 따라 아이콘을 업데이트합니다."""
         is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
         if is_enabled:
             self.lock_button.setIcon(QIcon("icons/lock_locked.svg"))
@@ -257,7 +235,6 @@ class MainWidget(QWidget):
         geometry = self.settings.get("geometry", DEFAULT_WINDOW_GEOMETRY)
         self.setGeometry(*geometry)
         
-        # 화면 크기에 비례하여 최소 크기 설정
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         min_width = int(screen_geometry.width() * 0.20)
         min_height = int(screen_geometry.height() * 0.25)
@@ -270,7 +247,7 @@ class MainWidget(QWidget):
         self.background_widget.setObjectName("main_background")
         self.background_widget.setMouseTracking(True)
         
-        self.setWindowOpacity(self.settings.get("window_opacity", 0.95))
+        self.apply_background_opacity()
         
         content_layout_wrapper = QVBoxLayout(self.background_widget)
         content_layout_wrapper.setContentsMargins(0,0,0,0)
@@ -280,7 +257,6 @@ class MainWidget(QWidget):
         content_layout_wrapper.addLayout(content_layout)
 
         bottom_bar_layout = QHBoxLayout()
-        
         bottom_bar_layout.addStretch(1)
         
         size_grip = CustomSizeGrip(self.background_widget)
@@ -295,7 +271,6 @@ class MainWidget(QWidget):
         self.data_manager.data_updated.connect(self.on_data_updated)
         self.data_manager.error_occurred.connect(self.show_error_message)
         
-        view_mode_layout = QHBoxLayout()
         month_button, week_button = QPushButton("월력"), QPushButton("주간")
         month_button.setCheckable(True)
         week_button.setCheckable(True)
@@ -320,24 +295,21 @@ class MainWidget(QWidget):
         self.lock_button.clicked.connect(self.toggle_lock_mode)
 
         view_mode_layout = QHBoxLayout()
-        view_mode_layout.setSpacing(5) # 버튼 간 최소 간격
+        view_mode_layout.setSpacing(5)
 
-        # 1. 왼쪽 절반 컨테이너
         left_half = QHBoxLayout()
         left_half.addWidget(search_button)
         left_half.addStretch(1)
         left_half.addWidget(month_button)
         
-        # 2. 오른쪽 절반 컨테이너
         right_half = QHBoxLayout()
         right_half.addWidget(week_button)
         right_half.addStretch(1)
         right_half.addWidget(self.lock_button)
         right_half.addWidget(today_button)
 
-        # 두 개의 절반 컨테이너를 메인 레이아웃에 추가
-        view_mode_layout.addLayout(left_half, 1) # 1의 비율로 공간 차지
-        view_mode_layout.addLayout(right_half, 1) # 1의 비율로 공간 차지
+        view_mode_layout.addLayout(left_half, 1)
+        view_mode_layout.addLayout(right_half, 1)
         
         content_layout.addLayout(view_mode_layout)
 
@@ -370,7 +342,6 @@ class MainWidget(QWidget):
         self.setup_tray_icon()
 
     def setup_tray_icon(self):
-        """시스템 트레이 아이콘을 설정합니다."""
         self.tray_icon = QSystemTrayIcon(QIcon("icons/tray_icon.svg"), self)
         self.tray_icon.setToolTip("Glassy Calendar")
 
@@ -404,41 +375,29 @@ class MainWidget(QWidget):
         self.tray_icon.show()
 
     def on_tray_icon_activated(self, reason):
-        """트레이 아이콘 클릭 시 창을 보여줍니다."""
-        if reason == QSystemTrayIcon.ActivationReason.Trigger: # 왼쪽 클릭
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.show_window()
 
     def show_window(self):
-        """창을 보여주고 활성화합니다."""
         self.show()
         self.activateWindow()
 
     def _get_dialog_pos(self):
-        """현재 위젯이 속한 화면의 중앙 위치를 반환합니다."""
         screen = QApplication.screenAt(self.pos())
         if not screen:
             screen = QApplication.primaryScreen()
-        
-        screen_center = screen.availableGeometry().center()
-        # 대화상자 크기를 대략적으로 추정하여 중앙 정렬 (필요 시 조절)
-        # 여기서는 대화상자 크기를 모르므로, 일단 화면 중앙을 기준으로 합니다.
-        # 더 정확하게 하려면 대화상자 크기를 알아야 합니다.
-        # 예: pos.setX(pos.x() - dialog.width() / 2)
-        return screen_center
+        return screen.availableGeometry().center()
 
     def _push_to_desktop_bottom(self):
-        """[Windows 전용] 창을 Z-order의 가장 아래로 보냅니다."""
         if sys.platform != "win32": return
         try:
             hwnd = self.winId()
-            # Z-order를 가장 아래로 설정합니다.
             win32gui.SetWindowPos(hwnd, win32con.HWND_BOTTOM, 0, 0, 0, 0,
                                   win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
         except Exception as e:
             print(f"Push to desktop bottom error: {e}")
 
     def quit_application(self):
-        """애플리케이션을 완전히 종료합니다."""
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
         save_settings(self.settings)
         self.data_manager.stop_caching_thread()
@@ -483,8 +442,25 @@ class MainWidget(QWidget):
             self.month_view.set_resizing(False)
             self.week_view.set_resizing(False)
 
-    def set_window_opacity(self, opacity):
-        self.setWindowOpacity(opacity)
+    def apply_background_opacity(self, opacity=None):
+        if opacity is None:
+            opacity = self.settings.get("window_opacity", 0.95)
+        
+        theme_name = self.settings.get("theme", "dark")
+        alpha = int(opacity * 255)
+
+        if theme_name == "dark":
+            base_color = "30, 30, 30"
+        else: # light theme
+            base_color = "250, 250, 250"
+
+        style = f"""
+            QWidget#main_background {{
+                background-color: rgba({base_color}, {alpha});
+                border-radius: 10px;
+            }}
+        """
+        self.background_widget.setStyleSheet(style)
 
     def go_to_today(self):
         self.set_current_date(datetime.date.today())
@@ -520,24 +496,26 @@ class MainWidget(QWidget):
 
     def open_settings_window(self):
         if self.active_dialog is not None:
-            self.active_dialog.activateWindow() # 이미 열려있으면 해당 창을 활성화
+            self.active_dialog.activateWindow()
             return
         with self.data_manager.user_action_priority():
             original_settings_snapshot = copy.deepcopy(self.settings)
 
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=self._get_dialog_pos())
             self.active_dialog = settings_dialog
-            settings_dialog.transparency_changed.connect(self.set_window_opacity)
+            
+            # [핵심 수정] 시그널 직접 연결
+            settings_dialog.transparency_changed.connect(self.apply_background_opacity)
             settings_dialog.theme_changed.connect(self.apply_theme)
             
             result = settings_dialog.exec()
-            self.active_dialog = None # 다이얼로그가 닫히면 초기화
+            self.active_dialog = None
             
             if result == QDialog.DialogCode.Accepted:
                 changed_fields = settings_dialog.get_changed_fields()
                 
                 if "window_opacity" in changed_fields:
-                    self.set_window_opacity(self.settings.get("window_opacity", 0.95))
+                    self.apply_background_opacity()
                 if "theme" in changed_fields:
                     self.apply_theme(self.settings.get("theme", "dark"))
                 if "sync_interval_minutes" in changed_fields:
@@ -564,7 +542,7 @@ class MainWidget(QWidget):
             else:
                 self.settings.clear()
                 self.settings.update(original_settings_snapshot)
-                self.set_window_opacity(self.settings.get("window_opacity", 0.95))
+                self.apply_background_opacity()
                 self.apply_theme(self.settings.get("theme", "dark"))
                 self.apply_window_settings()
                 self.refresh_current_view()
@@ -598,13 +576,13 @@ class MainWidget(QWidget):
             app = QApplication.instance()
             app.setStyleSheet(stylesheet)
             
-            # 열려있는 모든 최상위 창의 스타일을 강제로 다시 적용
+            self.apply_background_opacity()
+
             for widget in app.topLevelWidgets():
                 widget.style().unpolish(widget)
                 widget.style().polish(widget)
                 widget.update()
 
-            # 월간/주간 뷰 강제 새로고침
             self.month_view.refresh()
             self.week_view.refresh()
             
@@ -612,31 +590,23 @@ class MainWidget(QWidget):
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
     def open_event_editor(self, data):
-                # ▼▼▼ [수정] 다른 다이얼로그가 열려있는지 확인합니다. ▼▼▼
         if self.active_dialog is not None:
             self.active_dialog.activateWindow()
             return
-        # ▲▲▲ 여기까지 수정 ▲▲▲
         with self.data_manager.user_action_priority():
-            # all_calendars를 미리 가져오지 않습니다.
             editor = None
             cursor_pos = self._get_dialog_pos()
             if isinstance(data, (datetime.date, datetime.datetime)):
-                # calendars 인자 제거
                 editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
-                # calendars 인자 제거
                 editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             
             if editor:
-                 # ▼▼▼ [추가] 활성화된 다이얼로그로 등록하고, 닫힐 때 초기화합니다. ▼▼▼
                 self.active_dialog = editor
                 result = editor.exec()
-                self.active_dialog = None # 다이얼로그가 닫히면 초기화
-                # ▲▲▲ 여기까지 추가 ▲▲▲
+                self.active_dialog = None
                 if result == QDialog.DialogCode.Accepted:
                     event_data = editor.get_event_data()
-                    # 캘린더 목록이 로딩되지 않았을 경우를 대비한 방어 코드
                     if not event_data.get('calendarId'):
                         self.show_error_message("캘린더 목록이 아직 로딩되지 않았습니다. 잠시 후 다시 시도해주세요.")
                         return
@@ -654,9 +624,7 @@ class MainWidget(QWidget):
                     self.data_manager.delete_event(event_to_delete)
 
     def show_error_message(self, message):
-        """사용자에게 오류 메시지 대화상자를 표시합니다."""
         if not self.is_interaction_unlocked():
-            # 잠금 모드일 경우 상호작용이 불가능하므로, 트레이 아이콘 메시지로 대체
             self.tray_icon.showMessage(
                 "오류 발생",
                 message,
@@ -664,7 +632,6 @@ class MainWidget(QWidget):
                 5000
             )
         else:
-            # 일반 모드에서는 메시지 박스 사용
             error_dialog = QMessageBox(self)
             error_dialog.setIcon(QMessageBox.Icon.Warning)
             error_dialog.setText("오류가 발생했습니다.")
@@ -676,7 +643,6 @@ class MainWidget(QWidget):
     def add_common_context_menu_actions(self, menu):
         if menu.actions(): menu.addSeparator()
         refreshAction = QAction("새로고침 (Refresh)", self)
-        # 현재 보고 있는 월만 강제 동기화하도록 변경
         refreshAction.triggered.connect(lambda: self.data_manager.force_sync_month(self.current_date.year, self.current_date.month))
         menu.addAction(refreshAction)
         settingsAction = QAction("설정 (Settings)", self)
@@ -698,7 +664,6 @@ class MainWidget(QWidget):
         menu.exec(event.globalPos())
         
     def closeEvent(self, event):
-        """창을 닫을 때 트레이로 최소화합니다."""
         event.ignore()
         self.hide()
         self.tray_icon.showMessage(
@@ -753,7 +718,6 @@ class MainWidget(QWidget):
             QTimer.singleShot(50, self.lock_interactions)
 
     def snap_to_screen_edges(self):
-        """창을 모든 화면 가장자리에 스냅합니다."""
         snap_threshold = 45
         win_rect = self.frameGeometry()
         screens = QApplication.screens()
@@ -761,7 +725,6 @@ class MainWidget(QWidget):
         closest_screen = None
         min_dist = float('inf')
 
-        # 창의 중심과 가장 가까운 화면을 찾습니다.
         for screen in screens:
             screen_center = screen.availableGeometry().center()
             win_center = win_rect.center()
@@ -777,7 +740,6 @@ class MainWidget(QWidget):
         new_pos = win_rect.topLeft()
         moved = False
 
-        # 가로 스냅
         if abs(win_rect.left() - screen_geometry.left()) < snap_threshold:
             new_pos.setX(screen_geometry.left())
             moved = True
@@ -785,7 +747,6 @@ class MainWidget(QWidget):
             new_pos.setX(screen_geometry.right() - win_rect.width())
             moved = True
 
-        # 세로 스냅
         if abs(win_rect.top() - screen_geometry.top()) < snap_threshold:
             new_pos.setY(screen_geometry.top())
             moved = True
@@ -801,12 +762,10 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
-    # --- Auto Timezone Detection ---
     if "user_timezone" not in settings:
         user_timezone = get_timezone_from_ip()
         settings["user_timezone"] = user_timezone
         save_settings(settings)
-    # --------------------------------
 
     selected_theme = settings.get("theme", "dark")
     try:

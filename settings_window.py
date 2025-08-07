@@ -496,9 +496,10 @@ class SettingsWindow(BaseDialog):
 
     def on_opacity_changed(self, value):
         self._mark_as_changed("window_opacity")
-        self.temp_settings["window_opacity"] = value / 100.0
+        opacity_float = value / 100.0
+        self.temp_settings["window_opacity"] = opacity_float
         self.opacity_label.setText(f"{value}%")
-        self.transparency_changed.emit(self.temp_settings["window_opacity"])
+        self.transparency_changed.emit(opacity_float)
 
     def on_theme_changed(self, text):
         self._mark_as_changed("theme")

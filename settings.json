@@ -16,8 +16,8 @@
     "sync_interval_minutes": 5,
     "start_day_of_week": 6,
     "hide_weekends": false,
-    "window_opacity": 0.62,
-    "theme": "light",
+    "window_opacity": 0.6,
+    "theme": "dark",
     "window_mode": "AlwaysOnBottom",
     "lock_mode_enabled": false,
     "lock_mode_key": "Ctrl",
@@ -26,7 +26,7 @@
     "notification_minutes": 1,
     "last_selected_calendar_id": "family01556510902891015712@group.calendar.google.com",
     "geometry": [
-        791,
+        682,
         0,
         853,
         745
