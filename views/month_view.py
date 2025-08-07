@@ -2,17 +2,64 @@
 import datetime
 import calendar
 from collections import defaultdict
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QMenu, QToolTip, QSizePolicy, QApplication
-from PyQt6.QtGui import QFont, QCursor, QPainter, QColor, QAction, QFontMetrics
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect
+from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, 
+                             QPushButton, QMenu, QSizePolicy, QApplication, QStackedWidget)
+from PyQt6.QtGui import QFont, QCursor, QPainter, QColor, QAction, QFontMetrics, QPixmap, QTransform
+from PyQt6.QtCore import (Qt, pyqtSignal, QTimer, QRect, QSize, QPropertyAnimation, 
+                          pyqtProperty, QSequentialAnimationGroup)
+from PyQt6.QtSvg import QSvgRenderer
+
 from custom_dialogs import NewDateSelectionDialog, MoreEventsDialog
 from .widgets import EventLabelWidget
 from .layout_calculator import MonthLayoutCalculator
 from .base_view import BaseViewWidget
 
+class RotatingIcon(QWidget):
+    """SVG 아이콘을 로드하여 회전시키는 애니메이션 위젯"""
+    def __init__(self, svg_path, parent=None):
+        super().__init__(parent)
+        self.renderer = QSvgRenderer(svg_path)
+        self.setFixedSize(self.renderer.defaultSize())
+        self._angle = 0
+
+        self.animation = QPropertyAnimation(self, b'angle', self)
+        self.animation.setStartValue(0)
+        self.animation.setEndValue(360)
+        self.animation.setDuration(1200)
+        self.animation.setLoopCount(-1) # 무한 반복
+
+    @pyqtProperty(int)
+    def angle(self):
+        return self._angle
+
+    @angle.setter
+    def angle(self, value):
+        self._angle = value
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 위젯의 중심으로 이동하고 회전한 뒤, 다시 원래 위치로 복귀하여 그립니다.
+        center = self.rect().center()
+        painter.translate(center)
+        painter.rotate(self._angle)
+        painter.translate(-center)
+        
+        self.renderer.render(painter)
+
+    def start(self):
+        self.animation.start()
+
+    def stop(self):
+        self.animation.stop()
+        self._angle = 0
+        self.update()
+
 class DayCellWidget(QWidget):
     add_event_requested = pyqtSignal(datetime.date)
-    edit_event_requested = pyqtSignal(dict) # EventLabelWidget에서 직접 연결되므로 여기선 불필요할 수 있음
+    edit_event_requested = pyqtSignal(dict)
     
     def __init__(self, date_obj, parent_view=None):
         super().__init__(parent_view)
@@ -36,7 +83,7 @@ class DayCellWidget(QWidget):
         self.events_layout = QVBoxLayout(self.events_container)
         self.events_layout.setContentsMargins(0, 0, 0, 0)
         self.events_layout.setSpacing(1)
-        self.events_layout.addStretch() # 위젯이 위에서부터 쌓이도록
+        self.events_layout.addStretch()
         outer_layout.addWidget(self.events_container)
 
     def mouseDoubleClickEvent(self, event):
@@ -45,7 +92,7 @@ class DayCellWidget(QWidget):
         self.add_event_requested.emit(self.date_obj)
 
     def clear_events(self):
-        while self.events_layout.count() > 1: # 스트레치를 제외하고 모두 삭제
+        while self.events_layout.count() > 1:
             child = self.events_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
@@ -57,6 +104,7 @@ class MonthViewWidget(BaseViewWidget):
         self.setMouseTracking(True)
         self.initUI()
         self.data_manager.event_completion_changed.connect(self.refresh)
+        self.data_manager.sync_state_changed.connect(self.on_sync_state_changed)
 
     def on_data_updated(self, year, month):
         if year == self.current_date.year and month == self.current_date.month:
@@ -65,18 +113,46 @@ class MonthViewWidget(BaseViewWidget):
     def initUI(self):
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
+        
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
         self.month_button = QPushButton()
         self.month_button.clicked.connect(self.open_date_selection_dialog)
         prev_button.clicked.connect(self.go_to_previous_month)
         next_button.clicked.connect(self.go_to_next_month)
-        nav_layout.addWidget(prev_button); nav_layout.addStretch(1); nav_layout.addWidget(self.month_button); nav_layout.addStretch(1); nav_layout.addWidget(next_button)
+        
+        # --- [핵심 수정] 애니메이션 아이콘과 QStackedWidget 사용 ---
+        self.sync_icon = RotatingIcon("icons/refresh.svg")
+        
+        self.sync_status_container = QStackedWidget()
+        # 아이콘 크기를 24x24로 명시적으로 고정하여 레이아웃 문제를 해결합니다.
+        self.sync_status_container.setFixedSize(QSize(24, 24)) 
+        self.sync_status_container.addWidget(QWidget()) # 0번 페이지: 빈 위젯
+        self.sync_status_container.addWidget(self.sync_icon) # 1번 페이지: 회전 아이콘
+
+        nav_layout.addWidget(prev_button)
+        nav_layout.addStretch(1)
+        nav_layout.addWidget(self.month_button)
+        nav_layout.addWidget(self.sync_status_container) # 컨테이너 추가
+        nav_layout.addStretch(1)
+        nav_layout.addWidget(next_button)
+        # --- 여기까지 수정 ---
+        
         self.main_layout.addLayout(nav_layout)
         self.calendar_grid = QGridLayout()
-        self.calendar_grid.setObjectName("calendar_grid") # ID 설정
+        self.calendar_grid.setObjectName("calendar_grid")
         self.calendar_grid.setSpacing(0)
         self.main_layout.addLayout(self.calendar_grid)
+
+    def on_sync_state_changed(self, is_syncing):
+        # --- [핵심 수정] QStackedWidget 페이지 전환 및 애니메이션 제어 ---
+        if is_syncing:
+            self.sync_status_container.setCurrentIndex(1)
+            self.sync_icon.start()
+        else:
+            self.sync_icon.stop()
+            self.sync_status_container.setCurrentIndex(0)
+        # --- 여기까지 수정 ---
 
     def open_date_selection_dialog(self):
         if not self.main_widget.is_interaction_unlocked(): return
@@ -95,7 +171,6 @@ class MonthViewWidget(BaseViewWidget):
     def refresh(self):
         if self.is_resizing: return
 
-        # 1. 기존 그리드 위젯들을 모두 삭제합니다.
         if self.calendar_grid is not None:
             while self.calendar_grid.count():
                 child = self.calendar_grid.takeAt(0)
@@ -110,8 +185,7 @@ class MonthViewWidget(BaseViewWidget):
         self.main_layout.addLayout(self.calendar_grid)
         self.date_to_cell_map.clear()
         
-        # 2. 필요한 설정값과 색상을 가져옵니다.
-        start_day_of_week_setting = self.main_widget.settings.get("start_day_of_week", 6) # 6:일요일, 0:월요일
+        start_day_of_week_setting = self.main_widget.settings.get("start_day_of_week", 6)
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)
         
         colors = {
@@ -123,23 +197,21 @@ class MonthViewWidget(BaseViewWidget):
         year, month = self.current_date.year, self.current_date.month
         self.month_button.setText(f"{year}년 {month}월")
 
-        # 3. [수정된 핵심 로직] 요일 헤더와 컬럼 맵을 정확하게 생성합니다.
-        # datetime.weekday() 값 기준: 월요일=0, 화요일=1, ..., 토요일=5, 일요일=6
         days_of_week_text = ["월", "화", "수", "목", "금", "토", "일"]
         
-        if start_day_of_week_setting == 6: # 일요일 시작
+        if start_day_of_week_setting == 6:
             ordered_day_texts = days_of_week_text[-1:] + days_of_week_text[:-1]
             ordered_weekday_indices = [6, 0, 1, 2, 3, 4, 5]
-        else: # 월요일 시작
+        else:
             ordered_day_texts = days_of_week_text
             ordered_weekday_indices = [0, 1, 2, 3, 4, 5, 6]
 
-        col_map = {} # {요일_인덱스: 그리드_컬럼_번호}
+        col_map = {}
         grid_col_idx = 0
         for i, day_text in enumerate(ordered_day_texts):
             weekday_idx = ordered_weekday_indices[i]
             
-            if hide_weekends and weekday_idx in [5, 6]: # 토요일(5), 일요일(6)
+            if hide_weekends and weekday_idx in [5, 6]:
                 continue
 
             label = QLabel(day_text)
@@ -154,24 +226,21 @@ class MonthViewWidget(BaseViewWidget):
             col_map[weekday_idx] = grid_col_idx
             grid_col_idx += 1
 
-        # 4. [수정] 필요한 주의 수를 5주 또는 6주로 동적으로 계산합니다.
         first_day_of_month = self.current_date.replace(day=1)
         _, num_days_in_month = calendar.monthrange(self.current_date.year, self.current_date.month)
         last_day_of_month = self.current_date.replace(day=num_days_in_month)
 
-        if start_day_of_week_setting == 6: # 일요일 시작
+        if start_day_of_week_setting == 6:
             offset = (first_day_of_month.weekday() + 1) % 7
-        else: # 월요일 시작
+        else:
             offset = first_day_of_month.weekday()
         start_date_of_view = first_day_of_month - datetime.timedelta(days=offset)
 
-        # 5주차의 마지막 날이 현재 월의 마지막 날보다 뒤에 오면, 5주만 표시해도 충분합니다.
         end_of_5th_week = start_date_of_view + datetime.timedelta(days=34)
         num_days_in_grid = 35 if last_day_of_month <= end_of_5th_week else 42
         
         today = datetime.date.today()
 
-        # 5. 계산된 일수만큼 루프를 돌며 DayCellWidget 생성
         for i in range(num_days_in_grid):
             current_day_obj = start_date_of_view + datetime.timedelta(days=i)
             day_of_week_idx = current_day_obj.weekday()
@@ -205,7 +274,6 @@ class MonthViewWidget(BaseViewWidget):
             self.calendar_grid.addWidget(cell_widget, grid_row, grid_col)
             self.date_to_cell_map[current_day_obj] = cell_widget
 
-        # 6. 그리드 레이아웃을 설정하고 이벤트를 그립니다.
         for i in range(1, self.calendar_grid.rowCount()):
             self.calendar_grid.setRowStretch(i, 1)
         for i in range(self.calendar_grid.columnCount()):
@@ -234,13 +302,11 @@ class MonthViewWidget(BaseViewWidget):
         for date, cell_widget in self.date_to_cell_map.items():
             if not cell_widget.isVisible(): continue
             
-            # 요청사항 1: 이벤트 높이 5px 증가
             event_height = QFontMetrics(self.font()).height() + 9
             y_offset = cell_widget.day_label.height() + cell_widget.layout().spacing()
             max_slots = (cell_widget.height() - y_offset) // (event_height + cell_widget.events_layout.spacing())
             if max_slots < 0: max_slots = 0
 
-            # 마지막 슬롯은 '더보기'를 위해 예약
             max_visible_y_level = max(0, max_slots - 1)
 
             sorted_day_events = sorted(events_by_day.get(date, []), key=lambda p: p['y_level'])
@@ -248,16 +314,13 @@ class MonthViewWidget(BaseViewWidget):
             more_events_data = []
             y_levels_on_day = set()
 
-            # 표시할 이벤트와 '더보기'로 넘길 이벤트 분류
             for pos_info in sorted_day_events:
                 y_level = pos_info['y_level']
-                # 요청사항 2: 공간이 부족하면(슬롯 1개 이하) 이벤트 표시 안함
                 if y_level < max_visible_y_level and max_slots > 1:
                     y_levels_on_day.add(y_level)
                 else:
                     more_events_data.append(pos_info['event'])
 
-            # 빈 슬롯 채우기
             num_slots_for_events = max_visible_y_level if max_slots > 1 else 0
             for i in range(num_slots_for_events):
                 if i not in y_levels_on_day:
@@ -265,7 +328,6 @@ class MonthViewWidget(BaseViewWidget):
             
             sorted_day_events = sorted(events_by_day.get(date, []), key=lambda p: p['y_level'])
             
-            # 이벤트 위젯 생성
             for pos_info in sorted_day_events:
                 y_level = pos_info['y_level']
                 if y_level >= num_slots_for_events: continue
@@ -273,7 +335,6 @@ class MonthViewWidget(BaseViewWidget):
                 event_data = pos_info.get('event')
                 if event_data:
                     is_completed = self.data_manager.is_event_completed(event_data.get('id'))
-                    # 현재 월에 속하는 이벤트인지 확인
                     is_other_month = date.month != self.current_date.month
                     event_widget = EventLabelWidget(
                         event_data, 
@@ -284,29 +345,25 @@ class MonthViewWidget(BaseViewWidget):
                     )
                     event_widget.edit_requested.connect(self.edit_event_requested)
                     cell_widget.events_layout.insertWidget(y_level, event_widget)
-                else: # 빈 이벤트 (자리 채우기용)
+                else:
                     placeholder = QWidget(cell_widget)
                     placeholder.setFixedHeight(event_height)
                     cell_widget.events_layout.insertWidget(y_level, placeholder)
 
-            # 요청사항 2, 3: '더보기' 버튼 조건 및 크기 수정
             if more_events_data and max_slots > 1:
                 more_button = QPushButton(f"+ {len(more_events_data)}개 더보기")
                 more_button.setStyleSheet("text-align: left; border: none; color: #a0c4ff; background-color: transparent;")
-                more_button.setFixedHeight(int(event_height * 0.9)) # 높이 90%로 설정
+                more_button.setFixedHeight(int(event_height * 0.9))
                 more_button.clicked.connect(lambda _, d=date, e=more_events_data: self.show_more_events_popup(d, e))
                 cell_widget.events_layout.insertWidget(max_visible_y_level, more_button)
 
     def get_event_at(self, pos):
-        # 이 메서드는 이제 사용되지 않음
-        return None
+        pass
 
     def mouseDoubleClickEvent(self, event):
-        # DayCellWidget에서 처리하므로 MonthView의 이벤트는 비워둠
         pass
 
     def mousePressEvent(self, event):
-        # DayCellWidget에서 처리하므로 MonthView의 이벤트는 비워둠
         pass
 
     def go_to_previous_month(self):
@@ -324,7 +381,6 @@ class MonthViewWidget(BaseViewWidget):
         target_event = None
         date_info = None
 
-        # 부모 위젯을 따라 올라가며 EventLabelWidget 또는 DayCellWidget 찾기
         while target_widget and target_widget != self:
             if isinstance(target_widget, EventLabelWidget):
                 target_event = target_widget.event_data
@@ -336,7 +392,5 @@ class MonthViewWidget(BaseViewWidget):
             
         self.show_context_menu(event.globalPos(), target_event, date_info)
 
-    
     def paintEvent(self, event):
-        # 위젯 기반으로 변경되었으므로 paintEvent는 비워둠
         pass
