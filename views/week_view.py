@@ -1,41 +1,38 @@
 # views/week_view.py
 import datetime
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollArea, QPushButton, QMenu, QToolTip
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QPoint, QRectF
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from dateutil import parser as dateutil_parser # [수정] dateutil.parser 임포트
+from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollArea, 
+                             QPushButton, QMenu, QToolTip, QStackedWidget)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QPoint, QRectF, QSize
 from PyQt6.QtGui import QAction, QCursor, QPainter, QColor, QPen, QFontMetrics
 
 from custom_dialogs import WeekSelectionDialog
 from .widgets import draw_event
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
+from .month_view import RotatingIcon
 
 class ClickableLabel(QLabel):
-    """클릭 이벤트를 처리할 수 있는 커스텀 QLabel"""
     clicked = pyqtSignal()
 
-    # ▼▼▼ [수정] main_widget 참조를 받도록 __init__ 변경 ▼▼▼
     def __init__(self, main_widget, parent=None):
         super().__init__(parent)
         self.main_widget = main_widget
-    # ▲▲▲ 여기까지 수정 ▲▲▲
 
     def mousePressEvent(self, event):
-        # ▼▼▼ [수정] 잠금 상태 확인 ▼▼▼
         if not self.main_widget.is_interaction_unlocked():
             return
-        # ▲▲▲ 여기까지 수정 ▲▲▲
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
 
-# 레이아웃을 위한 상수 정의
 TIME_GRID_LEFT = 50
 HEADER_HEIGHT = 30
 ALL_DAY_LANE_HEIGHT = 25
 HORIZONTAL_MARGIN = 2
 
 class HeaderCanvas(QWidget):
-    """요일 헤더를 그리는 위젯"""
     def __init__(self, parent_view):
         super().__init__(parent_view)
         self.parent_view = parent_view
@@ -62,7 +59,6 @@ class HeaderCanvas(QWidget):
         header_bg_color = QColor("#2A2A2A") if is_dark else QColor("#F0F0F0")
         painter.fillRect(self.rect(), header_bg_color)
         
-        # 부모 뷰(WeekViewWidget)의 QSS 속성을 직접 사용
         colors = {
             "weekday": self.parent_view.weekdayColor,
             "saturday": self.parent_view.saturdayColor,
@@ -73,12 +69,9 @@ class HeaderCanvas(QWidget):
         today = datetime.date.today()
         start_of_week = self.parent_view._get_start_of_week()
 
-        # --- ▼▼▼ [핵심 수정] 주말 숨기기 로직 분리 ▼▼▼ ---
         if hide_weekends:
-            # 주말 숨기기 모드에서는 항상 월-금 순서로 표시
             days_to_display = ["월", "화", "수", "목", "금"]
             for i, day_text in enumerate(days_to_display):
-                # 시작일(월요일)로부터 i일 후의 날짜 계산
                 day_date = start_of_week + datetime.timedelta(days=i)
                 text = f"{day_text} ({day_date.day})"
                 
@@ -90,23 +83,21 @@ class HeaderCanvas(QWidget):
                 rect = QRectF(x, 0, width, HEADER_HEIGHT)
                 painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
         else:
-            # 주말 포함 모드에서는 사용자의 시작 요일 설정을 따름
-            if start_day_of_week == 0: # 월요일 시작
+            if start_day_of_week == 0:
                 days_of_week_str = ["월", "화", "수", "목", "금", "토", "일"]
-            else: # 일요일 시작
+            else:
                 days_of_week_str = ["일", "월", "화", "수", "목", "금", "토"]
 
             for i in range(7):
                 day_date = start_of_week + datetime.timedelta(days=i)
                 text = f"{days_of_week_str[i]} ({day_date.day})"
                 
-                # 색상은 실제 요일(weekday) 기준으로 결정하여 정확성 확보
                 font_color = colors['weekday']
                 if day_date == today:
                     font_color = colors['today']
-                elif day_date.weekday() == 6: # 일요일
+                elif day_date.weekday() == 6:
                     font_color = colors['sunday']
-                elif day_date.weekday() == 5: # 토요일
+                elif day_date.weekday() == 5:
                     font_color = colors['saturday']
                 
                 painter.setPen(font_color)
@@ -115,12 +106,10 @@ class HeaderCanvas(QWidget):
                 width = self.column_x_coords[i+1] - x
                 rect = QRectF(x, 0, width, HEADER_HEIGHT)
                 painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
-        # --- ▲▲▲ 핵심 수정 종료 ▲▲▲ ---
         
         painter.restore()
-# views/week_view.py의 AllDayCanvas 클래스
+
 class AllDayCanvas(QWidget):
-    """종일 이벤트를 그리는 위젯"""
     def __init__(self, parent_view):
         super().__init__(parent_view)
         self.parent_view = parent_view
@@ -128,9 +117,8 @@ class AllDayCanvas(QWidget):
         self.event_positions = []
         self.column_x_coords = []
         self.event_rects = []
-        self.hovered_event = None # 현재 호버된 이벤트 저장
+        self.hovered_event = None
 
-    # ▼▼▼ [추가] 마우스 이동/이탈 이벤트 핸들러 ▼▼▼
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
         event_under_cursor = self.get_event_at(event.pos())
@@ -144,9 +132,7 @@ class AllDayCanvas(QWidget):
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self.parent_view.handle_hover_leave(self)
-    # ▲▲▲
     
-    # ... (set_data, get_event_at, paintEvent, mouseDoubleClickEvent 함수는 기존과 동일하게 유지) ...
     def set_data(self, positions, num_lanes, column_x_coords):
         self.event_positions = positions
         self.column_x_coords = column_x_coords
@@ -199,9 +185,7 @@ class AllDayCanvas(QWidget):
         if clicked_event:
             self.parent_view.edit_event_requested.emit(clicked_event)
 
-# views/week_view.py의 TimeGridCanvas 클래스
 class TimeGridCanvas(QWidget):
-    """시간 그리드와 시간별 이벤트를 그리는 위젯"""
     def __init__(self, parent_view):
         super().__init__(parent_view)
         self.parent_view = parent_view
@@ -211,9 +195,8 @@ class TimeGridCanvas(QWidget):
         self.event_rects = []
         min_height = self.parent_view.total_hours * self.parent_view.hour_height
         self.setMinimumHeight(min_height)
-        self.hovered_event = None # 현재 호버된 이벤트 저장
+        self.hovered_event = None
         
-    # ▼▼▼ [추가] 마우스 이동/이탈 이벤트 핸들러 ▼▼▼
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
         event_under_cursor = self.get_event_at(event.pos())
@@ -227,9 +210,7 @@ class TimeGridCanvas(QWidget):
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self.parent_view.handle_hover_leave(self)
-    # ▲▲▲
     
-    # ... (set_data, get_event_at, paintEvent, _draw_time_grid, _draw_timed_events, mouseDoubleClickEvent 함수는 기존과 동일하게 유지) ...
     def set_data(self, positions, column_x_coords):
         self.event_positions = positions
         self.column_x_coords = column_x_coords
@@ -261,15 +242,13 @@ class TimeGridCanvas(QWidget):
         hide_weekends = self.parent_view.main_widget.settings.get("hide_weekends", False)
         
         if not hide_weekends and start_of_week <= today < start_of_week + datetime.timedelta(days=7):
-                       # ▼▼▼ highlight_color 값을 수정합니다. ▼▼▼
-            highlight_color = QColor("#CCE5FF") # 연한 파란색
-            # ▲▲▲ 여기까지 수정 ▲▲▲
+            highlight_color = QColor(0, 120, 215, 51) # 20% 투명도의 은은한 파란색
             day_offset = (today - start_of_week).days
             x = self.column_x_coords[day_offset]
             width = self.column_x_coords[day_offset+1] - x
             painter.fillRect(int(x), 0, int(width), self.height(), highlight_color)
 
-        line_color = QColor("#444") if is_dark else QColor("#E0E0E0")
+        line_color = QColor("#404040") if is_dark else QColor("#D0D0D0")
         painter.setPen(QPen(line_color, 1))
         
         for hour in range(1, self.parent_view.total_hours + 1):
@@ -300,8 +279,8 @@ class TimeGridCanvas(QWidget):
             rect = QRect(int(x), int(y), int(width), int(height))
             self.event_rects.append((rect, event_data))
             
-            start_dt = datetime.datetime.fromisoformat(event_data['start']['dateTime'])
-            end_dt = datetime.datetime.fromisoformat(event_data['end']['dateTime'])
+            start_dt = event_data['start']['local_dt']
+            end_dt = event_data['end']['local_dt']
             time_text = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
             summary = event_data.get('summary', '')
             if 'recurrence' in event_data: summary = f"🔄 {summary}"
@@ -322,7 +301,6 @@ class TimeGridCanvas(QWidget):
             if target_datetime:
                 self.parent_view.add_event_requested.emit(target_datetime)
 
-
 class WeekViewWidget(BaseViewWidget):
     def __init__(self, main_widget):
         super().__init__(main_widget)
@@ -337,6 +315,7 @@ class WeekViewWidget(BaseViewWidget):
         self.timeline_timer.start()
         
         self.data_manager.event_completion_changed.connect(self.redraw_events_with_current_data)
+        self.data_manager.sync_state_changed.connect(self.on_sync_state_changed)
 
     def initUI(self):
         main_layout = QVBoxLayout(self)
@@ -346,10 +325,7 @@ class WeekViewWidget(BaseViewWidget):
         nav_layout = QHBoxLayout()
         prev_button, next_button = QPushButton("<"), QPushButton(">")
         
-        # ▼▼▼ [수정] ClickableLabel 생성 시 main_widget 전달 ▼▼▼
         self.week_range_label = ClickableLabel(self.main_widget)
-        # ▲▲▲ 여기까지 수정 ▲▲▲
-        
         self.week_range_label.setObjectName("week_range_label")
         self.week_range_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.week_range_label.clicked.connect(self.open_week_selection_dialog)
@@ -359,11 +335,24 @@ class WeekViewWidget(BaseViewWidget):
         prev_button.clicked.connect(self.go_to_previous_week)
         next_button.clicked.connect(self.go_to_next_week)
         
+        self.sync_icon = RotatingIcon("icons/refresh.svg")
+        self.sync_status_container = QStackedWidget()
+        self.sync_status_container.setFixedSize(QSize(24, 24))
+        self.sync_status_container.addWidget(QWidget())
+        self.sync_status_container.addWidget(self.sync_icon)
+
+        center_layout = QHBoxLayout()
+        center_layout.setContentsMargins(0,0,0,0)
+        center_layout.setSpacing(5)
+        center_layout.addStretch(11)
+        center_layout.addWidget(self.week_range_label)
+        center_layout.addWidget(self.sync_status_container)
+        center_layout.addStretch(10)
+
         nav_layout.addWidget(prev_button)
-        nav_layout.addStretch(1)
-        nav_layout.addWidget(self.week_range_label)
-        nav_layout.addStretch(1)
+        nav_layout.addLayout(center_layout)
         nav_layout.addWidget(next_button)
+        
         main_layout.addLayout(nav_layout)
 
         self.header_canvas = HeaderCanvas(self)
@@ -379,13 +368,20 @@ class WeekViewWidget(BaseViewWidget):
         self.time_grid_canvas = TimeGridCanvas(self)
         self.scroll_area.setWidget(self.time_grid_canvas)
 
-        # AllDayCanvas와 TimeGridCanvas의 contextMenuEvent를 WeekViewWidget의 것으로 연결
         self.all_day_canvas.contextMenuEvent = self.contextMenuEvent
         self.time_grid_canvas.contextMenuEvent = self.contextMenuEvent
 
         self.timeline = QWidget(self.time_grid_canvas)
         self.timeline.setObjectName("timeline")
         self.timeline.setStyleSheet("background-color: #FF3333;")
+
+    def on_sync_state_changed(self, is_syncing):
+        if is_syncing:
+            self.sync_status_container.setCurrentIndex(1)
+            self.sync_icon.start()
+        else:
+            self.sync_icon.stop()
+            self.sync_status_container.setCurrentIndex(0)
 
     def open_week_selection_dialog(self):
         if not self.main_widget.is_interaction_unlocked():
@@ -408,24 +404,19 @@ class WeekViewWidget(BaseViewWidget):
     def contextMenuEvent(self, event):
         if not self.main_widget.is_interaction_unlocked():
             return
-            
-        # context menu 로직은 MainWidget에서 처리하므로 여기서는 전달만 함
-        # MainWidget의 contextMenuEvent가 호출되도록 이벤트를 상위로 전달
-        # 혹은, BaseViewWidget에 공통 로직을 만들고 호출
         super().contextMenuEvent(event)
 
     def _get_start_of_week(self):
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)
-        start_day_setting = self.main_widget.settings.get("start_day_of_week", 6) # 6 for Sunday
-        weekday = self.current_date.weekday() # 0 for Monday
+        start_day_setting = self.main_widget.settings.get("start_day_of_week", 6)
+        weekday = self.current_date.weekday()
 
-        # 주말 숨기기 옵션이 켜져 있으면, 항상 월요일을 한 주의 시작으로 간주합니다.
         if hide_weekends:
             return self.current_date - datetime.timedelta(days=weekday)
 
-        if start_day_setting == 6: # Sunday start
+        if start_day_setting == 6:
             return self.current_date - datetime.timedelta(days=(weekday + 1) % 7)
-        else: # Monday start
+        else:
             return self.current_date - datetime.timedelta(days=weekday)
 
     def _calculate_column_positions(self, total_width):
@@ -458,7 +449,6 @@ class WeekViewWidget(BaseViewWidget):
         
         start_of_week = self._get_start_of_week()
         if hide_weekends:
-            # col_index (0-4)를 실제 요일(월-금)로 매핑
             target_date = start_of_week + datetime.timedelta(days=col_index)
         else:
             target_date = start_of_week + datetime.timedelta(days=col_index)
@@ -479,7 +469,11 @@ class WeekViewWidget(BaseViewWidget):
             QToolTip.hideText()
 
     def update_timeline(self):
-        now = datetime.datetime.now()
+        try:
+            user_tz = ZoneInfo(self.main_widget.settings.get("user_timezone", "UTC"))
+        except ZoneInfoNotFoundError:
+            user_tz = ZoneInfo("UTC")
+        now = datetime.datetime.now(user_tz)
         today = now.date()
         start_of_week = self._get_start_of_week()
         
@@ -515,15 +509,12 @@ class WeekViewWidget(BaseViewWidget):
         end_of_week = start_of_week + datetime.timedelta(days=num_days - 1)
         
         first_day_of_month = start_of_week.replace(day=1)
-        # 그 주의 시작일(월요일 기준)을 계산
         first_day_of_cal_week_start = first_day_of_month - datetime.timedelta(days=first_day_of_month.weekday())
-        # 현재 주의 시작일과 그 달의 첫 번째 주 시작일의 차이를 계산하여 주차를 구함
         week_number = (start_of_week - first_day_of_cal_week_start).days // 7 + 1
 
         main_text = f"{start_of_week.month}월 {week_number}주"
         sub_text = f"({start_of_week.strftime('%Y.%m.%d')} - {end_of_week.strftime('%Y.%m.%d')})"
         
-        # HTML 대신 Rich Text를 사용하여 두 줄 텍스트를 표현하고, 색상은 QSS에 위임합니다.
         label_html = f"""
         <p style="font-size: 16px; font-weight: bold; margin-bottom: -2px;">{main_text}</p>
         <p style="font-size: 10px; margin-top: 0px;">{sub_text}</p>
@@ -535,7 +526,11 @@ class WeekViewWidget(BaseViewWidget):
 
         today = datetime.date.today()
         if start_of_week <= today <= end_of_week:
-            now = datetime.datetime.now()
+            try:
+                user_tz = ZoneInfo(self.main_widget.settings.get("user_timezone", "UTC"))
+            except ZoneInfoNotFoundError:
+                user_tz = ZoneInfo("UTC")
+            now = datetime.datetime.now(user_tz)
             target_y = now.hour * self.hour_height + (now.minute / 60.0 * self.hour_height)
             scroll_offset = self.scroll_area.height() * 0.3
             self.scroll_area.verticalScrollBar().setValue(int(target_y - scroll_offset))
@@ -549,24 +544,44 @@ class WeekViewWidget(BaseViewWidget):
         selected_ids = self.main_widget.settings.get("selected_calendars", [])
         filtered_events = [event for event in week_events if event.get('calendarId') in selected_ids]
 
+        try:
+            user_tz = ZoneInfo(self.main_widget.settings.get("user_timezone", "UTC"))
+        except ZoneInfoNotFoundError:
+            user_tz = ZoneInfo("UTC")
+
         time_events, all_day_events = [], []
         for e in filtered_events:
-            start_dt_str = e['start'].get('dateTime', e['start'].get('date'))
-            start_dt = datetime.datetime.fromisoformat(start_dt_str.replace('Z', ''))
-            if hide_weekends and start_dt.weekday() >= 5:
+            try:
+                start_str = e['start'].get('dateTime', e['start'].get('date'))
+                end_str = e['end'].get('dateTime', e['end'].get('date'))
+
+                # [핵심 수정] dateutil.parser.isoparse 사용
+                if 'dateTime' in e['start']:
+                    aware_start_dt = dateutil_parser.isoparse(start_str)
+                    aware_end_dt = dateutil_parser.isoparse(end_str)
+                    e['start']['local_dt'] = aware_start_dt.astimezone(user_tz)
+                    e['end']['local_dt'] = aware_end_dt.astimezone(user_tz)
+                else: # 종일 이벤트
+                    naive_start_dt = datetime.datetime.fromisoformat(start_str)
+                    naive_end_dt = datetime.datetime.fromisoformat(end_str)
+                    e['start']['local_dt'] = user_tz.localize(naive_start_dt) if naive_start_dt.tzinfo is None else naive_start_dt
+                    e['end']['local_dt'] = user_tz.localize(naive_end_dt) if naive_end_dt.tzinfo is None else naive_end_dt
+
+                if hide_weekends and e['start']['local_dt'].weekday() >= 5:
+                    continue
+
+                is_all_day_native = 'date' in e['start']
+                duration = e['end']['local_dt'] - e['start']['local_dt']
+                is_multi_day = duration.total_seconds() >= 86400
+                is_exactly_24h_midnight = duration.total_seconds() == 86400 and e['start']['local_dt'].time() == datetime.time(0, 0)
+
+                if is_all_day_native or (is_multi_day and not is_exactly_24h_midnight):
+                    all_day_events.append(e)
+                elif 'dateTime' in e['start']:
+                    time_events.append(e)
+            except (ValueError, TypeError) as err:
+                print(f"이벤트 시간 파싱 오류: {err}, 이벤트: {e.get('summary')}")
                 continue
-
-            is_all_day_native = 'date' in e['start']
-            end_dt_str = e['end'].get('dateTime', e['end'].get('date'))
-            end_dt = datetime.datetime.fromisoformat(end_dt_str.replace('Z', ''))
-            duration_seconds = (end_dt - start_dt).total_seconds()
-            is_multi_day = duration_seconds >= 86400
-            is_exactly_24h_midnight = duration_seconds == 86400 and start_dt.time() == datetime.time(0, 0) and end_dt.time() == datetime.time(0, 0)
-
-            if is_all_day_native or (is_multi_day and not is_exactly_24h_midnight):
-                all_day_events.append(e)
-            elif 'dateTime' in e['start']:
-                time_events.append(e)
 
         calculator = WeekLayoutCalculator(time_events, all_day_events, start_of_week, self.hour_height)
         

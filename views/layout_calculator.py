@@ -13,14 +13,13 @@ class MonthLayoutCalculator:
         self.event_height = event_height
         self.event_spacing = event_spacing
 
-        self.occupied_lanes = {}  # {date: [lane_index, ...]}
-        self.event_positions = [] # [{'event': event, 'rect': (x, y, w, h), 'style': '...'}, ...]
-        self.more_events = {}     # {date: [event, ...]}
+        self.occupied_lanes = {}
+        self.event_positions = []
+        self.more_events = {}
 
     def calculate(self):
-        """모든 이벤트의 위치와 스타일을 계산합니다."""
         if not self.events:
-            return [], {} # 빈 값을 반환하도록 수정
+            return [], {}
 
         for event in self.events:
             try:
@@ -45,7 +44,6 @@ class MonthLayoutCalculator:
         elif not is_all_day and event_start_date != event_end_date and end_str[11:] == '00:00:00':
              event_end_date -= datetime.timedelta(days=1)
 
-
         draw_start_date = max(event_start_date, self.view_start_date)
         draw_end_date = min(event_end_date, self.view_end_date)
 
@@ -60,7 +58,6 @@ class MonthLayoutCalculator:
                 break
             y_level += 1
 
-        # 레이아웃 정보를 저장할 딕셔너리 생성
         position_info = {
             'event': event,
             'y_level': y_level,
@@ -70,46 +67,43 @@ class MonthLayoutCalculator:
         }
         self.event_positions.append(position_info)
 
-        # 차지하는 레인 정보 업데이트
         for day in event_span_days:
             self.occupied_lanes.setdefault(day, []).append(y_level)
 
-
 class WeekLayoutCalculator:
     def __init__(self, time_events, all_day_events, start_of_week, hour_height=80, hide_weekends=False):
-        self.time_events = sorted(time_events, key=lambda e: e['start'].get('dateTime', ''))
+        # [수정] 정렬 기준을 local_dt로 변경
+        self.time_events = sorted(time_events, key=lambda e: e['start']['local_dt'])
         self.all_day_events = sorted(all_day_events, key=lambda e: (
-            datetime.date.fromisoformat(self._get_start_str(e)[:10]),
-            -(datetime.date.fromisoformat(self._get_end_str(e)[:10]) - datetime.date.fromisoformat(self._get_start_str(e)[:10])).days
+            e['start']['local_dt'].date(),
+            -(e['end']['local_dt'].date() - e['start']['local_dt'].date()).days
         ))
         self.start_of_week = start_of_week
         self.hour_height = hour_height
         self.hide_weekends = hide_weekends
         self.num_days = 5 if hide_weekends else 7
 
-    def _get_start_str(self, event):
-        return event.get('start', {}).get('dateTime') or event.get('start', {}).get('date', '')
+    def _get_start_dt(self, event):
+        return event['start']['local_dt']
 
-    def _get_end_str(self, event):
-        return event.get('end', {}).get('dateTime') or event.get('end', {}).get('date', '')
+    def _get_end_dt(self, event):
+        return event['end']['local_dt']
 
     def _get_day_column_index(self, date_obj):
-        """날짜 객체를 받아 뷰의 컬럼 인덱스(0-4 또는 0-6)를 반환합니다."""
         if self.hide_weekends:
-            if date_obj.weekday() >= 5: return -1 # 주말이면 -1
-            return date_obj.weekday() # 월(0) ~ 금(4)
+            if date_obj.weekday() >= 5: return -1
+            return date_obj.weekday()
         else:
             return (date_obj - self.start_of_week).days
 
     def calculate_time_events(self, day_column_width):
-        """시간대별 이벤트의 위치와 크기를 계산합니다. (가운데 정렬 적용)"""
         positions = []
         events_by_day = defaultdict(list)
         HORIZONTAL_EVENT_GAP = 2
-        GROUP_WIDTH_RATIO = 0.9 # 열 너비의 90%를 이벤트 그룹이 사용
+        GROUP_WIDTH_RATIO = 0.9
 
         for event in self.time_events:
-            start_dt = datetime.datetime.fromisoformat(self._get_start_str(event)).replace(tzinfo=None)
+            start_dt = self._get_start_dt(event)
             events_by_day[start_dt.date()].append(event)
         
         for day_date, day_events in events_by_day.items():
@@ -123,7 +117,6 @@ class WeekLayoutCalculator:
                 num_columns = len(columns)
                 if num_columns == 0: continue
 
-                # 그룹 전체가 사용할 너비와 시작점을 계산
                 group_total_width = day_column_width * GROUP_WIDTH_RATIO
                 group_start_x_offset = (day_column_width * (1 - GROUP_WIDTH_RATIO)) / 2
                 
@@ -132,14 +125,13 @@ class WeekLayoutCalculator:
 
                 for i, column in enumerate(columns):
                     for event in column:
-                        start_dt = datetime.datetime.fromisoformat(self._get_start_str(event)).replace(tzinfo=None)
-                        end_dt = datetime.datetime.fromisoformat(self._get_end_str(event)).replace(tzinfo=None)
+                        start_dt = self._get_start_dt(event)
+                        end_dt = self._get_end_dt(event)
                         
                         y = start_dt.hour * self.hour_height + (start_dt.minute / 60) * self.hour_height
                         duration_seconds = (end_dt - start_dt).total_seconds()
                         height = max(20, (duration_seconds / 3600) * self.hour_height)
                         
-                        # 최종 x 위치 계산
                         base_col_x = col_index * day_column_width
                         x_in_group = i * (sub_col_width + HORIZONTAL_EVENT_GAP)
                         x = base_col_x + group_start_x_offset + x_in_group
@@ -149,43 +141,41 @@ class WeekLayoutCalculator:
         return positions
 
     def _group_overlapping_events_for_layout(self, day_events):
-        """레이아웃 계산을 위해 직접적으로 겹치는 이벤트들을 그룹으로 묶습니다."""
         if not day_events:
             return []
         
-        sorted_events = sorted(day_events, key=self._get_start_str)
+        sorted_events = sorted(day_events, key=self._get_start_dt)
         
         groups = []
         current_group = [sorted_events[0]]
-        group_end_time = datetime.datetime.fromisoformat(self._get_end_str(sorted_events[0]))
+        group_end_time = self._get_end_dt(sorted_events[0])
 
         for event in sorted_events[1:]:
-            event_start_time = datetime.datetime.fromisoformat(self._get_start_str(event))
+            event_start_time = self._get_start_dt(event)
             if event_start_time < group_end_time:
                 current_group.append(event)
-                group_end_time = max(group_end_time, datetime.datetime.fromisoformat(self._get_end_str(event)))
+                group_end_time = max(group_end_time, self._get_end_dt(event))
             else:
                 groups.append(current_group)
                 current_group = [event]
-                group_end_time = datetime.datetime.fromisoformat(self._get_end_str(event))
+                group_end_time = self._get_end_dt(event)
         
         groups.append(current_group)
         return groups
 
     def _find_columns_in_group(self, group_events):
-        """하나의 이벤트 그룹 내에서 겹치지 않는 이벤트들의 열(column)을 찾습니다."""
         if not group_events:
             return []
 
-        sorted_events = sorted(group_events, key=self._get_start_str)
+        sorted_events = sorted(group_events, key=self._get_start_dt)
 
         columns = []
         for event in sorted_events:
             placed = False
-            event_start_dt = datetime.datetime.fromisoformat(self._get_start_str(event))
+            event_start_dt = self._get_start_dt(event)
             for column in columns:
                 last_event_in_column = column[-1]
-                last_event_end_dt = datetime.datetime.fromisoformat(self._get_end_str(last_event_in_column))
+                last_event_end_dt = self._get_end_dt(last_event_in_column)
                 
                 if event_start_dt >= last_event_end_dt:
                     column.append(event)
@@ -197,25 +187,20 @@ class WeekLayoutCalculator:
         return columns
 
     def calculate_all_day_events(self):
-        """종일 이벤트의 위치(레인, 시작 컬럼, 스팬)를 계산합니다."""
         positions = []
         lanes_occupancy = [[] for _ in range(self.num_days)]
         event_to_lane = {}
 
         for event in self.all_day_events:
-            is_all_day_native = 'date' in event['start']
-            start_str = self._get_start_str(event)
-            end_str = self._get_end_str(event)
+            start_date = self._get_start_dt(event).date()
+            end_date = self._get_end_dt(event).date()
             
-            start_date = datetime.date.fromisoformat(start_str[:10])
-            end_date = datetime.date.fromisoformat(end_str[:10])
-            
-            if is_all_day_native:
+            # 종일 이벤트 보정
+            if 'date' in event['start']:
                 end_date -= datetime.timedelta(days=1)
-            elif start_date != end_date and end_str[11:] == '00:00:00':
+            elif start_date != end_date and self._get_end_dt(event).time() == datetime.time(0, 0):
                 end_date -= datetime.timedelta(days=1)
 
-            # Calculate the visible portion of the event for the current view
             view_end_date = self.start_of_week + datetime.timedelta(days=self.num_days - 1)
             draw_start_date = max(start_date, self.start_of_week)
             draw_end_date = min(end_date, view_end_date)
@@ -227,7 +212,6 @@ class WeekLayoutCalculator:
             while True:
                 is_free = True
                 
-                # Iterate only over the visible days to check for free lanes
                 current_date_in_view = draw_start_date
                 while current_date_in_view <= draw_end_date:
                     col_idx = self._get_day_column_index(current_date_in_view)
@@ -237,7 +221,6 @@ class WeekLayoutCalculator:
                     current_date_in_view += datetime.timedelta(days=1)
 
                 if is_free:
-                    # Occupy the lane for the visible days
                     current_date_in_view = draw_start_date
                     while current_date_in_view <= draw_end_date:
                         col_idx = self._get_day_column_index(current_date_in_view)
@@ -249,18 +232,12 @@ class WeekLayoutCalculator:
                 lane_idx += 1
         
         for event in self.all_day_events:
-            # This part remains the same, as it correctly calculates the final position
-            # based on the pre-calculated lane.
-            is_all_day_native = 'date' in event['start']
-            start_str = self._get_start_str(event)
-            end_str = self._get_end_str(event)
-
-            start_date = datetime.date.fromisoformat(start_str[:10])
-            end_date = datetime.date.fromisoformat(end_str[:10])
+            start_date = self._get_start_dt(event).date()
+            end_date = self._get_end_dt(event).date()
             
-            if is_all_day_native:
+            if 'date' in event['start']:
                 end_date -= datetime.timedelta(days=1)
-            elif start_date != end_date and end_str[11:] == '00:00:00':
+            elif start_date != end_date and self._get_end_dt(event).time() == datetime.time(0, 0):
                 end_date -= datetime.timedelta(days=1)
 
             view_end_date = self.start_of_week + datetime.timedelta(days=self.num_days - 1)

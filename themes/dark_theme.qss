@@ -65,6 +65,5 @@ MonthViewWidget, WeekViewWidget {
     qproperty-saturdayColor: #8080FF;
     qproperty-sundayColor: #FF8080;
     qproperty-otherMonthColor: #777777;
-    qproperty-todayBackgroundColor: #004C99;
     qproperty-todayForegroundColor: #FFFFFF;
 }

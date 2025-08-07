@@ -268,7 +268,7 @@ class MonthViewWidget(BaseViewWidget):
             cell_widget.day_label.setStyleSheet(f"color: {font_color.name()}; background-color: transparent;")
             
             if current_day_obj == today:
-                cell_widget.setStyleSheet(f"background-color: {colors['today_bg'].name()}; border-radius: 5px;")
+                cell_widget.setStyleSheet("background-color: rgba(0, 120, 215, 51); border-radius: 5px;")
                 cell_widget.day_label.setStyleSheet(f"color: {colors['today_fg'].name()}; font-weight: bold; background-color: transparent;")
             
             self.calendar_grid.addWidget(cell_widget, grid_row, grid_col)
@@ -354,7 +354,7 @@ class MonthViewWidget(BaseViewWidget):
             if show_more_button and more_events_data:
                 more_button = QPushButton(f"+ {len(more_events_data)}개 더보기")
                 # [수정] '더보기' 버튼의 폰트를 줄이고 패딩을 제거하여 공간 확보
-                more_button.setStyleSheet("text-align: left; border: none; color: #a0c4ff; background-color: transparent; padding: 0px; font-size: 8pt;")
+                more_button.setStyleSheet("text-align: left; border: none; color: #82a7ff; background-color: transparent; padding: 0px; font-size: 8pt;")
                 more_button.setFixedHeight(event_height)
                 more_button.clicked.connect(lambda _, d=date, e=more_events_data: self.show_more_events_popup(d, e))
                 cell_widget.events_layout.insertWidget(max_slots - 1, more_button)
