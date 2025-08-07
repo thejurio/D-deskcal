@@ -62,6 +62,9 @@ class MainWidget(QWidget):
         self.start_keyboard_listener()
         
         self.initUI()
+        
+        # DataManager의 sync_timer가 DataManager의 새로운 메서드를 호출하도록 연결
+        self.data_manager.sync_timer.timeout.connect(self.data_manager.request_current_month_sync)
 
         if sys.platform == "win32":
             self.set_as_desktop_child()
@@ -359,7 +362,7 @@ class MainWidget(QWidget):
         tray_menu.addAction(settings_action)
 
         refresh_action = QAction("새로고침", self)
-        refresh_action.triggered.connect(self.data_manager.request_full_sync)
+        refresh_action.triggered.connect(lambda: self.data_manager.force_sync_month(self.current_date.year, self.current_date.month))
         tray_menu.addAction(refresh_action)
 
         tray_menu.addSeparator()
@@ -645,7 +648,8 @@ class MainWidget(QWidget):
     def add_common_context_menu_actions(self, menu):
         if menu.actions(): menu.addSeparator()
         refreshAction = QAction("새로고침 (Refresh)", self)
-        refreshAction.triggered.connect(self.data_manager.request_full_sync)
+        # 현재 보고 있는 월만 강제 동기화하도록 변경
+        refreshAction.triggered.connect(lambda: self.data_manager.force_sync_month(self.current_date.year, self.current_date.month))
         menu.addAction(refreshAction)
         settingsAction = QAction("설정 (Settings)", self)
         settingsAction.triggered.connect(self.open_settings_window)

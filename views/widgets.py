@@ -11,15 +11,14 @@ from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics
 class EventLabelWidget(QLabel):
     edit_requested = pyqtSignal(dict)
 
-    def __init__(self, event, is_completed=False, main_widget=None, parent=None):
+    def __init__(self, event, is_completed=False, is_other_month=False, main_widget=None, parent=None):
         super().__init__(parent)
         self.event_data = event
         self.is_completed = is_completed
+        self.is_other_month = is_other_month
         self.main_widget = main_widget
-        # ▼▼▼ [수정] 마우스 추적 활성화 및 부모 뷰 참조 저장 ▼▼▼
         self.setMouseTracking(True) 
         self.parent_view = self.main_widget.stacked_widget.currentWidget()
-        # ▲▲▲
 
         summary = event.get('summary', '제목 없음')
         if 'recurrence' in event:
@@ -30,19 +29,15 @@ class EventLabelWidget(QLabel):
         
         self.set_styles()
 
-    # ▼▼▼ [추가] 마우스 진입/이탈 이벤트 핸들러 ▼▼▼
     def enterEvent(self, event):
-        """마우스가 위젯에 진입하면 부모 뷰의 핸들러를 호출합니다."""
         super().enterEvent(event)
         if self.parent_view:
             self.parent_view.handle_hover_enter(self, self.event_data)
 
     def leaveEvent(self, event):
-        """마우스가 위젯에서 이탈하면 부모 뷰의 핸들러를 호출합니다."""
         super().leaveEvent(event)
         if self.parent_view:
             self.parent_view.handle_hover_leave(self)
-    # ▲▲▲
 
     def set_styles(self):
         bg_color = self.event_data.get('color', '#555555')
@@ -61,14 +56,20 @@ class EventLabelWidget(QLabel):
 
         self.setStyleSheet(style)
         
+        # 완료 또는 다른 달 이벤트일 경우 투명도 조절
+        opacity = 1.0
         if self.is_completed:
+            opacity = 0.6
+        elif self.is_other_month:
+            opacity = 0.5 # 다른 달 이벤트는 더 투명하게
+
+        if opacity < 1.0:
             opacity_effect = QGraphicsOpacityEffect(self)
-            opacity_effect.setOpacity(0.6)
+            opacity_effect.setOpacity(opacity)
             self.setGraphicsEffect(opacity_effect)
         else:
             self.setGraphicsEffect(None)
     
-    # ▼▼▼ [수정] resizeEvent 로직을 원래대로 또는 개선된 버전으로 유지 ▼▼▼
     def resizeEvent(self, event):
         super().resizeEvent(event)
         font_metrics = QFontMetrics(self.font())

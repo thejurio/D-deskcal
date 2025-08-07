@@ -15,6 +15,22 @@ from config import (DB_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL,
                     GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_EVENT_COLOR)
 
+def get_month_view_dates(year, month, start_day_of_week):
+    """월간 뷰에 표시될 모든 날짜(이전/현재/다음 달 포함)의 시작일과 종료일을 반환합니다."""
+    first_day_of_month = datetime.date(year, month, 1)
+    
+    # 해당 월의 첫 날이 주의 몇 번째 날인지 계산 (설정값에 따라)
+    if start_day_of_week == 6: # 일요일 시작
+        offset = (first_day_of_month.weekday() + 1) % 7
+    else: # 월요일 시작
+        offset = first_day_of_month.weekday()
+        
+    start_date = first_day_of_month - datetime.timedelta(days=offset)
+    
+    # 6주(42일)를 기준으로 종료일 계산
+    end_date = start_date + datetime.timedelta(days=41)
+    return start_date, end_date
+
 class CachingManager(QObject):
     finished = pyqtSignal()
     def __init__(self, data_manager):
@@ -32,38 +48,43 @@ class CachingManager(QObject):
     def request_caching_around(self, year, month, direction="none"):
         with QMutexLocker(self._mutex):
             self._last_viewed_month = (year, month)
-            self._task_queue = [t for t in self._task_queue if t[0] == "FULL_SYNC"]
-            self._pending_tasks = {t for t in self._pending_tasks if t[0] == "FULL_SYNC"}
+            # '현재 월 동기화' 작업을 제외한 모든 월 캐싱 작업을 초기화
+            self._task_queue = [t for t in self._task_queue if t[0] == "SYNC_CURRENT"]
+            self._pending_tasks = {t for t in self._pending_tasks if t[0] == "SYNC_CURRENT"}
+            
             new_tasks = []
             base_date = datetime.date(year, month, 15)
+            
+            # 예측 캐싱 로직 (기존과 유사하게 주변 월을 캐싱)
             task_configs = []
             if direction == "forward":
                 for i in range(1, 4): task_configs.append(i * 31)
-                task_configs.append(0)
                 for i in range(-1, -4, -1): task_configs.append(i * 31)
             elif direction == "backward":
                 for i in range(-1, -4, -1): task_configs.append(i * 31)
-                task_configs.append(0)
                 for i in range(1, 4): task_configs.append(i * 31)
-            else:
-                task_configs.append(0)
+            else: # none or initial
                 for i in range(1, 4):
                     task_configs.append(i * 31)
                     task_configs.append(-i * 31)
+
             for days in task_configs:
                 new_tasks.append(self._get_month_tuple(base_date, days))
+
             for task_type, task_data in new_tasks:
                 if task_data not in self.data_manager.event_cache and ('month', task_data) not in self._pending_tasks:
                     self._task_queue.append(('month', task_data))
                     self._pending_tasks.add(('month', task_data))
             print(f"새로운 캐싱 계획 수립: {year}년 {month}월 주변. 대기열: {len(self._task_queue)}개")
 
-    def request_full_sync(self):
+    def request_current_month_sync(self):
+        """현재 보고 있는 월의 동기화를 요청합니다."""
         with QMutexLocker(self._mutex):
-            if ("FULL_SYNC", None) not in self._pending_tasks:
-                self._task_queue.insert(0, ("FULL_SYNC", None))
-                self._pending_tasks.add(("FULL_SYNC", None))
-                print("백그라운드 전체 동기화 요청됨.")
+            if self._last_viewed_month and ("SYNC_CURRENT", self._last_viewed_month) not in self._pending_tasks:
+                # 최우선순위로 작업을 추가
+                self._task_queue.insert(0, ("SYNC_CURRENT", self._last_viewed_month))
+                self._pending_tasks.add(("SYNC_CURRENT", self._last_viewed_month))
+                print(f"현재 월({self._last_viewed_month}) 동기화 요청됨.")
 
     def _get_month_tuple(self, base_date, days_delta):
         target_date = base_date + datetime.timedelta(days=days_delta)
@@ -81,65 +102,52 @@ class CachingManager(QObject):
                 if self._task_queue:
                     task_type, task_data = self._task_queue.pop(0)
                     self._pending_tasks.remove((task_type, task_data))
-            if task_type == "month":
+            
+            if task_type in ("month", "SYNC_CURRENT"):
                 self._wait_if_paused()
                 if not self._is_running: break
+                
                 year, month = task_data
-                print(f"백그라운드 캐싱 수행: {year}년 {month}월")
+                action_text = "백그라운드 캐싱" if task_type == "month" else "현재 월 동기화"
+                print(f"{action_text} 수행: {year}년 {month}월")
+                
                 events = self.data_manager._fetch_events_from_providers(year, month)
                 if events is not None:
                     self.data_manager.event_cache[(year, month)] = events
                     self.data_manager._save_month_to_cache_db(year, month, events)
                     self.data_manager.data_updated.emit(year, month)
-                    self._manage_cache_size()
-                time.sleep(0.5)
-            elif task_type == "FULL_SYNC":
-                self._perform_full_sync()
+                    if task_type == "month": # 일반 캐싱일 때만 크기 관리
+                        self._manage_cache_size()
+                
+                # 현재 월 동기화는 더 자주, 일반 캐싱은 조금 더 여유롭게
+                time.sleep(0.2 if task_type == "SYNC_CURRENT" else 0.5)
             else:
                 time.sleep(1)
         print("지능형 캐싱 매니저 스레드가 종료되었습니다.")
         self.finished.emit()
 
-    def _perform_full_sync(self):
-        print("백그라운드 전체 동기화 시작...")
-        with QMutexLocker(self._mutex):
-            cached_months = list(self.data_manager.event_cache.keys())
-            if not cached_months: return
-            if self._last_viewed_month:
-                y, m = self._last_viewed_month
-                cached_months.sort(key=lambda t: abs((t[0] - y) * 12 + (t[1] - m)))
-        for year, month in cached_months:
-            self._wait_if_paused()
-            if not self._is_running: break
-            print(f"동기화 중: {year}년 {month}월")
-            events = self.data_manager._fetch_events_from_providers(year, month)
-            if events is not None:
-                self.data_manager.event_cache[(year, month)] = events
-                self.data_manager._save_month_to_cache_db(year, month, events)
-                self.data_manager.data_updated.emit(year, month)
-            time.sleep(0.2)
-        if self._is_running:
-            print("자동 동기화 완료.")
-
     def _manage_cache_size(self):
         with QMutexLocker(self._mutex):
             today = datetime.date.today()
             current_month = (today.year, today.month)
-            prev_month_date = today.replace(day=1) - datetime.timedelta(days=1)
-            prev_month = (prev_month_date.year, prev_month_date.month)
-            next_month_date = (today.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-            next_month = (next_month_date.year, next_month_date.month)
             
-            protected_months = {current_month, prev_month, next_month}
-            
+            # 보호할 월 목록 (현재, 이전, 다음 달)
+            protected_months = {current_month}
+            base_date = today.replace(day=15)
+            for i in range(1, 3): # 주변 2달까지 보호 범위 확장
+                protected_months.add((base_date + datetime.timedelta(days=i*31)).timetuple()[:2])
+                protected_months.add((base_date - datetime.timedelta(days=i*31)).timetuple()[:2])
+
             while len(self.data_manager.event_cache) > MAX_CACHE_SIZE:
                 if self._last_viewed_month is None: break
                 
+                # 제거할 후보: 보호되지 않은 월 중에서 현재 보고 있는 월에서 가장 먼 월
                 candidates = {
                     month: abs((month[0] - self._last_viewed_month[0]) * 12 + (month[1] - self._last_viewed_month[1]))
                     for month in self.data_manager.event_cache.keys() if month not in protected_months
                 }
                 if not candidates: break
+                
                 farthest_month = max(candidates, key=candidates.get)
                 print(f"월간 캐시 용량 초과. 가장 먼 항목 제거: {farthest_month}")
                 del self.data_manager.event_cache[farthest_month]
@@ -272,7 +280,6 @@ class DataManager(QObject):
         
         if start_timer:
             self.sync_timer = QTimer(self)
-            self.sync_timer.timeout.connect(self.request_full_sync)
             self.update_sync_timer()
         
         self.setup_providers()
@@ -383,9 +390,6 @@ class DataManager(QObject):
                     # DB 캐시도 업데이트
                     self._save_month_to_cache_db(month_key[0], month_key[1], remaining_events)
             
-            # 구글 캘린더만 선택되어 있던 경우, 설정을 초기화하거나 로컬 캘린더를 선택하도록 유도할 수 있음
-            # 여기서는 일단 캐시만 정리
-            
         self.get_all_calendars(fetch_if_empty=True)
         
         # UI가 새로운 데이터 상태를 반영하도록 신호 전송
@@ -400,14 +404,16 @@ class DataManager(QObject):
     def update_sync_timer(self):
         interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
         if interval_minutes > 0:
+            # 타이머가 이제 현재 월 동기화를 요청하도록 변경
             self.sync_timer.start(interval_minutes * 60 * 1000)
             print(f"자동 동기화 타이머가 설정되었습니다. 주기: {interval_minutes}분")
         else:
             self.sync_timer.stop()
             print("자동 동기화가 비활성화되었습니다.")
 
-    def request_full_sync(self):
-        self.caching_manager.request_full_sync()
+    def request_current_month_sync(self):
+        """주기적인 자동 동기화를 위해 CachingManager에 현재 월 동기화를 요청합니다."""
+        self.caching_manager.request_current_month_sync()
 
     def notify_date_changed(self, new_date, direction="none"):
         self.last_requested_month = (new_date.year, new_date.month)
@@ -477,8 +483,10 @@ class DataManager(QObject):
 
     def _fetch_events_from_providers(self, year, month):
         all_events = []
-        _, num_days = calendar.monthrange(year, month)
-        start_date, end_date = datetime.date(year, month, 1), datetime.date(year, month, num_days)
+        # 월간 뷰에 필요한 전체 날짜 범위를 계산
+        start_day_of_week = self.settings.get("start_day_of_week", 6) # 6 for Sunday
+        start_date, end_date = get_month_view_dates(year, month, start_day_of_week)
+        
         all_calendars = self.get_all_calendars(fetch_if_empty=False) # 동기 호출 방지
         custom_colors = self.settings.get("calendar_colors", {})
         default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
@@ -508,10 +516,26 @@ class DataManager(QObject):
         self.immediate_sync_worker.data_fetched.connect(self._on_immediate_data_fetched)
         self.immediate_sync_worker.error_occurred.connect(self.report_error)
         self.immediate_sync_thread.started.connect(self.immediate_sync_worker.run)
-        self.immediate_sync_worker.finished.connect(self.immediate_sync_thread.quit)
-        self.immediate_sync_worker.finished.connect(self.immediate_sync_worker.deleteLater)
-        self.immediate_sync_thread.finished.connect(self.immediate_sync_thread.deleteLater)
+        
+        # 스레드 종료 시 _on_immediate_sync_finished를 호출하여 정리하도록 연결
+        self.immediate_sync_worker.finished.connect(self._on_immediate_sync_finished)
+        
         self.immediate_sync_thread.start()
+
+    def _on_immediate_sync_finished(self):
+        """즉시 동기화 스레드가 종료된 후 호출되는 정리 함수."""
+        if self.immediate_sync_thread is None:
+            return
+            
+        self.immediate_sync_thread.quit()
+        if self.immediate_sync_thread.isRunning():
+            self.immediate_sync_thread.wait()
+            
+        self.immediate_sync_worker.deleteLater()
+        self.immediate_sync_thread.deleteLater()
+        self.immediate_sync_thread = None
+        self.immediate_sync_worker = None
+        print("즉시 동기화 스레드 정리 완료.")
 
     def _on_immediate_data_fetched(self, year, month, events):
         print(f"즉시 동기화 데이터 수신: {year}년 {month}월")
