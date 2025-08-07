@@ -171,6 +171,27 @@ class MainWidget(QWidget):
     # ▲▲▲ 여기까지 수정 ▲▲▲
 
     def apply_window_settings(self):
+        # 1. 창 위치 설정 적용
+        mode = self.settings.get("window_mode", DEFAULT_WINDOW_MODE)
+        flags = self.windowFlags()
+
+        # 기존 위치 관련 플래그 초기화
+        flags &= ~Qt.WindowType.WindowStaysOnTopHint
+        flags &= ~Qt.WindowType.WindowStaysOnBottomHint
+
+        if mode == "AlwaysOnTop":
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        elif mode == "AlwaysOnBottom":
+            flags |= Qt.WindowType.WindowStaysOnBottomHint
+        
+        self.setWindowFlags(flags)
+        self.show() # setWindowFlags 호출 후 창이 숨겨질 수 있으므로 다시 표시
+
+        # "항상 아래에" 모드일 때 Z-order를 맨 아래로 강제
+        if mode == "AlwaysOnBottom" and sys.platform == "win32":
+            self._push_to_desktop_bottom()
+
+        # 2. 잠금 모드 설정 적용
         if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
             self.lock_interactions()
         else:
@@ -196,7 +217,7 @@ class MainWidget(QWidget):
 
     def initUI(self):
         self.setWindowTitle('Glassy Calendar')
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnBottomHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
         
@@ -346,6 +367,30 @@ class MainWidget(QWidget):
         self.show()
         self.activateWindow()
 
+    def _get_dialog_pos(self):
+        """현재 위젯이 속한 화면의 중앙 위치를 반환합니다."""
+        screen = QApplication.screenAt(self.pos())
+        if not screen:
+            screen = QApplication.primaryScreen()
+        
+        screen_center = screen.availableGeometry().center()
+        # 대화상자 크기를 대략적으로 추정하여 중앙 정렬 (필요 시 조절)
+        # 여기서는 대화상자 크기를 모르므로, 일단 화면 중앙을 기준으로 합니다.
+        # 더 정확하게 하려면 대화상자 크기를 알아야 합니다.
+        # 예: pos.setX(pos.x() - dialog.width() / 2)
+        return screen_center
+
+    def _push_to_desktop_bottom(self):
+        """[Windows 전용] 창을 Z-order의 가장 아래로 보냅니다."""
+        if sys.platform != "win32": return
+        try:
+            hwnd = self.winId()
+            # Z-order를 가장 아래로 설정합니다.
+            win32gui.SetWindowPos(hwnd, win32con.HWND_BOTTOM, 0, 0, 0, 0,
+                                  win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+        except Exception as e:
+            print(f"Push to desktop bottom error: {e}")
+
     def quit_application(self):
         """애플리케이션을 완전히 종료합니다."""
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
@@ -434,7 +479,7 @@ class MainWidget(QWidget):
         with self.data_manager.user_action_priority():
             original_settings_snapshot = copy.deepcopy(self.settings)
 
-            settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=QCursor.pos())
+            settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=self._get_dialog_pos())
             self.active_dialog = settings_dialog
             settings_dialog.transparency_changed.connect(self.set_window_opacity)
             settings_dialog.theme_changed.connect(self.apply_theme)
@@ -480,7 +525,7 @@ class MainWidget(QWidget):
 
     def open_search_dialog(self):
         with self.data_manager.user_action_priority():
-            dialog = SearchDialog(self.data_manager, self, self.settings, pos=QCursor.pos())
+            dialog = SearchDialog(self.data_manager, self, self.settings, pos=self._get_dialog_pos())
             dialog.event_selected.connect(self.go_to_event)
             dialog.exec()
 
@@ -504,7 +549,13 @@ class MainWidget(QWidget):
     def apply_theme(self, theme_name):
         try:
             stylesheet = load_stylesheet(f'themes/{theme_name}_theme.qss')
-            QApplication.instance().setStyleSheet(stylesheet)
+            app = QApplication.instance()
+            app.setStyleSheet(stylesheet)
+            
+            # 스타일 강제 재적용
+            self.style().unpolish(app)
+            self.style().polish(app)
+            
         except FileNotFoundError:
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
@@ -520,7 +571,7 @@ class MainWidget(QWidget):
                 return
 
             editor = None
-            cursor_pos = QCursor.pos()
+            cursor_pos = self._get_dialog_pos()
             if isinstance(data, (datetime.date, datetime.datetime)):
                 editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
@@ -645,28 +696,47 @@ class MainWidget(QWidget):
             QTimer.singleShot(50, self.lock_interactions)
 
     def snap_to_screen_edges(self):
-        """창을 화면 가장자리에 스냅합니다."""
+        """창을 모든 화면 가장자리에 스냅합니다."""
         snap_threshold = 45
-        screen_geometry = QApplication.primaryScreen().availableGeometry()
         win_rect = self.frameGeometry()
+        screens = QApplication.screens()
+        
+        closest_screen = None
+        min_dist = float('inf')
 
+        # 창의 중심과 가장 가까운 화면을 찾습니다.
+        for screen in screens:
+            screen_center = screen.availableGeometry().center()
+            win_center = win_rect.center()
+            dist = (screen_center - win_center).manhattanLength()
+            if dist < min_dist:
+                min_dist = dist
+                closest_screen = screen
+        
+        if not closest_screen:
+            closest_screen = QApplication.primaryScreen()
+
+        screen_geometry = closest_screen.availableGeometry()
         new_pos = win_rect.topLeft()
+        moved = False
 
-        # 왼쪽 가장자리
+        # 가로 스냅
         if abs(win_rect.left() - screen_geometry.left()) < snap_threshold:
             new_pos.setX(screen_geometry.left())
-        # 오른쪽 가장자리
+            moved = True
         elif abs(win_rect.right() - screen_geometry.right()) < snap_threshold:
             new_pos.setX(screen_geometry.right() - win_rect.width())
-        
-        # 위쪽 가장자리
+            moved = True
+
+        # 세로 스냅
         if abs(win_rect.top() - screen_geometry.top()) < snap_threshold:
             new_pos.setY(screen_geometry.top())
-        # 아래쪽 가장자리
+            moved = True
         elif abs(win_rect.bottom() - screen_geometry.bottom()) < snap_threshold:
             new_pos.setY(screen_geometry.bottom() - win_rect.height())
+            moved = True
 
-        if new_pos != win_rect.topLeft():
+        if moved:
             self.move(new_pos)
 
 if __name__ == '__main__':

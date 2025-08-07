@@ -1,37 +1,29 @@
 {
-    "geometry": [
-        615,
-        0,
-        920,
-        738
-    ],
-    "use_local_calendar": false,
     "selected_calendars": [
-        "family01556510902891015712@group.calendar.google.com",
         "thejurio@gmail.com",
-        "ko.south_korea#holiday@group.v.calendar.google.com",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
-        "local_calendar": "#4CAF50",
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#9bf6ff",
-        "family01556510902891015712@group.calendar.google.com": "#ffadad",
-        "thejurio@gmail.com": "#ffadad",
-        "ko.south_korea#holiday@group.v.calendar.google.com": "#fdffb6"
+        "family01556510902891015712@group.calendar.google.com": "#b99aff",
+        "thejurio@gmail.com": "#a0aee5",
+        "ko.south_korea#holiday@group.v.calendar.google.com": "#e95f72",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#a17cdd",
+        "local_calendar": "#4CAF50"
     },
-    "sync_interval_minutes": 1,
-    "window_opacity": 0.85,
-    "theme": "dark",
-    "last_selected_calendar_id": "family01556510902891015712@group.calendar.google.com",
-    "always_on_top": false,
-    "window_position": null,
-    "window_size": null,
-    "notifications_enabled": true,
-    "default_notification_time": 10,
+    "sync_interval_minutes": 5,
     "start_day_of_week": 6,
     "hide_weekends": false,
+    "window_opacity": 0.95,
+    "theme": "dark",
     "window_mode": "AlwaysOnBottom",
     "lock_mode_enabled": false,
-    "lock_mode_key": "z"
+    "lock_mode_key": "Ctrl",
+    "start_on_boot": true,
+    "geometry": [
+        817,
+        0,
+        718,
+        653
+    ]
 }
