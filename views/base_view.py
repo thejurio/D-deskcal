@@ -1,7 +1,7 @@
 # views/base_view.py
 from PyQt6.QtWidgets import QWidget, QMenu, QToolTip, QApplication
-from PyQt6.QtCore import pyqtSignal, QTimer
-from PyQt6.QtGui import QCursor, QAction
+from PyQt6.QtCore import pyqtSignal, QTimer, pyqtProperty
+from PyQt6.QtGui import QCursor, QAction, QColor
 import datetime
 
 from custom_dialogs import CustomMessageBox, BaseDialog, EventPopover
@@ -21,6 +21,14 @@ class BaseViewWidget(QWidget):
         self.is_resizing = False
         self.event_widgets = []
         
+        # QSS 속성을 위한 내부 변수 초기화
+        self._weekdayColor = QColor()
+        self._saturdayColor = QColor()
+        self._sundayColor = QColor()
+        self._otherMonthColor = QColor()
+        self._todayBackgroundColor = QColor()
+        self._todayForegroundColor = QColor()
+
         self.popover_timer = QTimer(self)
         self.popover_timer.setSingleShot(True)
         self.popover_timer.setInterval(500)
@@ -32,6 +40,36 @@ class BaseViewWidget(QWidget):
 
         self.setMouseTracking(True)
         self.data_manager.data_updated.connect(self.on_data_updated)
+
+    # weekdayColor 속성 정의
+    def getWeekdayColor(self): return self._weekdayColor
+    def setWeekdayColor(self, color): self._weekdayColor = color
+    weekdayColor = pyqtProperty(QColor, getWeekdayColor, setWeekdayColor)
+
+    # saturdayColor 속성 정의
+    def getSaturdayColor(self): return self._saturdayColor
+    def setSaturdayColor(self, color): self._saturdayColor = color
+    saturdayColor = pyqtProperty(QColor, getSaturdayColor, setSaturdayColor)
+
+    # sundayColor 속성 정의
+    def getSundayColor(self): return self._sundayColor
+    def setSundayColor(self, color): self._sundayColor = color
+    sundayColor = pyqtProperty(QColor, getSundayColor, setSundayColor)
+
+    # otherMonthColor 속성 정의
+    def getOtherMonthColor(self): return self._otherMonthColor
+    def setOtherMonthColor(self, color): self._otherMonthColor = color
+    otherMonthColor = pyqtProperty(QColor, getOtherMonthColor, setOtherMonthColor)
+
+    # todayBackgroundColor 속성 정의
+    def getTodayBackgroundColor(self): return self._todayBackgroundColor
+    def setTodayBackgroundColor(self, color): self._todayBackgroundColor = color
+    todayBackgroundColor = pyqtProperty(QColor, getTodayBackgroundColor, setTodayBackgroundColor)
+
+    # todayForegroundColor 속성 정의
+    def getTodayForegroundColor(self): return self._todayForegroundColor
+    def setTodayForegroundColor(self, color): self._todayForegroundColor = color
+    todayForegroundColor = pyqtProperty(QColor, getTodayForegroundColor, setTodayForegroundColor)
     
     # ▼▼▼ [핵심 수정] 자식 위젯이 직접 호출할 새로운 핸들러 함수들 ▼▼▼
     def handle_hover_enter(self, target_widget, event_data):

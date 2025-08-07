@@ -288,13 +288,26 @@ class MainWidget(QWidget):
         self.lock_button.setStyleSheet("padding-bottom: 2px;")
         self.lock_button.clicked.connect(self.toggle_lock_mode)
 
-        view_mode_layout.addWidget(search_button)
-        view_mode_layout.addStretch(1)
-        view_mode_layout.addWidget(month_button)
-        view_mode_layout.addWidget(week_button)
-        view_mode_layout.addStretch(1)
-        view_mode_layout.addWidget(self.lock_button)
-        view_mode_layout.addWidget(today_button)
+        view_mode_layout = QHBoxLayout()
+        view_mode_layout.setSpacing(5) # 버튼 간 최소 간격
+
+        # 1. 왼쪽 절반 컨테이너
+        left_half = QHBoxLayout()
+        left_half.addWidget(search_button)
+        left_half.addStretch(1)
+        left_half.addWidget(month_button)
+        
+        # 2. 오른쪽 절반 컨테이너
+        right_half = QHBoxLayout()
+        right_half.addWidget(week_button)
+        right_half.addStretch(1)
+        right_half.addWidget(self.lock_button)
+        right_half.addWidget(today_button)
+
+        # 두 개의 절반 컨테이너를 메인 레이아웃에 추가
+        view_mode_layout.addLayout(left_half, 1) # 1의 비율로 공간 차지
+        view_mode_layout.addLayout(right_half, 1) # 1의 비율로 공간 차지
+        
         content_layout.addLayout(view_mode_layout)
 
         self.stacked_widget = QStackedWidget()
@@ -554,9 +567,15 @@ class MainWidget(QWidget):
             app = QApplication.instance()
             app.setStyleSheet(stylesheet)
             
-            # 스타일 강제 재적용
-            self.style().unpolish(app)
-            self.style().polish(app)
+            # 열려있는 모든 최상위 창의 스타일을 강제로 다시 적용
+            for widget in app.topLevelWidgets():
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.update()
+
+            # 월간/주간 뷰 강제 새로고침
+            self.month_view.refresh()
+            self.week_view.refresh()
             
         except FileNotFoundError:
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
@@ -568,16 +587,15 @@ class MainWidget(QWidget):
             return
         # ▲▲▲ 여기까지 수정 ▲▲▲
         with self.data_manager.user_action_priority():
-            all_calendars = self.data_manager.get_all_calendars()
-            if not all_calendars:
-                return
-
+            # all_calendars를 미리 가져오지 않습니다.
             editor = None
             cursor_pos = self._get_dialog_pos()
             if isinstance(data, (datetime.date, datetime.datetime)):
-                editor = EventEditorWindow(mode='new', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
+                # calendars 인자 제거
+                editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
-                editor = EventEditorWindow(mode='edit', data=data, calendars=all_calendars, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
+                # calendars 인자 제거
+                editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             
             if editor:
                  # ▼▼▼ [추가] 활성화된 다이얼로그로 등록하고, 닫힐 때 초기화합니다. ▼▼▼
@@ -587,6 +605,11 @@ class MainWidget(QWidget):
                 # ▲▲▲ 여기까지 추가 ▲▲▲
                 if result == QDialog.DialogCode.Accepted:
                     event_data = editor.get_event_data()
+                    # 캘린더 목록이 로딩되지 않았을 경우를 대비한 방어 코드
+                    if not event_data.get('calendarId'):
+                        self.show_error_message("캘린더 목록이 아직 로딩되지 않았습니다. 잠시 후 다시 시도해주세요.")
+                        return
+                    
                     is_recurring = 'recurrence' in event_data.get('body', {})
                     if editor.mode == 'new': 
                         self.data_manager.add_event(event_data)

@@ -62,7 +62,13 @@ class HeaderCanvas(QWidget):
         header_bg_color = QColor("#2A2A2A") if is_dark else QColor("#F0F0F0")
         painter.fillRect(self.rect(), header_bg_color)
         
-        colors = {"weekday": "#D0D0D0" if is_dark else "#222222", "saturday": "#8080FF" if is_dark else "#0000DD", "sunday": "#FF8080" if is_dark else "#DD0000", "today": "#FFFF77" if is_dark else "#A0522D" }
+        # 부모 뷰(WeekViewWidget)의 QSS 속성을 직접 사용
+        colors = {
+            "weekday": self.parent_view.weekdayColor,
+            "saturday": self.parent_view.saturdayColor,
+            "sunday": self.parent_view.sundayColor,
+            "today": self.parent_view.todayForegroundColor
+        }
         
         today = datetime.date.today()
         start_of_week = self.parent_view._get_start_of_week()
@@ -77,7 +83,7 @@ class HeaderCanvas(QWidget):
                 text = f"{day_text} ({day_date.day})"
                 
                 font_color = colors['today'] if day_date == today else colors['weekday']
-                painter.setPen(QColor(font_color))
+                painter.setPen(font_color)
                 
                 x = self.column_x_coords[i]
                 width = self.column_x_coords[i+1] - x
@@ -103,7 +109,7 @@ class HeaderCanvas(QWidget):
                 elif day_date.weekday() == 5: # 토요일
                     font_color = colors['saturday']
                 
-                painter.setPen(QColor(font_color))
+                painter.setPen(font_color)
                 
                 x = self.column_x_coords[i]
                 width = self.column_x_coords[i+1] - x
@@ -273,8 +279,7 @@ class TimeGridCanvas(QWidget):
         for x in self.column_x_coords:
             painter.drawLine(int(x), 0, int(x), self.height())
 
-        text_color = QColor("#D0D0D0") if is_dark else QColor("#222222")
-        painter.setPen(text_color)
+        painter.setPen(self.parent_view.weekdayColor)
         for hour in range(self.parent_view.total_hours + 1):
             y = hour * self.parent_view.hour_height
             rect = QRect(0, y - self.parent_view.hour_height // 2, 45, self.parent_view.hour_height)
@@ -510,18 +515,18 @@ class WeekViewWidget(BaseViewWidget):
         end_of_week = start_of_week + datetime.timedelta(days=num_days - 1)
         
         first_day_of_month = start_of_week.replace(day=1)
-        first_day_of_cal = self._get_start_of_week()
-        week_number = (start_of_week - first_day_of_cal).days // 7 + 1
+        # 그 주의 시작일(월요일 기준)을 계산
+        first_day_of_cal_week_start = first_day_of_month - datetime.timedelta(days=first_day_of_month.weekday())
+        # 현재 주의 시작일과 그 달의 첫 번째 주 시작일의 차이를 계산하여 주차를 구함
+        week_number = (start_of_week - first_day_of_cal_week_start).days // 7 + 1
 
         main_text = f"{start_of_week.month}월 {week_number}주"
         sub_text = f"({start_of_week.strftime('%Y.%m.%d')} - {end_of_week.strftime('%Y.%m.%d')})"
         
-        is_dark = self.main_widget.settings.get("theme", "dark") == "dark"
-        text_color = "#D0D0D0" if is_dark else "#222222"
-        
+        # HTML 대신 Rich Text를 사용하여 두 줄 텍스트를 표현하고, 색상은 QSS에 위임합니다.
         label_html = f"""
-        <p style="font-size: 16px; font-weight: bold; color: {text_color}; margin-bottom: -2px;">{main_text}</p>
-        <p style="font-size: 10px; color: {text_color}; margin-top: 0px;">{sub_text}</p>
+        <p style="font-size: 16px; font-weight: bold; margin-bottom: -2px;">{main_text}</p>
+        <p style="font-size: 10px; margin-top: 0px;">{sub_text}</p>
         """
         self.week_range_label.setText(label_html)
 

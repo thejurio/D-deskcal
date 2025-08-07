@@ -163,7 +163,7 @@ QMessageBox {
 }
 
 DayCellWidget {
-    border: 1px solid #DCDCDC;
+    border: none;
 }
 
 QToolTip {
@@ -172,4 +172,24 @@ QToolTip {
     border: 1px solid #C0C0C0;
     border-radius: 5px;
     padding: 5px;
+}
+
+/* Calendar Grid Lines */
+#calendar_grid DayCellWidget {
+    border-right: 1px solid #E0E0E0;
+    border-bottom: 1px solid #E0E0E0;
+}
+#calendar_grid {
+    border-left: 1px solid #E0E0E0;
+    border-top: 1px solid #E0E0E0;
+}
+
+/* Calendar View Specific Styles */
+MonthViewWidget, WeekViewWidget {
+    qproperty-weekdayColor: #222222;
+    qproperty-saturdayColor: #0000DD;
+    qproperty-sundayColor: #DD0000;
+    qproperty-otherMonthColor: #AAAAAA;
+    qproperty-todayBackgroundColor: #CCE5FF;
+    qproperty-todayForegroundColor: #004C99;
 }

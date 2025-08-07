@@ -164,6 +164,37 @@ class CachingManager(QObject):
             self._resume_condition.wait(self._activity_lock)
         locker.unlock()
 
+class CalendarListFetcher(QObject):
+    """백그라운드에서 캘린더 목록을 가져오는 워커"""
+    calendars_fetched = pyqtSignal(list)
+    finished = pyqtSignal()
+
+    def __init__(self, providers):
+        super().__init__()
+        self.providers = providers
+        self._is_running = True
+
+    def run(self):
+        print("캘린더 목록 비동기 로더 스레드 시작...")
+        all_calendars = []
+        for provider in self.providers:
+            if not self._is_running:
+                break
+            if hasattr(provider, 'get_calendars'):
+                try:
+                    all_calendars.extend(provider.get_calendars())
+                except Exception as e:
+                    print(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생: {e}")
+        
+        if self._is_running:
+            self.calendars_fetched.emit(all_calendars)
+        
+        self.finished.emit()
+        print("캘린더 목록 비동기 로더 스레드 종료.")
+
+    def stop(self):
+        self._is_running = False
+
 class ImmediateSyncWorker(QObject):
     """특정 월의 데이터를 즉시 가져오는 작업을 처리하는 워커"""
     data_fetched = pyqtSignal(int, int, list)
@@ -218,6 +249,9 @@ class DataManager(QObject):
         
         self.immediate_sync_thread = None
         self.immediate_sync_worker = None
+        
+        self.calendar_fetch_thread = None
+        self.calendar_fetcher = None
 
         if load_cache:
             self._init_cache_db()
@@ -252,7 +286,7 @@ class DataManager(QObject):
             return custom_colors[cal_id]
 
         if not hasattr(self, '_default_color_map_cache') or self._default_color_map_cache is None:
-            all_calendars = self.get_all_calendars()
+            all_calendars = self.get_all_calendars(fetch_if_empty=False) # 동기 호출 방지
             self._default_color_map_cache = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
         
         return self._default_color_map_cache.get(cal_id, DEFAULT_EVENT_COLOR)
@@ -330,17 +364,38 @@ class DataManager(QObject):
 
     def on_auth_state_changed(self):
         print("인증 상태 변경 감지. Provider를 재설정하고 데이터를 새로고침합니다.")
+        
+        is_logging_out = not self.auth_manager.is_logged_in()
+        
         self.setup_providers()
         self.calendar_list_cache = None
-        if hasattr(self, '_default_color_map_cache'):
-            del self._default_color_map_cache
+        self._default_color_map_cache = None
+        
+        if is_logging_out:
+            print("로그아웃 감지. Google 캘린더 관련 캐시를 삭제합니다.")
+            # 메모리 캐시에서 구글 이벤트 제거
+            for month_key, events in list(self.event_cache.items()):
+                google_events = [e for e in events if e.get('provider') == GOOGLE_CALENDAR_PROVIDER_NAME]
+                if google_events:
+                    # 구글 이벤트만 제거하고 로컬 이벤트는 남김
+                    remaining_events = [e for e in events if e.get('provider') != GOOGLE_CALENDAR_PROVIDER_NAME]
+                    self.event_cache[month_key] = remaining_events
+                    # DB 캐시도 업데이트
+                    self._save_month_to_cache_db(month_key[0], month_key[1], remaining_events)
+            
+            # 구글 캘린더만 선택되어 있던 경우, 설정을 초기화하거나 로컬 캘린더를 선택하도록 유도할 수 있음
+            # 여기서는 일단 캐시만 정리
+            
+        self.get_all_calendars(fetch_if_empty=True)
+        
+        # UI가 새로운 데이터 상태를 반영하도록 신호 전송
         self.calendar_list_changed.emit()
-        self.event_cache.clear()
-        self.clear_all_cache_db()
         if self.last_requested_month:
             year, month = self.last_requested_month
-            self.get_events(year, month)
-        self.request_full_sync()
+            self.data_updated.emit(year, month)
+        else:
+            today = datetime.date.today()
+            self.data_updated.emit(today.year, today.month)
 
     def update_sync_timer(self):
         interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
@@ -359,14 +414,19 @@ class DataManager(QObject):
         self.caching_manager.request_caching_around(new_date.year, new_date.month, direction)
 
     def stop_caching_thread(self):
-        if self.immediate_sync_thread and self.immediate_sync_thread.isRunning():
+        # 각 스레드 객체가 None이 아니고, 실제로 실행 중일 때만 중지하도록 수정
+        if self.immediate_sync_thread is not None and self.immediate_sync_thread.isRunning():
             self.immediate_sync_worker.stop()
             self.immediate_sync_thread.quit()
             self.immediate_sync_thread.wait()
-        if self.caching_thread and self.caching_thread.isRunning():
+        if self.caching_thread is not None and self.caching_thread.isRunning():
             self.caching_manager.stop()
             self.caching_thread.quit()
             self.caching_thread.wait()
+        if self.calendar_fetch_thread is not None and self.calendar_fetch_thread.isRunning():
+            self.calendar_fetcher.stop()
+            self.calendar_fetch_thread.quit()
+            self.calendar_fetch_thread.wait()
 
     @contextmanager
     def user_action_priority(self):
@@ -419,7 +479,7 @@ class DataManager(QObject):
         all_events = []
         _, num_days = calendar.monthrange(year, month)
         start_date, end_date = datetime.date(year, month, 1), datetime.date(year, month, num_days)
-        all_calendars = self.get_all_calendars()
+        all_calendars = self.get_all_calendars(fetch_if_empty=False) # 동기 호출 방지
         custom_colors = self.settings.get("calendar_colors", {})
         default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
         for provider in self.providers:
@@ -508,18 +568,58 @@ class DataManager(QObject):
         unique_events = {e['id']: e for e in all_events}.values()
         return list(unique_events)
 
-    def get_all_calendars(self):
+    def get_all_calendars(self, fetch_if_empty=True):
+        """
+        캐시된 캘린더 목록을 반환합니다.
+        캐시가 비어있고 fetch_if_empty가 True이면, 백그라운드에서 목록 가져오기를 시작합니다.
+        """
         if self.calendar_list_cache is not None:
             return self.calendar_list_cache
-        all_calendars = []
-        for provider in self.providers:
-            if hasattr(provider, 'get_calendars'):
-                try:
-                    all_calendars.extend(provider.get_calendars())
-                except Exception as e:
-                    print(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생: {e}")
-        self.calendar_list_cache = all_calendars
-        return all_calendars
+
+        if fetch_if_empty:
+            self._fetch_calendars_async()
+        
+        return [] # 캐시가 없으면 일단 빈 리스트 반환
+
+    def _fetch_calendars_async(self):
+        """캘린더 목록을 비동기적으로 가져오는 스레드를 시작합니다."""
+        if self.calendar_fetch_thread and self.calendar_fetch_thread.isRunning():
+            return # 이미 실행 중이면 중복 실행 방지
+
+        self.calendar_fetch_thread = QThread()
+        self.calendar_fetcher = CalendarListFetcher(self.providers)
+        self.calendar_fetcher.moveToThread(self.calendar_fetch_thread)
+
+        self.calendar_fetcher.calendars_fetched.connect(self._on_calendars_fetched)
+        self.calendar_fetch_thread.started.connect(self.calendar_fetcher.run)
+        
+        # 스레드 종료 시 _on_calendar_thread_finished를 호출하여 정리하도록 연결
+        self.calendar_fetcher.finished.connect(self._on_calendar_thread_finished)
+        
+        self.calendar_fetch_thread.start()
+
+    def _on_calendar_thread_finished(self):
+        """캘린더 페처 스레드가 종료된 후 호출되는 정리 함수."""
+        if self.calendar_fetch_thread is None:
+            return
+            
+        self.calendar_fetch_thread.quit()
+        # deleteLater를 호출하기 전에 isRunning을 확인하여 경고를 피할 수 있습니다.
+        if self.calendar_fetch_thread.isRunning():
+            self.calendar_fetch_thread.wait() # 안전하게 종료 대기
+            
+        self.calendar_fetcher.deleteLater()
+        self.calendar_fetch_thread.deleteLater()
+        self.calendar_fetch_thread = None # 변수를 None으로 설정하여 유령 객체 참조 방지
+        self.calendar_fetcher = None
+        print("캘린더 목록 스레드 정리 완료.")
+
+    def _on_calendars_fetched(self, calendars):
+        """백그라운드 스레드로부터 캘린더 목록을 받으면 호출됩니다."""
+        print(f"{len(calendars)}개의 캘린더 목록을 비동기적으로 수신했습니다.")
+        self.calendar_list_cache = calendars
+        self._default_color_map_cache = None # 색상 맵도 초기화
+        self.calendar_list_changed.emit() # UI에 변경 알림
 
     def add_event(self, event_data):
         provider_name = event_data.get('provider')
@@ -530,7 +630,7 @@ class DataManager(QObject):
                     if 'provider' not in new_event: new_event['provider'] = provider_name
                     cal_id = new_event.get('calendarId')
                     if cal_id:
-                        all_calendars = self.get_all_calendars()
+                        all_calendars = self.get_all_calendars(fetch_if_empty=False) # 동기 호출 방지
                         cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
                         default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
                         new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
@@ -554,7 +654,7 @@ class DataManager(QObject):
                     if 'provider' not in updated_event: updated_event['provider'] = provider_name
                     cal_id = updated_event.get('calendarId')
                     if cal_id:
-                        all_calendars = self.get_all_calendars()
+                        all_calendars = self.get_all_calendars(fetch_if_empty=False) # 동기 호출 방지
                         cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
                         default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
                         updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
@@ -590,12 +690,13 @@ class DataManager(QObject):
 
     def load_initial_month(self):
         print("초기 데이터 로딩을 요청합니다...")
+        self.get_all_calendars(fetch_if_empty=True) # 앱 시작 시 캘린더 목록 가져오기 시작
         today = datetime.date.today()
         self.get_events(today.year, today.month)
 
     def _apply_colors_to_events(self, events):
         if not events: return
-        all_calendars = self.get_all_calendars()
+        all_calendars = self.get_all_calendars(fetch_if_empty=False) # 동기 호출 방지
         custom_colors = self.settings.get("calendar_colors", {})
         default_color_map = {cal['id']: cal.get('backgroundColor', DEFAULT_EVENT_COLOR) for cal in all_calendars}
         for event in events:

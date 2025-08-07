@@ -83,7 +83,7 @@ class EventEditorWindow(BaseDialog):
     def __init__(self, mode='new', data=None, calendars=None, settings=None, parent=None, pos=None, data_manager=None):
         super().__init__(parent=parent, settings=settings, pos=pos)
         self.mode = mode
-        self.calendars = calendars if calendars else []
+        # calendars 인자는 이제 사용하지 않지만, 호환성을 위해 남겨둡니다.
         self.event_data = data if isinstance(data, dict) else {}
         self.date_info = data if isinstance(data, (datetime.date, datetime.datetime)) else None
         self.custom_rrule = None
@@ -91,10 +91,18 @@ class EventEditorWindow(BaseDialog):
         self.initial_completed_state = False
         
         self.setWindowTitle("일정 추가" if self.mode == 'new' else "일정 수정")
-        self.setMinimumWidth(450) # 너비 조정
+        self.setMinimumWidth(450)
         
         self.initUI()
+        
+        # DataManager의 신호에 연결
+        if self.data_manager:
+            self.data_manager.calendar_list_changed.connect(self.repopulate_calendars)
+        
+        # 초기 데이터 채우기
+        self.repopulate_calendars() # 현재 캐시된 데이터로 우선 채움
         self.populate_data()
+        
         QTimer.singleShot(0, self.adjustSize)
 
     def initUI(self):
@@ -112,24 +120,12 @@ class EventEditorWindow(BaseDialog):
         layout.addWidget(self.summary_edit)
 
         self.calendar_combo = QComboBox()
-        for calendar in self.calendars:
-            user_data = {'id': calendar['id'], 'provider': calendar['provider']}
-            
-            # 설정에서 커스텀 색상을 먼저 확인하고, 없으면 캘린더의 기본 색상 사용
-            custom_colors = self.settings.get("calendar_colors", {})
-            color_hex = custom_colors.get(calendar['id'], calendar.get('backgroundColor', '#9fc6e7')) # 기본 색상
-
-            color = QColor(color_hex)
-            pixmap = QPixmap(16, 16)
-            pixmap.fill(color)
-            icon = QIcon(pixmap)
-            
-            self.calendar_combo.addItem(icon, calendar['summary'], userData=user_data)
+        # 초기화 시점에는 비워둡니다. repopulate_calendars에서 채웁니다.
         
         layout.addWidget(QLabel("캘린더:"))
         layout.addWidget(self.calendar_combo)
 
-        # --- ▼▼▼ [핵심 수정] 새로운 날짜/시간 선택 위젯 사용 ▼▼▼ ---
+        # --- 날짜/시간 선택 위젯 ---
         start_layout = QHBoxLayout()
         self.start_date_selector = DateSelector()
         self.start_time_edit = QTimeEdit()
@@ -147,7 +143,6 @@ class EventEditorWindow(BaseDialog):
         end_layout.addWidget(self.end_date_selector)
         end_layout.addWidget(self.end_time_edit)
         layout.addLayout(end_layout)
-        # --- ▲▲▲ 핵심 수정 종료 ▲▲▲ ---
 
         self.all_day_checkbox = QCheckBox("하루 종일")
         self.all_day_checkbox.stateChanged.connect(self.toggle_time_edit)
@@ -198,6 +193,53 @@ class EventEditorWindow(BaseDialog):
         self.save_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.delete_button.clicked.connect(self.request_delete)
+
+    def repopulate_calendars(self):
+        """DataManager로부터 캘린더 목록을 가져와 콤보박스를 다시 채웁니다."""
+        # 현재 선택된 ID 저장
+        current_selection_id = None
+        if self.calendar_combo.count() > 0:
+            current_selection_id = self.calendar_combo.currentData()['id']
+
+        self.calendar_combo.clear()
+        
+        # fetch_if_empty=True로 설정하여, 캐시가 없으면 비동기 로딩을 트리거합니다.
+        calendars = self.data_manager.get_all_calendars(fetch_if_empty=True)
+        
+        if not calendars:
+            self.calendar_combo.addItem("캘린더 목록 로딩 중...")
+            self.calendar_combo.setEnabled(False)
+            return
+
+        self.calendar_combo.setEnabled(True)
+        for calendar in calendars:
+            user_data = {'id': calendar['id'], 'provider': calendar['provider']}
+            custom_colors = self.settings.get("calendar_colors", {})
+            color_hex = custom_colors.get(calendar['id'], calendar.get('backgroundColor', '#9fc6e7'))
+            color = QColor(color_hex)
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(color)
+            icon = QIcon(pixmap)
+            self.calendar_combo.addItem(icon, calendar['summary'], userData=user_data)
+
+        # 이전에 선택했던 캘린더를 다시 선택
+        if current_selection_id:
+            index = self.calendar_combo.findData({'id': current_selection_id})
+            if index != -1:
+                self.calendar_combo.setCurrentIndex(index)
+        # 또는, 수정 모드일 때 이벤트 데이터의 캘린더를 선택
+        elif self.mode == 'edit' and self.event_data:
+            target_cal_id = self.event_data.get('calendarId')
+            index = self.calendar_combo.findData({'id': target_cal_id})
+            if index != -1:
+                self.calendar_combo.setCurrentIndex(index)
+        # 또는, 마지막으로 사용한 캘린더를 선택
+        else:
+            last_used_id = self.settings.get('last_selected_calendar_id')
+            if last_used_id:
+                index = self.calendar_combo.findData({'id': last_used_id})
+                if index != -1:
+                    self.calendar_combo.setCurrentIndex(index)
 
     def accept(self):
         event_id = self.event_data.get('id', '')

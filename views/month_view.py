@@ -74,6 +74,7 @@ class MonthViewWidget(BaseViewWidget):
         nav_layout.addWidget(prev_button); nav_layout.addStretch(1); nav_layout.addWidget(self.month_button); nav_layout.addStretch(1); nav_layout.addWidget(next_button)
         self.main_layout.addLayout(nav_layout)
         self.calendar_grid = QGridLayout()
+        self.calendar_grid.setObjectName("calendar_grid") # ID 설정
         self.calendar_grid.setSpacing(0)
         self.main_layout.addLayout(self.calendar_grid)
 
@@ -104,6 +105,7 @@ class MonthViewWidget(BaseViewWidget):
             self.calendar_grid.deleteLater()
         
         self.calendar_grid = QGridLayout()
+        self.calendar_grid.setObjectName("calendar_grid") # ID 설정
         self.calendar_grid.setSpacing(0)
         self.main_layout.addLayout(self.calendar_grid)
         self.date_to_cell_map.clear()
@@ -111,17 +113,17 @@ class MonthViewWidget(BaseViewWidget):
         
         start_day_of_week = self.main_widget.settings.get("start_day_of_week", 6)
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)
-        is_dark = self.main_widget.settings.get("theme", "dark") == "dark"
         
+        # QSS로부터 읽어온 속성 사용
         colors = {
-            "weekday": "#D0D0D0" if is_dark else "#222222", 
-            "saturday": "#8080FF" if is_dark else "#0000DD", 
-            "sunday": "#FF8080" if is_dark else "#DD0000", 
-            "today_bg": "#CCE5FF",
-            "today_fg": "#004C99",
-            "other_month": "#777777" if is_dark else "#AAAAAA"
+            "weekday": self.weekdayColor,
+            "saturday": self.saturdayColor,
+            "sunday": self.sundayColor,
+            "today_bg": self.todayBackgroundColor,
+            "today_fg": self.todayForegroundColor,
+            "other_month": self.otherMonthColor
         }
-        self.month_button.setStyleSheet(f"color: {colors['weekday']}; background-color: transparent; border: none; font-size: 16px; font-weight: bold;")
+        self.month_button.setStyleSheet(f"color: {colors['weekday'].name()}; background-color: transparent; border: none; font-size: 16px; font-weight: bold;")
         
         year, month = self.current_date.year, self.current_date.month
         self.month_button.setText(f"{year}년 {month}월")
@@ -148,7 +150,7 @@ class MonthViewWidget(BaseViewWidget):
             color = colors['weekday']
             if original_day_idx == 0: color = colors['sunday']
             elif original_day_idx == 6: color = colors['saturday']
-            label.setStyleSheet(f"color: {color}; font-weight: bold;")
+            label.setStyleSheet(f"color: {color.name()}; font-weight: bold;")
             
             self.calendar_grid.addWidget(label, 0, grid_col_idx)
             col_map[original_day_idx] = grid_col_idx
@@ -172,10 +174,10 @@ class MonthViewWidget(BaseViewWidget):
                 if day_of_week_original == 0: font_color = colors['sunday']
                 elif day_of_week_original == 6: font_color = colors['saturday']
                 
-                cell_widget.day_label.setStyleSheet(f"color: {font_color}; background-color: transparent;")
+                cell_widget.day_label.setStyleSheet(f"color: {font_color.name()}; background-color: transparent;")
                 if current_day_obj == today:
-                    cell_widget.setStyleSheet(f"background-color: {colors['today_bg']}; border-radius: 5px;")
-                    cell_widget.day_label.setStyleSheet(f"color: {colors['today_fg']}; font-weight: bold; background-color: transparent;")
+                    cell_widget.setStyleSheet(f"background-color: {colors['today_bg'].name()}; border-radius: 5px;")
+                    cell_widget.day_label.setStyleSheet(f"color: {colors['today_fg'].name()}; font-weight: bold; background-color: transparent;")
                 
                 self.calendar_grid.addWidget(cell_widget, week_index + 1, grid_col)
                 self.date_to_cell_map[current_day_obj] = cell_widget
