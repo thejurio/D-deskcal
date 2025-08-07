@@ -131,10 +131,10 @@ class MonthViewWidget(BaseViewWidget):
         self.sync_status_container.addWidget(self.sync_icon) # 1번 페이지: 회전 아이콘
 
         nav_layout.addWidget(prev_button)
-        nav_layout.addStretch(1)
+        nav_layout.addStretch(11) # 왼쪽 공간을 11의 비율로 설정
         nav_layout.addWidget(self.month_button)
-        nav_layout.addWidget(self.sync_status_container) # 컨테이너 추가
-        nav_layout.addStretch(1)
+        nav_layout.addWidget(self.sync_status_container)
+        nav_layout.addStretch(10) # 오른쪽 공간을 10의 비율로 설정
         nav_layout.addWidget(next_button)
         # --- 여기까지 수정 ---
         
@@ -302,37 +302,31 @@ class MonthViewWidget(BaseViewWidget):
         for date, cell_widget in self.date_to_cell_map.items():
             if not cell_widget.isVisible(): continue
             
-            event_height = QFontMetrics(self.font()).height() + 9
+            # [수정] 이벤트 높이 간격을 줄여 더 많은 일정을 표시하도록 함
+            event_height = QFontMetrics(self.font()).height() + 2
             y_offset = cell_widget.day_label.height() + cell_widget.layout().spacing()
             max_slots = (cell_widget.height() - y_offset) // (event_height + cell_widget.events_layout.spacing())
             if max_slots < 0: max_slots = 0
 
-            max_visible_y_level = max(0, max_slots - 1)
-
             sorted_day_events = sorted(events_by_day.get(date, []), key=lambda p: p['y_level'])
+            total_events_on_day = len(sorted_day_events)
             
+            events_to_render = []
             more_events_data = []
-            y_levels_on_day = set()
+            show_more_button = total_events_on_day > max_slots and max_slots > 0
 
-            for pos_info in sorted_day_events:
+            if show_more_button:
+                num_visible_events = max_slots - 1
+                events_to_render = sorted_day_events[:num_visible_events]
+                more_events_data = [p['event'] for p in sorted_day_events[num_visible_events:] if p.get('event')]
+            else:
+                events_to_render = sorted_day_events[:max_slots]
+
+            rendered_y_levels = set()
+            for pos_info in events_to_render:
                 y_level = pos_info['y_level']
-                if y_level < max_visible_y_level and max_slots > 1:
-                    y_levels_on_day.add(y_level)
-                else:
-                    more_events_data.append(pos_info['event'])
-
-            num_slots_for_events = max_visible_y_level if max_slots > 1 else 0
-            for i in range(num_slots_for_events):
-                if i not in y_levels_on_day:
-                    events_by_day[date].append({'y_level': i, 'event': None})
-            
-            sorted_day_events = sorted(events_by_day.get(date, []), key=lambda p: p['y_level'])
-            
-            for pos_info in sorted_day_events:
-                y_level = pos_info['y_level']
-                if y_level >= num_slots_for_events: continue
-
                 event_data = pos_info.get('event')
+                
                 if event_data:
                     is_completed = self.data_manager.is_event_completed(event_data.get('id'))
                     is_other_month = date.month != self.current_date.month
@@ -345,17 +339,25 @@ class MonthViewWidget(BaseViewWidget):
                     )
                     event_widget.edit_requested.connect(self.edit_event_requested)
                     cell_widget.events_layout.insertWidget(y_level, event_widget)
-                else:
+                    rendered_y_levels.add(y_level)
+
+            num_slots_to_fill = len(events_to_render)
+            if show_more_button:
+                num_slots_to_fill = max_slots -1
+
+            for i in range(num_slots_to_fill):
+                if i not in rendered_y_levels:
                     placeholder = QWidget(cell_widget)
                     placeholder.setFixedHeight(event_height)
-                    cell_widget.events_layout.insertWidget(y_level, placeholder)
+                    cell_widget.events_layout.insertWidget(i, placeholder)
 
-            if more_events_data and max_slots > 1:
+            if show_more_button and more_events_data:
                 more_button = QPushButton(f"+ {len(more_events_data)}개 더보기")
-                more_button.setStyleSheet("text-align: left; border: none; color: #a0c4ff; background-color: transparent;")
-                more_button.setFixedHeight(int(event_height * 0.9))
+                # [수정] '더보기' 버튼의 폰트를 줄이고 패딩을 제거하여 공간 확보
+                more_button.setStyleSheet("text-align: left; border: none; color: #a0c4ff; background-color: transparent; padding: 0px; font-size: 8pt;")
+                more_button.setFixedHeight(event_height)
                 more_button.clicked.connect(lambda _, d=date, e=more_events_data: self.show_more_events_popup(d, e))
-                cell_widget.events_layout.insertWidget(max_visible_y_level, more_button)
+                cell_widget.events_layout.insertWidget(max_slots - 1, more_button)
 
     def get_event_at(self, pos):
         pass
