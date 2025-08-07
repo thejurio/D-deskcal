@@ -9,12 +9,11 @@ class BaseDialog(QDialog):
     모든 커스텀 다이얼로그의 기반이 되는 클래스.
     - 프레임리스 윈도우, 드래그 이동
     - 메인 윈도우와 연동된 투명도 적용
-    - 지능형 팝업 위치 조정
+    - PyQt 기본 중앙 정렬 위치 사용
     """
     def __init__(self, parent=None, settings=None, pos: QPoint = None):
         super().__init__(parent)
         self.settings = settings
-        self.click_pos = pos
         self.oldPos = None
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
@@ -22,44 +21,9 @@ class BaseDialog(QDialog):
         
         self.apply_opacity()
 
-    def showEvent(self, event):
-        """다이얼로그가 표시되기 직전에 호출되어 위치를 조정합니다."""
-        # 먼저 부모의 showEvent를 호출하여 다이얼로그의 지오메트리를 확정합니다.
-        super().showEvent(event)
-
-        if self.click_pos and self.parent():
-            parent_rect = self.parent().geometry()
-            dialog_size = self.frameGeometry().size()
-
-            # 기본 위치: 클릭 지점
-            x, y = self.click_pos.x(), self.click_pos.y()
-
-            # 오른쪽 경계 확인
-            if x + dialog_size.width() > parent_rect.right():
-                x = self.click_pos.x() - dialog_size.width()
-            
-            # 아래쪽 경계 확인
-            if y + dialog_size.height() > parent_rect.bottom():
-                y = self.click_pos.y() - dialog_size.height()
-
-            # 왼쪽/위쪽 경계 확인
-            if x < parent_rect.left():
-                x = parent_rect.left()
-            if y < parent_rect.top():
-                y = parent_rect.top()
-            
-            self.move(x, y)
-        
-        elif self.parent():
-            # 클릭 위치 정보가 없으면 부모의 중앙에 배치
-            parent_center = self.parent().geometry().center()
-            dialog_rect = self.frameGeometry()
-            self.move(parent_center - dialog_rect.center())
-
     def apply_opacity(self):
         if self.settings:
             main_opacity = self.settings.get("window_opacity", 0.95)
-            # 메인 창보다 85% 덜 투명하게 (더 불투명하게)
             dialog_opacity = main_opacity + (1 - main_opacity) * 0.85
             self.setWindowOpacity(dialog_opacity)
 
@@ -77,7 +41,7 @@ class BaseDialog(QDialog):
         self.oldPos = None
 
 class CustomMessageBox(BaseDialog):
-    def __init__(self, parent=None, title="알림", text="메시지 내용", settings=None, pos=None):
+    def __init__(self, parent=None, title="알림", text="메시지 내용", settings=None, pos=None, ok_only=False):
         super().__init__(parent, settings, pos)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -105,6 +69,10 @@ class CustomMessageBox(BaseDialog):
         self.no_button = QPushButton("취소")
         self.no_button.clicked.connect(self.reject)
         button_layout.addWidget(self.no_button)
+        
+        if ok_only:
+            self.no_button.setVisible(False)
+            
         content_layout.addLayout(button_layout)
 
 class NewDateSelectionDialog(BaseDialog):

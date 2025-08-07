@@ -1,6 +1,8 @@
 import datetime
 import uuid
 from dateutil.rrule import rrulestr, rrule, YEARLY, MONTHLY, WEEKLY, DAILY
+from dateutil import tz
+import pytz
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
                              QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox, 
@@ -135,6 +137,11 @@ class EventEditorWindow(BaseDialog):
         start_layout.addWidget(self.start_time_edit)
         layout.addLayout(start_layout)
 
+        # --- Signal Connections for Auto-adjustment ---
+        self.start_date_selector.dateTimeChanged.connect(self._on_start_datetime_changed)
+        self.start_time_edit.timeChanged.connect(self._on_start_datetime_changed)
+        # -----------------------------------------
+
         end_layout = QHBoxLayout()
         self.end_date_selector = DateSelector()
         self.end_time_edit = QTimeEdit()
@@ -194,6 +201,16 @@ class EventEditorWindow(BaseDialog):
         self.cancel_button.clicked.connect(self.reject)
         self.delete_button.clicked.connect(self.request_delete)
 
+    def _on_start_datetime_changed(self):
+        """시작 날짜 또는 시간이 변경될 때 호출되어 끝 시간을 자동으로 조정합니다."""
+        start_dt = self.get_start_datetime()
+        end_dt = self.get_end_datetime()
+
+        if start_dt >= end_dt:
+            # 시작 시간이 종료 시간보다 늦거나 같으면, 종료 시간을 시작 시간보다 1시간 뒤로 설정
+            new_end_dt = start_dt.addSecs(3600) # 1시간 추가
+            self.set_end_datetime(new_end_dt)
+
     def repopulate_calendars(self):
         """DataManager로부터 캘린더 목록을 가져와 콤보박스를 다시 채웁니다."""
         # 현재 선택된 ID 저장
@@ -242,6 +259,22 @@ class EventEditorWindow(BaseDialog):
                     self.calendar_combo.setCurrentIndex(index)
 
     def accept(self):
+        # --- 최종 시간 유효성 검사 ---
+        start_dt = self.get_start_datetime()
+        end_dt = self.get_end_datetime()
+        if start_dt > end_dt:
+            # 부모(self)를 명시적으로 전달하고, 'ok_only=True' 옵션을 사용하여 확인 버튼만 표시
+            msg_box = CustomMessageBox(
+                parent=self, 
+                title='시간 오류', 
+                text="끝나는 시각이 시작 시각보다 빠를 수 없습니다.", 
+                settings=self.settings,
+                ok_only=True
+            )
+            msg_box.exec()
+            return # 저장 절차 중단
+        # -----------------------------
+
         event_id = self.event_data.get('id', '')
         is_recurring_instance = '_' in event_id and self.event_data.get('provider') == 'LocalCalendarProvider'
         is_recurring_master = 'recurrence' in self.event_data
@@ -384,8 +417,13 @@ class EventEditorWindow(BaseDialog):
             self.all_day_checkbox.setChecked(is_all_day)
             start_str = start_info.get('date') or start_info.get('dateTime')
             end_str = end_info.get('date') or end_info.get('dateTime')
-            start_dt = QDateTime.fromString(start_str, Qt.DateFormat.ISODateWithMs)
-            end_dt = QDateTime.fromString(end_str, Qt.DateFormat.ISODateWithMs)
+            
+            # UTC 시간을 QDateTime으로 파싱한 후, Local Time으로 변환
+            start_dt_utc = QDateTime.fromString(start_str, Qt.DateFormat.ISODateWithMs)
+            end_dt_utc = QDateTime.fromString(end_str, Qt.DateFormat.ISODateWithMs)
+            start_dt = start_dt_utc.toLocalTime()
+            end_dt = end_dt_utc.toLocalTime()
+
             if is_all_day: end_dt = end_dt.addDays(-1)
             self.set_start_datetime(start_dt)
             self.set_end_datetime(end_dt)
@@ -409,7 +447,17 @@ class EventEditorWindow(BaseDialog):
         is_all_day = self.all_day_checkbox.isChecked()
         start_dt = self.get_start_datetime().toPyDateTime()
         end_dt = self.get_end_datetime().toPyDateTime()
-        event_body = {'summary': summary, 'description': description}
+
+        # --- 핵심 수정 ---
+        # 수정 모드일 경우, 기존 데이터의 복사본에서 시작하여 필요한 필드만 덮어씁니다.
+        if self.mode == 'edit':
+            event_body = self.event_data.copy()
+        else:
+            event_body = {}
+
+        event_body['summary'] = summary
+        event_body['description'] = description
+        # --- 여기까지 수정 ---
 
         if self.custom_rrule:
             event_body['recurrence'] = [self.custom_rrule]
@@ -427,8 +475,22 @@ class EventEditorWindow(BaseDialog):
             event_body['start'] = {'date': start_dt.strftime('%Y-%m-%d')}
             event_body['end'] = {'date': (end_dt + datetime.timedelta(days=1)).strftime('%Y-%m-%d')}
         else:
-            event_body['start'] = {'dateTime': start_dt.isoformat(), 'timeZone': 'Asia/Seoul'}
-            event_body['end'] = {'dateTime': end_dt.isoformat(), 'timeZone': 'Asia/Seoul'}
+            user_timezone_str = self.settings.get("user_timezone", "Asia/Seoul")
+            try:
+                local_tz = pytz.timezone(user_timezone_str)
+                # Naive datetime(시간대 정보 없음)을 aware datetime(시간대 정보 포함)으로 변환
+                aware_start_dt = local_tz.localize(start_dt)
+                aware_end_dt = local_tz.localize(end_dt)
+                
+                # 시간대 정보가 포함된 ISO 형식 문자열 생성 (예: '...T15:14:00+09:00')
+                # 이 경우 'timeZone' 필드는 불필요합니다.
+                event_body['start'] = {'dateTime': aware_start_dt.isoformat()}
+                event_body['end'] = {'dateTime': aware_end_dt.isoformat()}
+            except pytz.UnknownTimeZoneError:
+                # 설정에 저장된 시간대가 잘못된 경우를 대비한 예외 처리
+                print(f"'{user_timezone_str}'는 알 수 없는 시간대입니다. UTC를 기본값으로 사용합니다.")
+                event_body['start'] = {'dateTime': start_dt.isoformat() + 'Z'}
+                event_body['end'] = {'dateTime': end_dt.isoformat() + 'Z'}
 
         if self.mode == 'edit':
             event_id = self.event_data.get('id', '')

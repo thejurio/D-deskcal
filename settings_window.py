@@ -3,12 +3,16 @@ import copy
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QHBoxLayout,
                              QColorDialog, QComboBox, QSlider, QSizePolicy,
-                             QListWidget, QStackedWidget, QListWidgetItem, QFormLayout)
+                             QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit)
 from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime
 
 from custom_dialogs import BaseDialog
-from config import DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE
+from config import (DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, 
+                    DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE,
+                    DEFAULT_NOTIFICATIONS_ENABLED, DEFAULT_NOTIFICATION_MINUTES,
+                    DEFAULT_ALL_DAY_NOTIFICATION_ENABLED, DEFAULT_ALL_DAY_NOTIFICATION_TIME,
+                    DEFAULT_NOTIFICATION_DURATION)
 
 PASTEL_COLORS = {
     "기본": ["#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", "#a0c4ff", "#bdb2ff", "#ffc6ff", "#e4e4e4", "#f1f1f1"]
@@ -79,6 +83,7 @@ class SettingsWindow(BaseDialog):
         self.create_account_page()
         self.create_calendars_page()
         self.create_appearance_page()
+        self.create_notification_page() # 알림 페이지 추가
         self.create_general_page()
         
         self.nav_list.currentRowChanged.connect(self.stack.setCurrentIndex)
@@ -258,6 +263,106 @@ class SettingsWindow(BaseDialog):
         container_layout.addLayout(form_layout_opacity)
 
         self.stack.addWidget(page)
+
+    def create_notification_page(self):
+        """알림 설정 페이지를 생성합니다."""
+        page = QWidget()
+        page.setObjectName("settings_page")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(25, 15, 25, 25)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.nav_list.addItem(QListWidgetItem("🔔 알림"))
+
+        container = QWidget()
+        container.setObjectName("transparent_container")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(container)
+
+        container_layout.addWidget(self._create_section_label("데스크톱 알림"))
+        
+        form_layout = QFormLayout()
+        
+        self.notifications_enabled_checkbox = QCheckBox("시간 지정 일정 알림 표시")
+        is_enabled = self.temp_settings.get("notifications_enabled", DEFAULT_NOTIFICATIONS_ENABLED)
+        self.notifications_enabled_checkbox.setChecked(is_enabled)
+        self.notifications_enabled_checkbox.stateChanged.connect(self.on_notifications_toggled)
+        form_layout.addRow("", self.notifications_enabled_checkbox)
+
+        self.notification_minutes_spinbox = QComboBox()
+        self.notification_time_options = {
+            1: "1분 전", 5: "5분 전", 10: "10분 전", 15: "15분 전", 30: "30분 전"
+        }
+        for minutes, text in self.notification_time_options.items():
+            self.notification_minutes_spinbox.addItem(text, minutes)
+        
+        current_minutes = self.temp_settings.get("notification_minutes", DEFAULT_NOTIFICATION_MINUTES)
+        self.notification_minutes_spinbox.setCurrentIndex(self.notification_minutes_spinbox.findData(current_minutes))
+        self.notification_minutes_spinbox.setEnabled(is_enabled)
+        self.notification_minutes_spinbox.currentIndexChanged.connect(
+            lambda: self._mark_as_changed("notification_minutes")
+        )
+        form_layout.addRow("알림 시간:", self.notification_minutes_spinbox)
+
+        self.notification_duration_combo = QComboBox()
+        self.duration_options = { 5: "5초", 10: "10초", 20: "20초", 60: "1분", 0: "닫지 않음" }
+        for seconds, text in self.duration_options.items():
+            self.notification_duration_combo.addItem(text, seconds)
+        
+        current_duration = self.temp_settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
+        self.notification_duration_combo.setCurrentIndex(self.notification_duration_combo.findData(current_duration))
+        self.notification_duration_combo.setEnabled(is_enabled)
+        self.notification_duration_combo.currentIndexChanged.connect(
+            lambda: self._mark_as_changed("notification_duration")
+        )
+        form_layout.addRow("팝업 표시 시간:", self.notification_duration_combo)
+        
+        container_layout.addLayout(form_layout)
+        
+        # --- 하루 종일 이벤트 알림 섹션 ---
+        container_layout.addSpacing(20)
+        
+        form_layout_all_day = QFormLayout()
+        
+        self.all_day_notification_checkbox = QCheckBox("하루 종일 일정 알림 표시")
+        is_all_day_enabled = self.temp_settings.get("all_day_notification_enabled", DEFAULT_ALL_DAY_NOTIFICATION_ENABLED)
+        self.all_day_notification_checkbox.setChecked(is_all_day_enabled)
+        self.all_day_notification_checkbox.stateChanged.connect(self.on_all_day_notifications_toggled)
+        form_layout_all_day.addRow("", self.all_day_notification_checkbox)
+
+        self.all_day_notification_time_edit = QTimeEdit()
+        self.all_day_notification_time_edit.setDisplayFormat("HH:mm")
+        default_time_str = self.temp_settings.get("all_day_notification_time", DEFAULT_ALL_DAY_NOTIFICATION_TIME)
+        self.all_day_notification_time_edit.setTime(QTime.fromString(default_time_str, "HH:mm"))
+        self.all_day_notification_time_edit.setEnabled(is_all_day_enabled)
+        self.all_day_notification_time_edit.timeChanged.connect(
+            lambda: self._mark_as_changed("all_day_notification_time")
+        )
+        form_layout_all_day.addRow("알림 시간:", self.all_day_notification_time_edit)
+        
+        container_layout.addLayout(form_layout_all_day)
+        container_layout.addStretch(1)
+        self.stack.addWidget(page)
+
+    def on_all_day_notifications_toggled(self, state):
+        """하루 종일 알림 활성화 체크박스 상태 변경 시 호출됩니다."""
+        self._mark_as_changed("all_day_notification_enabled")
+        is_checked = bool(state)
+        self.all_day_notification_time_edit.setEnabled(is_checked)
+
+    def on_notifications_toggled(self, state):
+        """알림 활성화 체크박스 상태 변경 시 호출됩니다."""
+        self._mark_as_changed("notifications_enabled")
+        is_checked = bool(state)
+        self.notification_minutes_spinbox.setEnabled(is_checked)
+        self.notification_duration_combo.setEnabled(is_checked)
+
+    def on_all_day_notifications_toggled(self, state):
+        """하루 종일 알림 활성화 체크박스 상태 변경 시 호출됩니다."""
+        self._mark_as_changed("all_day_notification_enabled")
+        is_checked = bool(state)
+        self.all_day_notification_time_edit.setEnabled(is_checked)
 # settings_window.py 파일입니다.
 
     def create_general_page(self):
@@ -443,6 +548,11 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["lock_mode_enabled"] = self.lock_mode_checkbox.isChecked()
         self.temp_settings["lock_mode_key"] = self.lock_key_combo.currentData()
         self.temp_settings["start_on_boot"] = self.startup_checkbox.isChecked()
+        self.temp_settings["notifications_enabled"] = self.notifications_enabled_checkbox.isChecked()
+        self.temp_settings["notification_minutes"] = self.notification_minutes_spinbox.currentData()
+        self.temp_settings["notification_duration"] = self.notification_duration_combo.currentData()
+        self.temp_settings["all_day_notification_enabled"] = self.all_day_notification_checkbox.isChecked()
+        self.temp_settings["all_day_notification_time"] = self.all_day_notification_time_edit.time().toString("HH:mm")
 
         # 원본 설정 업데이트
         self.original_settings.clear()

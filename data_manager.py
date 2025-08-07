@@ -11,9 +11,12 @@ from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTi
 from auth_manager import AuthManager # AuthManager 임포트
 from providers.google_provider import GoogleCalendarProvider
 from providers.local_provider import LocalCalendarProvider
+from notification_manager import show_notification
 from config import (DB_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL, 
                     GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME,
-                    DEFAULT_EVENT_COLOR)
+                    DEFAULT_EVENT_COLOR, DEFAULT_NOTIFICATIONS_ENABLED, 
+                    DEFAULT_NOTIFICATION_MINUTES, DEFAULT_ALL_DAY_NOTIFICATION_ENABLED,
+                    DEFAULT_ALL_DAY_NOTIFICATION_TIME)
 
 def get_month_view_dates(year, month, start_day_of_week):
     """월간 뷰에 표시될 모든 날짜(이전/현재/다음 달 포함)의 시작일과 종료일을 반환합니다."""
@@ -242,6 +245,7 @@ class DataManager(QObject):
     calendar_list_changed = pyqtSignal()
     event_completion_changed = pyqtSignal() # 완료 상태 변경 시그널 추가
     error_occurred = pyqtSignal(str) # 오류 발생 시그널 추가
+    notification_triggered = pyqtSignal(str, str) # 알림 발생 신호 추가
 
     def __init__(self, settings, auth_manager, start_timer=True, load_cache=True):
         super().__init__()
@@ -251,6 +255,7 @@ class DataManager(QObject):
 
         self.event_cache = {}
         self.completed_event_ids = set() 
+        self.notified_event_ids = set()
         
         self.calendar_list_cache = None
         self._default_color_map_cache = None
@@ -281,6 +286,10 @@ class DataManager(QObject):
         if start_timer:
             self.sync_timer = QTimer(self)
             self.update_sync_timer()
+
+            self.notification_timer = QTimer(self)
+            self.notification_timer.timeout.connect(self._check_for_notifications)
+            self.notification_timer.start(60 * 1000) # 1분마다 실행
         
         self.setup_providers()
 
@@ -421,6 +430,8 @@ class DataManager(QObject):
 
     def stop_caching_thread(self):
         # 각 스레드 객체가 None이 아니고, 실제로 실행 중일 때만 중지하도록 수정
+        if hasattr(self, 'notification_timer'):
+            self.notification_timer.stop()
         if self.immediate_sync_thread is not None and self.immediate_sync_thread.isRunning():
             self.immediate_sync_worker.stop()
             self.immediate_sync_thread.quit()
@@ -745,3 +756,97 @@ class DataManager(QObject):
             return start.get('dateTime') or start.get('date')
         unique_results.sort(key=get_start_time)
         return unique_results
+
+    def _check_for_notifications(self):
+        """주기적으로 호출되어 다가오는 이벤트를 확인하고 알림을 보냅니다."""
+        if not self.settings.get("notifications_enabled", DEFAULT_NOTIFICATIONS_ENABLED):
+            return
+
+        minutes_before = self.settings.get("notification_minutes", DEFAULT_NOTIFICATION_MINUTES)
+        now = datetime.datetime.now().astimezone()
+        notification_start_time = now
+        notification_end_time = now + datetime.timedelta(minutes=minutes_before)
+
+        # 확인할 이벤트 목록 (현재 월과 다음 월의 캐시)
+        today = datetime.date.today()
+        events_to_check = []
+        
+        # 현재 월 이벤트 추가
+        current_month_events = self.event_cache.get((today.year, today.month), [])
+        events_to_check.extend(current_month_events)
+        
+        # 다음 월 이벤트 추가 (월말에 다음달 초 이벤트를 놓치지 않기 위함)
+        next_month_date = today.replace(day=28) + datetime.timedelta(days=4)
+        next_month_events = self.event_cache.get((next_month_date.year, next_month_date.month), [])
+        events_to_check.extend(next_month_events)
+
+        # --- 하루 종일 이벤트 알림 확인 ---
+        if self.settings.get("all_day_notification_enabled", DEFAULT_ALL_DAY_NOTIFICATION_ENABLED):
+            notification_time_str = self.settings.get("all_day_notification_time", DEFAULT_ALL_DAY_NOTIFICATION_TIME)
+            hour, minute = map(int, notification_time_str.split(':'))
+            notification_time_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+            # 오늘 날짜의 '하루 종일' 이벤트만 필터링
+            today_str = today.strftime('%Y-%m-%d')
+            all_day_events_today = [
+                e for e in current_month_events 
+                if e.get('start', {}).get('date') == today_str
+            ]
+
+            # 알림 시간이 지났고, 아직 알림을 보내지 않았다면
+            if now >= notification_time_today:
+                for event in all_day_events_today:
+                    # 하루 종일 이벤트는 ID와 날짜를 조합하여 고유하게 식별
+                    notification_id = f"{event.get('id')}_{today_str}"
+                    if notification_id not in self.notified_event_ids:
+                        summary = event.get('summary', '제목 없음')
+                        message = f"오늘 '{summary}' 일정이 있습니다."
+                        self.notification_triggered.emit("일정 알림", message)
+                        self.notified_event_ids.add(notification_id)
+
+        # --- 시간 지정 이벤트 알림 확인 ---
+        for event in events_to_check:
+            event_id = event.get('id')
+            if event_id in self.notified_event_ids:
+                continue
+
+            start_info = event.get('start', {})
+            start_time_str = start_info.get('dateTime')
+            
+            # 'dateTime'이 있는 시간 지정 이벤트만 알림 대상으로 함
+            if not start_time_str:
+                continue
+
+            try:
+                # 'Z'를 +00:00으로 변환하여 시간대 정보 처리
+                if start_time_str.endswith('Z'):
+                    start_time_str = start_time_str[:-1] + '+00:00'
+
+                # 시간대 정보가 없는 경우, 현재 시스템의 시간대로 간주
+                event_start_time = datetime.datetime.fromisoformat(start_time_str)
+                if event_start_time.tzinfo is None:
+                    event_start_time = event_start_time.astimezone()
+
+                if notification_start_time <= event_start_time < notification_end_time:
+                    summary = event.get('summary', '제목 없음')
+                    
+                    # 알림 메시지 생성
+                    time_diff = event_start_time - now
+                    minutes_remaining = int(time_diff.total_seconds() / 60)
+                    
+                    if minutes_remaining > 0:
+                        message = f"{minutes_remaining}분 후에 '{summary}' 일정이 시작됩니다."
+                    else:
+                        message = f"지금 '{summary}' 일정이 시작됩니다."
+
+                    self.notification_triggered.emit("일정 알림", message)
+                    self.notified_event_ids.add(event_id)
+                    
+                    # 하루가 지난 알림 ID는 정리
+                    if len(self.notified_event_ids) > 100:
+                         self.notified_event_ids.clear()
+
+
+            except ValueError:
+                # 잘못된 형식의 날짜 문자열은 건너뜀
+                continue

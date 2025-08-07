@@ -2,6 +2,7 @@
     "selected_calendars": [
         "family01556510902891015712@group.calendar.google.com",
         "thejurio@gmail.com",
+        "ko.south_korea#holiday@group.v.calendar.google.com",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "local_calendar"
     ],
@@ -20,12 +21,18 @@
     "window_mode": "AlwaysOnBottom",
     "lock_mode_enabled": false,
     "lock_mode_key": "Ctrl",
-    "start_on_boot": true,
+    "start_on_boot": false,
+    "notifications_enabled": true,
+    "notification_minutes": 1,
+    "last_selected_calendar_id": "thejurio@gmail.com",
     "geometry": [
-        817,
+        765,
         0,
-        718,
-        653
+        770,
+        816
     ],
-    "last_selected_calendar_id": "family01556510902891015712@group.calendar.google.com"
+    "user_timezone": "Asia/Seoul",
+    "notification_duration": 10,
+    "all_day_notification_enabled": true,
+    "all_day_notification_time": "09:00"
 }

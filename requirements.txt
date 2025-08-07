@@ -26,3 +26,8 @@ six==1.17.0
 uritemplate==4.2.0
 urllib3==2.5.0
 pynput==1.8.1
+plyer==2.1.0
+pywin32==310
+Pillow==10.4.0
+pytz==2024.1
+win10toast==0.9

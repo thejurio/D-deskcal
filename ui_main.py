@@ -17,7 +17,9 @@ from PyQt6.QtGui import QAction, QCursor, QIcon
 from pynput import keyboard
 from auth_manager import AuthManager
 from settings_manager import load_settings, save_settings
-from config import DEFAULT_WINDOW_GEOMETRY, DEFAULT_LOCK_MODE_ENABLED, DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE
+from config import (DEFAULT_WINDOW_GEOMETRY, DEFAULT_LOCK_MODE_ENABLED, 
+                    DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE,
+                    DEFAULT_NOTIFICATION_DURATION)
 
 from data_manager import DataManager
 from views.month_view import MonthViewWidget
@@ -25,6 +27,8 @@ from views.week_view import WeekViewWidget
 from settings_window import SettingsWindow
 from event_editor_window import EventEditorWindow
 from search_dialog import SearchDialog
+from notification_manager import NotificationPopup
+from timezone_helper import get_timezone_from_ip
 
 def load_stylesheet(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
@@ -65,12 +69,36 @@ class MainWidget(QWidget):
         
         # DataManager의 sync_timer가 DataManager의 새로운 메서드를 호출하도록 연결
         self.data_manager.sync_timer.timeout.connect(self.data_manager.request_current_month_sync)
+        self.data_manager.notification_triggered.connect(self.show_notification_popup)
 
         if sys.platform == "win32":
             self.set_as_desktop_child()
         
         self.apply_window_settings()
         self.sync_startup_setting()
+
+    def show_notification_popup(self, title, message):
+        # 여러 알림이 동시에 뜰 경우를 대비하여 리스트로 관리
+        if not hasattr(self, 'notification_popups'):
+            self.notification_popups = []
+
+        # 이전 팝업이 있다면 새 팝업을 그 위에 쌓이도록 위치 조정
+        offset = len(self.notification_popups) * 10
+        
+        duration = self.settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
+        popup = NotificationPopup(title, message, duration_seconds=duration)
+        
+        # 화면 오른쪽 하단 기준으로 위치 조정
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        popup_x = screen_geometry.width() - popup.width() - 15
+        popup_y = screen_geometry.height() - popup.height() - 15 - offset
+        popup.move(popup_x, popup_y)
+        
+        popup.show()
+        
+        # 팝업이 닫힐 때 리스트에서 제거되도록 연결
+        popup.destroyed.connect(lambda: self.notification_popups.remove(popup))
+        self.notification_popups.append(popup)
 
     def sync_startup_setting(self):
         """설정 파일과 레지스트리의 자동 시작 상태를 동기화합니다."""
@@ -772,7 +800,14 @@ if __name__ == '__main__':
     settings = load_settings()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    
+
+    # --- Auto Timezone Detection ---
+    if "user_timezone" not in settings:
+        user_timezone = get_timezone_from_ip()
+        settings["user_timezone"] = user_timezone
+        save_settings(settings)
+    # --------------------------------
+
     selected_theme = settings.get("theme", "dark")
     try:
         stylesheet = load_stylesheet(f'themes/{selected_theme}_theme.qss')
