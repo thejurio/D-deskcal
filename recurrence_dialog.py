@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QRadioButton, QButtonGroup, QLineEdit, QCalendarWidget)
 from PyQt6.QtCore import Qt, QDate, QEvent, QPoint, pyqtSignal, QDateTime
 from PyQt6.QtGui import QIcon
-from dateutil.rrule import rrule, DAILY, WEEKLY, MONTHLY, YEARLY, MO, TU, WE, TH, FR, SA, SU
+from dateutil.rrule import rrule, rrulestr, DAILY, WEEKLY, MONTHLY, YEARLY, MO, TU, WE, TH, FR, SA, SU
 
 from custom_dialogs import BaseDialog
 
@@ -199,7 +199,9 @@ class RecurrenceRuleDialog(BaseDialog):
             return
 
         try:
-            rule = rrulestr(rrule_str.replace("RRULE:", ""), dtstart=self.initial_start_date.toPyDate())
+            # QDate를 Python의 date 객체로 변환하여 전달
+            start_pydate = self.initial_start_date.toPyDate()
+            rule = rrulestr(rrule_str.replace("RRULE:", ""), dtstart=start_pydate)
             
             self.freq_combo.setCurrentIndex(self.freq_combo.findData(rule._freq))
             self.interval_spin.setValue(rule._interval)
@@ -247,7 +249,7 @@ class RecurrenceRuleDialog(BaseDialog):
             parts.append(f"INTERVAL={interval}")
 
         if freq == WEEKLY:
-            byday = [str(self.weekday_map[i]) for i, btn in self.weekday_buttons.items() if btn.isChecked()]
+            byday = [self.weekday_map[i].name for i, btn in self.weekday_buttons.items() if btn.isChecked()]
             if byday:
                 parts.append(f"BYDAY={','.join(byday)}")
         
@@ -256,7 +258,7 @@ class RecurrenceRuleDialog(BaseDialog):
                 week_pos = self.monthly_week_combo.currentIndex()
                 setpos = week_pos + 1 if week_pos < 4 else -1
                 day_index = self.monthly_weekday_combo.currentIndex()
-                day_name = str(self.weekday_map[day_index])
+                day_name = self.weekday_map[day_index].name
                 parts.append(f"BYDAY={day_name}")
                 parts.append(f"BYSETPOS={setpos}")
 

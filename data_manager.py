@@ -204,10 +204,10 @@ class DataManager(QObject):
     event_completion_changed = pyqtSignal() # 완료 상태 변경 시그널 추가
     error_occurred = pyqtSignal(str) # 오류 발생 시그널 추가
 
-    def __init__(self, settings, start_timer=True, load_cache=True):
+    def __init__(self, settings, auth_manager, start_timer=True, load_cache=True):
         super().__init__()
         self.settings = settings
-        self.auth_manager = AuthManager()
+        self.auth_manager = auth_manager
         self.auth_manager.auth_state_changed.connect(self.on_auth_state_changed)
 
         self.event_cache = {}

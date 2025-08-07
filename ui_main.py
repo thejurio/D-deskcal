@@ -15,6 +15,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QAction, QCursor, QIcon
 
 from pynput import keyboard
+from auth_manager import AuthManager
 from settings_manager import load_settings, save_settings
 from config import DEFAULT_WINDOW_GEOMETRY, DEFAULT_LOCK_MODE_ENABLED, DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE
 
@@ -47,7 +48,8 @@ class MainWidget(QWidget):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
-        self.data_manager = DataManager(settings)
+        self.auth_manager = AuthManager()
+        self.data_manager = DataManager(settings, self.auth_manager)
         self.current_date = datetime.date.today()
         self.is_resizing = False
         self.is_moving = False
