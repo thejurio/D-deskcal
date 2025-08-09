@@ -1,8 +1,9 @@
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit)
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit, QLineEdit)
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QObject, QThread
 from PyQt6.QtGui import QAction, QKeySequence
+import gemini_parser
 
 class BaseDialog(QDialog):
     def __init__(self, parent=None, settings=None, pos: QPoint = None):
@@ -686,14 +687,14 @@ class HotkeyInputDialog(BaseDialog):
     def get_hotkey(self):
         return self.hotkey_str
 
-class HotkeyInputDialog(BaseDialog):
+class SingleKeyInputDialog(BaseDialog):
     def __init__(self, parent=None, settings=None, pos=None):
         super().__init__(parent, settings, pos)
-        self.setWindowTitle("단축키 설정")
+        self.setWindowTitle("잠금 해제 키 설정")
         self.setModal(True)
         self.setFixedSize(350, 180)
 
-        self.hotkey_str = ""
+        self.key_str = ""
         self.key_map = self._get_key_map()
 
         main_layout = QVBoxLayout(self)
@@ -705,15 +706,15 @@ class HotkeyInputDialog(BaseDialog):
         content_layout = QVBoxLayout(background_widget)
         content_layout.setContentsMargins(20, 15, 20, 15)
 
-        info_label = QLabel("등록할 단축키 조합을 누르세요.\n(예: Ctrl + Shift + F1)")
+        info_label = QLabel("등록할 키 하나를 누르세요.\n(예: Ctrl, Alt, Shift, F1, A 등)")
         info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         content_layout.addWidget(info_label)
 
-        self.hotkey_display = QLabel("...")
-        self.hotkey_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.hotkey_display.setObjectName("hotkey_display")
-        self.hotkey_display.setMinimumHeight(40)
-        content_layout.addWidget(self.hotkey_display)
+        self.key_display = QLabel("...")
+        self.key_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.key_display.setObjectName("hotkey_display")
+        self.key_display.setMinimumHeight(40)
+        content_layout.addWidget(self.key_display)
 
         button_layout = QHBoxLayout()
         button_layout.addStretch(1)
@@ -731,36 +732,130 @@ class HotkeyInputDialog(BaseDialog):
         for key_name in dir(Qt.Key):
             if key_name.startswith('Key_'):
                 key_value = getattr(Qt.Key, key_name)
+                # QKeySequence.toString()이 더 나은 이름을 제공하는 경우가 많으므로,
+                # 기본적인 이름만 매핑하고 나머지는 QKeySequence에 의존합니다.
                 key_map[key_value] = key_name.replace('Key_', '')
         return key_map
 
     def keyPressEvent(self, event):
         event.accept()
         key = event.key()
-        modifiers = event.modifiers()
-
-        if key in (Qt.Key.Key_unknown, Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
+        
+        # 제어 키(Ctrl, Alt 등) 자체는 무시하고, 다른 키와 조합될 때만 의미가 있도록 합니다.
+        # 하지만 여기서는 단일 키를 원하므로, 키가 눌렸다는 사실 자체가 중요합니다.
+        if key == Qt.Key.Key_unknown:
             return
 
-        mod_list = []
-        if modifiers & Qt.KeyboardModifier.ControlModifier:
-            mod_list.append("Ctrl")
-        if modifiers & Qt.KeyboardModifier.ShiftModifier:
-            mod_list.append("Shift")
-        if modifiers & Qt.KeyboardModifier.AltModifier:
-            mod_list.append("Alt")
+        # Qt.Key enum 값으로부터 사람이 읽을 수 있는 문자열을 얻습니다.
+        key_str = self.key_map.get(key, QKeySequence(key).toString())
 
-        key_str = self.key_map.get(key, QKeySequence(key).toString().upper())
-        
         if not key_str or key_str.isspace():
              return
 
-        if key_str not in mod_list:
-            mod_list.append(key_str)
-
-        self.hotkey_str = " + ".join(mod_list)
-        self.hotkey_display.setText(self.hotkey_str)
+        self.key_str = key_str
+        self.key_display.setText(self.key_str)
         self.ok_button.setEnabled(True)
 
-    def get_hotkey(self):
-        return self.hotkey_str
+    def get_key(self):
+        # keyboard 라이브러리와 호환되도록 소문자로 반환
+        return self.key_str.lower()
+
+class ApiKeyVerifier(QObject):
+    """API 키 유효성 검사를 백그라운드 스레드에서 실행하는 워커"""
+    verification_finished = pyqtSignal(bool, str)
+
+    def __init__(self, api_key):
+        super().__init__()
+        self.api_key = api_key
+
+    def run(self):
+        is_valid, message = gemini_parser.verify_api_key(self.api_key)
+        self.verification_finished.emit(is_valid, message)
+
+class APIKeyInputDialog(BaseDialog):
+    def __init__(self, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
+        self.setWindowTitle("Gemini API 키 설정")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+
+        self.api_key = ""
+        self.verification_thread = None
+        self.verifier = None
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(20, 15, 20, 15)
+
+        title_label = QLabel("Gemini API 키 입력")
+        title_label.setStyleSheet("font-weight: bold; font-size: 11pt;")
+        content_layout.addWidget(title_label)
+
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setPlaceholderText("여기에 API 키를 붙여넣으세요")
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        content_layout.addWidget(self.api_key_input)
+
+        self.status_label = QLabel(" ")
+        self.status_label.setStyleSheet("font-size: 8pt; padding-top: 5px;")
+        content_layout.addWidget(self.status_label)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        self.ok_button = QPushButton("확인 및 저장")
+        self.ok_button.clicked.connect(self.verify_and_accept)
+        self.ok_button.setDefault(True)
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.ok_button)
+        content_layout.addLayout(button_layout)
+
+    def verify_and_accept(self):
+        self.api_key = self.api_key_input.text().strip()
+        if not self.api_key:
+            self.status_label.setText("API 키를 입력해주세요.")
+            self.status_label.setStyleSheet("color: #E57373;")
+            return
+
+        self.ok_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        self.status_label.setText("API 키 유효성을 확인하는 중입니다...")
+        self.status_label.setStyleSheet("color: #9E9E9E;")
+
+        self.verification_thread = QThread()
+        self.verifier = ApiKeyVerifier(self.api_key)
+        self.verifier.moveToThread(self.verification_thread)
+        self.verifier.verification_finished.connect(self.on_verification_finished)
+        self.verification_thread.started.connect(self.verifier.run)
+        self.verification_thread.finished.connect(self.verification_thread.deleteLater)
+        self.verification_thread.start()
+
+    def on_verification_finished(self, is_valid, message):
+        self.status_label.setText(message)
+        if is_valid:
+            self.status_label.setStyleSheet("color: #81C784;")
+            # 잠시 후 다이얼로그를 닫습니다.
+            QThread.msleep(500) 
+            self.accept()
+        else:
+            self.status_label.setStyleSheet("color: #E57373;")
+            self.ok_button.setEnabled(True)
+            self.cancel_button.setEnabled(True)
+        
+        self.verification_thread.quit()
+        self.verification_thread.wait()
+
+    def get_api_key(self):
+        return self.api_key
+
+    def closeEvent(self, event):
+        if self.verification_thread and self.verification_thread.isRunning():
+            self.verification_thread.quit()
+            self.verification_thread.wait()
+        super().closeEvent(event)

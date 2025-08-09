@@ -7,11 +7,10 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton,
 from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime, QObject, QThread
 
-from custom_dialogs import BaseDialog, HotkeyInputDialog, CustomMessageBox
-import gemini_parser
+from custom_dialogs import BaseDialog, HotkeyInputDialog, CustomMessageBox, APIKeyInputDialog, SingleKeyInputDialog
 from config import (
                     DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, 
-                    DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE,
+                    DEFAULT_WINDOW_MODE,
                     DEFAULT_NOTIFICATIONS_ENABLED, DEFAULT_NOTIFICATION_MINUTES,
                     DEFAULT_ALL_DAY_NOTIFICATION_ENABLED, DEFAULT_ALL_DAY_NOTIFICATION_TIME,
                     DEFAULT_NOTIFICATION_DURATION)
@@ -20,14 +19,6 @@ PASTEL_COLORS = {
     "기본": ["#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", "#a0c4ff", "#bdb2ff", "#ffc6ff", "#e4e4e4", "#f1f1f1"]
 }
 CUSTOM_COLOR_TEXT = "사용자 지정..."
-
-class ApiKeyVerifier(QObject):
-    """API 키 유효성 검사를 백그라운드 스레드에서 실행하는 워커"""
-    verification_finished = pyqtSignal(bool, str)
-
-    def run(self, api_key):
-        is_valid, message = gemini_parser.verify_api_key(api_key)
-        self.verification_finished.emit(is_valid, message)
 
 class SettingsWindow(BaseDialog):
     transparency_changed = pyqtSignal(float)
@@ -126,14 +117,31 @@ class SettingsWindow(BaseDialog):
             QListWidget#settings_nav::item {{ padding: 15px; border: none; }}
             QListWidget#settings_nav::item:selected {{ background-color: {nav_item_selected_bg}; color: {nav_item_selected_fg}; font-weight: bold; }}
             QListWidget#settings_nav::item:hover:!selected {{ background-color: {nav_item_hover_bg}; }}
-            QWidget#settings_page {{ background-color: {content_bg}; color: {general_text_color}; border-top-right-radius: 8px; }}
+            QWidget#settings_page, QWidget#scroll_area_widget {{ background-color: {content_bg}; color: {general_text_color}; }}
+            QScrollArea#settings_scroll_area {{ border: none; background-color: transparent; }}
             QWidget#bottom_container {{ background-color: {bottom_bg}; border-top: 1px solid {nav_border}; border-bottom-right-radius: 8px; }}
-            QLabel#section_title {{ font-size: 18px; font-weight: bold; padding-top: 10px; padding-bottom: 15px; color: {section_title_fg}; }}
+            QLabel#section_title {{ font-size: 18px; font-weight: bold; padding-top: 10px; padding-bottom: 10px; color: {section_title_fg}; }}
             QWidget#settings_page QScrollArea, QWidget#transparent_container {{ background-color: transparent; }}
             QWidget#settings_page QLabel:!#section_title {{ color: {general_text_color}; }}
             QWidget#settings_page QCheckBox {{ color: {general_text_color}; }}
         """
         self.setStyleSheet(qss)
+
+    def _create_scrollable_page(self):
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("settings_scroll_area")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        content_widget = QWidget()
+        content_widget.setObjectName("scroll_area_widget")
+        
+        layout = QVBoxLayout(content_widget)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(25, 15, 25, 25)
+        
+        scroll_area.setWidget(content_widget)
+        return scroll_area, layout
 
     def _create_section_label(self, text):
         label = QLabel(text)
@@ -141,8 +149,7 @@ class SettingsWindow(BaseDialog):
         return label
 
     def create_connectivity_page(self):
-        page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop); layout.setContentsMargins(25, 15, 25, 25)
+        scroll_area, layout = self._create_scrollable_page()
         self.nav_list.addItem(QListWidgetItem("🔗 연동 및 데이터"))
         
         layout.addWidget(self._create_section_label("Google 계정 연동"))
@@ -150,22 +157,33 @@ class SettingsWindow(BaseDialog):
         account_layout.addWidget(self.account_status_label, 1); account_layout.addWidget(self.account_button)
         self.account_button.clicked.connect(self.handle_account_button_click)
         layout.addLayout(account_layout)
-        layout.addSpacing(20)
+        layout.addSpacing(15)
 
         layout.addWidget(self._create_section_label("Gemini AI 연동"))
-        api_key_layout = QHBoxLayout()
-        self.gemini_api_key_input = QLineEdit(); self.gemini_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.gemini_api_key_input.setPlaceholderText("Gemini API 키를 여기에 붙여넣으세요")
-        self.verify_api_key_button = QPushButton("확인")
-        api_key_layout.addWidget(self.gemini_api_key_input); api_key_layout.addWidget(self.verify_api_key_button)
-        self.api_key_status_label = QLabel(""); self.api_key_status_label.setStyleSheet("font-size: 8pt; padding-left: 5px;")
-        gemini_form_layout = QFormLayout(); gemini_form_layout.addRow("API 키:", api_key_layout); gemini_form_layout.addRow("", self.api_key_status_label)
-        layout.addLayout(gemini_form_layout)
-        current_api_key = self.temp_settings.get("gemini_api_key")
-        if current_api_key: self.gemini_api_key_input.setPlaceholderText(f"저장된 키 유지 (마지막 4자리: {current_api_key[-4:]})")
-        self.gemini_api_key_input.textChanged.connect(self.on_api_key_text_changed)
-        self.verify_api_key_button.clicked.connect(self.on_verify_api_key_clicked)
-        layout.addSpacing(20)
+        
+        api_key_form = QFormLayout()
+        api_key_widget = QWidget()
+        api_key_layout = QHBoxLayout(api_key_widget)
+        api_key_layout.setContentsMargins(0,0,0,0)
+        
+        self.api_key_display = QLabel()
+        self.add_api_key_button = QPushButton("API 키 등록")
+        self.change_api_key_button = QPushButton("변경")
+        self.reset_api_key_button = QPushButton("초기화")
+
+        api_key_layout.addWidget(self.api_key_display, 1)
+        api_key_layout.addWidget(self.add_api_key_button)
+        api_key_layout.addWidget(self.change_api_key_button)
+        api_key_layout.addWidget(self.reset_api_key_button)
+        
+        self.add_api_key_button.clicked.connect(self.open_api_key_dialog)
+        self.change_api_key_button.clicked.connect(self.open_api_key_dialog)
+        self.reset_api_key_button.clicked.connect(self.reset_api_key)
+
+        api_key_form.addRow("API 키:", api_key_widget)
+        layout.addLayout(api_key_form)
+        self.update_api_key_ui()
+        layout.addSpacing(15)
 
         layout.addWidget(self._create_section_label("동기화"))
         form_layout_sync = QFormLayout()
@@ -177,11 +195,10 @@ class SettingsWindow(BaseDialog):
         form_layout_sync.addRow("자동 동기화 주기:", self.sync_interval_combo)
         layout.addLayout(form_layout_sync)
 
-        self.stack.addWidget(page)
+        self.stack.addWidget(scroll_area)
 
     def create_appearance_page(self):
-        page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop); layout.setContentsMargins(25, 15, 25, 25)
+        scroll_area, layout = self._create_scrollable_page()
         self.nav_list.addItem(QListWidgetItem("🎨 화면 표시"))
 
         layout.addWidget(self._create_section_label("테마 및 투명도"))
@@ -201,7 +218,7 @@ class SettingsWindow(BaseDialog):
         opacity_layout.addWidget(self.opacity_slider); opacity_layout.addWidget(self.opacity_label)
         form_layout_theme.addRow("전체 투명도:", opacity_widget)
         layout.addLayout(form_layout_theme)
-        layout.addSpacing(20)
+        layout.addSpacing(15)
 
         layout.addWidget(self._create_section_label("달력 표시"))
         form_layout_display = QFormLayout()
@@ -214,22 +231,40 @@ class SettingsWindow(BaseDialog):
         self.hide_weekends_checkbox.stateChanged.connect(lambda: self._mark_as_changed("hide_weekends"))
         form_layout_display.addRow("", self.hide_weekends_checkbox)
         layout.addLayout(form_layout_display)
-        layout.addSpacing(20)
+        layout.addSpacing(15)
 
         layout.addWidget(self._create_section_label("캘린더 표시 및 색상 설정"))
-        scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
-        layout.addWidget(scroll_area)
         self.calendar_list_widget = QWidget(); self.calendar_list_widget.setObjectName("transparent_container")
         self.calendar_list_layout = QVBoxLayout(self.calendar_list_widget)
         self.calendar_list_layout.setContentsMargins(0,0,0,0); self.calendar_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        scroll_area.setWidget(self.calendar_list_widget)
+        layout.addWidget(self.calendar_list_widget)
         
-        self.stack.addWidget(page)
+        self.stack.addWidget(scroll_area)
 
     def create_behavior_page(self):
-        page = QWidget(); page.setObjectName("settings_page"); layout = QVBoxLayout(page)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop); layout.setContentsMargins(25, 15, 25, 25)
+        scroll_area, layout = self._create_scrollable_page()
         self.nav_list.addItem(QListWidgetItem("🔔 동작 및 알림"))
+
+        layout.addWidget(self._create_section_label("창 동작"))
+        form_layout_behavior = QFormLayout()
+        self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
+        is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
+        self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
+        self.lock_mode_checkbox.stateChanged.connect(lambda s: self._mark_as_changed("lock_mode_enabled"))
+        form_layout_behavior.addRow("", self.lock_mode_checkbox)
+        
+        self.unlock_key_widget = self.create_single_key_input_widget("unlock_key")
+        form_layout_behavior.addRow("잠금 해제 키:", self.unlock_key_widget)
+        layout.addLayout(form_layout_behavior)
+        layout.addSpacing(15)
+
+        layout.addWidget(self._create_section_label("글로벌 단축키"))
+        form_layout_hotkey = QFormLayout()
+        
+        ai_hotkey_layout = self.create_hotkey_input_widget("ai_add_event_hotkey")
+        form_layout_hotkey.addRow("AI 일정 추가:", ai_hotkey_layout)
+        layout.addLayout(form_layout_hotkey)
+        layout.addSpacing(15)
 
         layout.addWidget(self._create_section_label("데스크톱 알림"))
         form_layout_notif = QFormLayout()
@@ -267,105 +302,116 @@ class SettingsWindow(BaseDialog):
         self.all_day_notification_time_edit.timeChanged.connect(lambda: self._mark_as_changed("all_day_notification_time"))
         form_layout_notif.addRow("알림 시간:", self.all_day_notification_time_edit)
         layout.addLayout(form_layout_notif)
-        layout.addSpacing(20)
+        layout.addSpacing(15)
 
-        layout.addWidget(self._create_section_label("창 동작"))
-        form_layout_behavior = QFormLayout()
-
-        self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
-        is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
-        self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
-        self.lock_mode_checkbox.stateChanged.connect(self.on_lock_mode_toggled)
-        form_layout_behavior.addRow("", self.lock_mode_checkbox)
-        
-        self.lock_key_combo = QComboBox()
-        self.lock_key_options = { "ctrl": "Ctrl", "alt": "Alt", "shift": "Shift", "z": "Z", "a": "A", "q": "Q" }
-        for value, text in self.lock_key_options.items(): self.lock_key_combo.addItem(text, value)
-        current_lock_key = self.temp_settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY)
-        self.lock_key_combo.setCurrentIndex(self.lock_key_combo.findData(current_lock_key))
-        self.lock_key_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("lock_mode_key"))
-        self.lock_key_combo.setEnabled(is_lock_mode_enabled)
-        form_layout_behavior.addRow("잠금 해제 키:", self.lock_key_combo)
-
+        layout.addWidget(self._create_section_label("시스템"))
+        form_layout_system = QFormLayout()
         self.startup_checkbox = QCheckBox("Windows 시작 시 자동 실행")
         self.startup_checkbox.setChecked(self.temp_settings.get("start_on_boot", False))
         self.startup_checkbox.stateChanged.connect(lambda: self._mark_as_changed("start_on_boot"))
-        form_layout_behavior.addRow("", self.startup_checkbox)
-        layout.addLayout(form_layout_behavior)
-        layout.addSpacing(20)
+        form_layout_system.addRow("", self.startup_checkbox)
+        layout.addLayout(form_layout_system)
 
-        layout.addWidget(self._create_section_label("글로벌 단축키"))
-        form_layout_hotkey = QFormLayout()
+        self.stack.addWidget(scroll_area)
+
+    def create_hotkey_input_widget(self, setting_key):
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0,0,0,0)
         
-        hotkey_layout = QHBoxLayout()
-        self.ai_hotkey_display = QLineEdit()
-        self.ai_hotkey_display.setReadOnly(True)
-        self.ai_hotkey_display.setPlaceholderText("단축키 없음")
+        display_widget = QLineEdit()
+        display_widget.setReadOnly(True)
+        display_widget.setPlaceholderText("단축키 없음")
         
-        set_hotkey_button = QPushButton("단축키 등록")
-        set_hotkey_button.clicked.connect(self.open_hotkey_dialog)
-        clear_hotkey_button = QPushButton("해제")
-        clear_hotkey_button.clicked.connect(self.clear_ai_hotkey)
+        set_button = QPushButton("단축키 등록")
+        set_button.clicked.connect(lambda: self.open_hotkey_dialog(setting_key, display_widget))
+        
+        clear_button = QPushButton("해제")
+        clear_button.clicked.connect(lambda: self.clear_hotkey(setting_key, display_widget))
 
-        hotkey_layout.addWidget(self.ai_hotkey_display)
-        hotkey_layout.addWidget(set_hotkey_button)
-        hotkey_layout.addWidget(clear_hotkey_button)
+        layout.addWidget(display_widget)
+        layout.addWidget(set_button)
+        layout.addWidget(clear_button)
+        
+        hotkey = self.temp_settings.get(setting_key, "")
+        display_widget.setText(hotkey)
+        
+        return container
 
-        form_layout_hotkey.addRow("AI 일정 추가:", hotkey_layout)
-        layout.addLayout(form_layout_hotkey)
+    def create_single_key_input_widget(self, setting_key):
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0,0,0,0)
+        
+        display_widget = QLineEdit()
+        display_widget.setReadOnly(True)
+        display_widget.setPlaceholderText("키 없음")
+        
+        set_button = QPushButton("키 등록")
+        set_button.clicked.connect(lambda: self.open_single_key_dialog(setting_key, display_widget))
+        
+        clear_button = QPushButton("해제")
+        clear_button.clicked.connect(lambda: self.clear_hotkey(setting_key, display_widget))
 
-        self.stack.addWidget(page)
+        layout.addWidget(display_widget)
+        layout.addWidget(set_button)
+        layout.addWidget(clear_button)
+        
+        key = self.temp_settings.get(setting_key, "")
+        display_widget.setText(key.capitalize())
+        
+        return container
 
-    def open_hotkey_dialog(self):
+    def open_hotkey_dialog(self, setting_key, display_widget):
         dialog = HotkeyInputDialog(self, self.settings, self.pos())
         if dialog.exec():
             hotkey = dialog.get_hotkey()
-            if not hotkey:
-                return
+            if not hotkey: return
+            self.temp_settings[setting_key] = hotkey
+            display_widget.setText(hotkey)
+            self._mark_as_changed(setting_key)
 
-            confirm_dialog = CustomMessageBox(
-                self, 
-                title="단축키 확인", 
-                text=f"'{hotkey}'을(를) AI 일정 추가 단축키로 등록하시겠습니까?",
-                settings=self.settings
-            )
-            if confirm_dialog.exec():
-                self.temp_settings['ai_add_event_hotkey'] = hotkey
-                self.ai_hotkey_display.setText(hotkey)
-                self._mark_as_changed('ai_add_event_hotkey')
+    def open_single_key_dialog(self, setting_key, display_widget):
+        dialog = SingleKeyInputDialog(self, self.settings, self.pos())
+        if dialog.exec():
+            key = dialog.get_key()
+            if not key: return
+            self.temp_settings[setting_key] = key
+            display_widget.setText(key.capitalize())
+            self._mark_as_changed(setting_key)
 
-    def clear_ai_hotkey(self):
-        self.temp_settings['ai_add_event_hotkey'] = ""
-        self.ai_hotkey_display.setText("")
-        self._mark_as_changed('ai_add_event_hotkey')
+    def clear_hotkey(self, setting_key, display_widget):
+        self.temp_settings[setting_key] = ""
+        display_widget.setText("")
+        self._mark_as_changed(setting_key)
 
-    def update_hotkey_display(self):
-        hotkey = self.temp_settings.get("ai_add_event_hotkey", "")
-        self.ai_hotkey_display.setText(hotkey)
+    def open_api_key_dialog(self):
+        dialog = APIKeyInputDialog(self, self.settings, self.pos())
+        if dialog.exec():
+            api_key = dialog.get_api_key()
+            self.temp_settings['gemini_api_key'] = api_key
+            self._mark_as_changed('gemini_api_key')
+            self.update_api_key_ui()
 
-    def on_api_key_text_changed(self):
-        self._mark_as_changed("gemini_api_key")
-        self.api_key_status_label.setText("")
+    def reset_api_key(self):
+        confirm = CustomMessageBox(self, "API 키 초기화", "정말로 API 키를 삭제하시겠습니까?", settings=self.settings)
+        if confirm.exec():
+            self.temp_settings['gemini_api_key'] = ""
+            self._mark_as_changed('gemini_api_key')
+            self.update_api_key_ui()
 
-    def on_verify_api_key_clicked(self):
-        api_key = self.gemini_api_key_input.text().strip()
-        if not api_key:
-            api_key = self.temp_settings.get("gemini_api_key")
-            if not api_key:
-                self.api_key_status_label.setText("오류: 확인할 API 키가 없습니다."); self.api_key_status_label.setStyleSheet("color: #E57373;"); return
-        self.api_key_status_label.setText("확인 중..."); self.api_key_status_label.setStyleSheet("color: #9E9E9E;"); self.verify_api_key_button.setEnabled(False)
-        self.worker = ApiKeyVerifier(); self.thread = QThread(); self.worker.moveToThread(self.thread)
-        self.worker.verification_finished.connect(self.on_verification_finished)
-        self.thread.started.connect(lambda: self.worker.run(api_key)); self.thread.finished.connect(self.thread.deleteLater); self.thread.start()
-
-    def on_verification_finished(self, is_valid, message):
-        self.api_key_status_label.setText(message)
-        self.api_key_status_label.setStyleSheet(f"color: {{'#81C784' if is_valid else '#E57373'}}");
-        self.verify_api_key_button.setEnabled(True); self.thread.quit(); self.worker.deleteLater()
-
-    def on_lock_mode_toggled(self, state):
-        self._mark_as_changed("lock_mode_enabled"); is_checked = bool(state); self.lock_key_combo.setEnabled(is_checked)
-        # if not is_checked: self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData("Normal")); self._mark_as_changed("window_mode")
+    def update_api_key_ui(self):
+        api_key = self.temp_settings.get("gemini_api_key")
+        if api_key:
+            self.api_key_display.setText(f"**** **** **** {api_key[-4:]}")
+            self.add_api_key_button.hide()
+            self.change_api_key_button.show()
+            self.reset_api_key_button.show()
+        else:
+            self.api_key_display.setText("등록된 키 없음")
+            self.add_api_key_button.show()
+            self.change_api_key_button.hide()
+            self.reset_api_key_button.hide()
 
     def on_notifications_toggled(self, state):
         self._mark_as_changed("notifications_enabled"); is_checked = bool(state)
@@ -377,7 +423,6 @@ class SettingsWindow(BaseDialog):
     def rebuild_ui(self):
         self.update_account_status()
         self.populate_calendar_list()
-        self.update_hotkey_display()
 
     def update_account_status(self):
         if self.data_manager.auth_manager.is_logged_in():
@@ -387,7 +432,7 @@ class SettingsWindow(BaseDialog):
             self.account_status_label.setText("연결되지 않음"); self.account_button.setText("로그인")
 
     def handle_account_button_click(self):
-        if self.data_manager.auth_manager.is_logged_in(): self.data_manager.auth_manager.logout() # This line might need escaping if it contained special characters
+        if self.data_manager.auth_manager.is_logged_in(): self.data_manager.auth_manager.logout()
         else: self.data_manager.auth_manager.login()
 
     def populate_calendar_list(self):
@@ -460,17 +505,14 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["hide_weekends"] = self.hide_weekends_checkbox.isChecked()
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
-        # self.temp_settings["window_mode"] = self.window_mode_combo.currentData()
         self.temp_settings["lock_mode_enabled"] = self.lock_mode_checkbox.isChecked()
-        self.temp_settings["lock_mode_key"] = self.lock_key_combo.currentData()
         self.temp_settings["start_on_boot"] = self.startup_checkbox.isChecked()
         self.temp_settings["notifications_enabled"] = self.notifications_enabled_checkbox.isChecked()
         self.temp_settings["notification_minutes"] = self.notification_minutes_spinbox.currentData()
         self.temp_settings["notification_duration"] = self.notification_duration_combo.currentData()
         self.temp_settings["all_day_notification_enabled"] = self.all_day_notification_checkbox.isChecked()
         self.temp_settings["all_day_notification_time"] = self.all_day_notification_time_edit.time().toString("HH:mm")
-        new_api_key = self.gemini_api_key_input.text().strip()
-        if new_api_key: self.temp_settings["gemini_api_key"] = new_api_key
+        
         self.original_settings.clear(); self.original_settings.update(self.temp_settings)
         self.done(1)
         

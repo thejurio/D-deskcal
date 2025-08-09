@@ -19,7 +19,7 @@
     "window_opacity": 0.9,
     "theme": "dark",
     "window_mode": "AlwaysOnBottom",
-    "lock_mode_enabled": true,
+    "lock_mode_enabled": false,
     "lock_mode_key": "ctrl",
     "start_on_boot": false,
     "notifications_enabled": true,
@@ -36,5 +36,6 @@
     "all_day_notification_enabled": true,
     "all_day_notification_time": "07:00",
     "gemini_api_key": "AIzaSyBNGWOIvVTTYP4GLroRNN9gFMduWiZhsFs",
-    "ai_add_event_hotkey": "Ctrl + K"
+    "ai_add_event_hotkey": "Ctrl + K",
+    "unlock_hotkey": "Shift + E"
 }
