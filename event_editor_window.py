@@ -16,8 +16,7 @@ from recurrence_dialog import RecurrenceRuleDialog
 
 class DateSelector(QWidget):
     """
-    QLineEdit와 QPushButton을 조합하여 만든 커스텀 날짜 선택 위젯.
-    QLineEdit나 버튼을 클릭하면 캘린더 팝업이 나타난다.
+    QLineEdit를 클릭하면 캘린더 팝업이 나타나는 커스텀 날짜 선택 위젯.
     """
     dateTimeChanged = pyqtSignal(QDateTime)
 
@@ -27,20 +26,14 @@ class DateSelector(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
+        layout.setSpacing(0)
 
         self.line_edit = QLineEdit()
         self.line_edit.setReadOnly(True)
         # 클릭 이벤트를 감지하기 위해 이벤트 필터 설치
         self.line_edit.installEventFilter(self)
 
-        self.calendar_button = QPushButton()
-        self.calendar_button.setIcon(QIcon("icons/search.svg")) # 임시 아이콘, 추후 변경 가능
-        self.calendar_button.setFixedSize(28, 28)
-        self.calendar_button.clicked.connect(self.show_calendar)
-
         layout.addWidget(self.line_edit)
-        layout.addWidget(self.calendar_button)
 
         self.calendar_popup = QCalendarWidget(self)
         self.calendar_popup.setWindowFlags(Qt.WindowType.Popup)

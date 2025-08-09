@@ -290,19 +290,19 @@ class MainWidget(QWidget):
         search_button.setIcon(QIcon("icons/search.svg"))
         search_button.setIconSize(QSize(20, 20))
         search_button.setObjectName("search_button")
-        search_button.setFixedSize(30, 28)
+        search_button.setFixedSize(30, 30)
         search_button.setStyleSheet("padding-bottom: 2px;")
         search_button.clicked.connect(self.open_search_dialog)
 
         self.lock_button = QPushButton()
         self.lock_button.setIconSize(QSize(20, 20))
         self.lock_button.setObjectName("lock_button")
-        self.lock_button.setFixedSize(30, 28)
+        self.lock_button.setFixedSize(30, 30)
         self.lock_button.setStyleSheet("padding-bottom: 2px;")
         self.lock_button.clicked.connect(self.toggle_lock_mode)
 
         ai_add_button = QPushButton()
-        ai_add_button.setIcon(QIcon("icons/search.svg")) # 임시 아이콘
+        ai_add_button.setIcon(QIcon("icons/gemini.svg"))
         ai_add_button.setIconSize(QSize(20, 20))
         ai_add_button.setObjectName("ai_add_button")
         ai_add_button.setFixedSize(30, 28)

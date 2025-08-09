@@ -63,8 +63,7 @@ class EventEditWidget(QWidget):
         # 시작일
         self.start_date_input = QLineEdit(self.event_data.get('startDate', ''))
         self.start_date_input.setReadOnly(True)
-        start_cal_button = QPushButton("📅")
-        start_cal_button.clicked.connect(lambda: self.show_calendar(self.start_date_input))
+        self.start_date_input.installEventFilter(self)
         
         # 시작 시간
         self.start_time_input = QTimeEdit()
@@ -75,15 +74,13 @@ class EventEditWidget(QWidget):
             self.all_day_checkbox.setChecked(True) # 시간이 없으면 하루종일로 간주
 
         grid_layout.addWidget(QLabel("시작:"), 0, 0)
-        grid_layout.addWidget(self.start_date_input, 0, 1)
-        grid_layout.addWidget(start_cal_button, 0, 2)
+        grid_layout.addWidget(self.start_date_input, 0, 1, 1, 2)
         grid_layout.addWidget(self.start_time_input, 0, 3)
 
         # 종료일
         self.end_date_input = QLineEdit(self.event_data.get('endDate', ''))
         self.end_date_input.setReadOnly(True)
-        end_cal_button = QPushButton("📅")
-        end_cal_button.clicked.connect(lambda: self.show_calendar(self.end_date_input))
+        self.end_date_input.installEventFilter(self)
 
         # 종료 시간
         self.end_time_input = QTimeEdit()
@@ -92,8 +89,7 @@ class EventEditWidget(QWidget):
             self.end_time_input.setTime(QTime.fromString(self.event_data['endTime'], "HH:mm"))
 
         grid_layout.addWidget(QLabel("종료:"), 1, 0)
-        grid_layout.addWidget(self.end_date_input, 1, 1)
-        grid_layout.addWidget(end_cal_button, 1, 2)
+        grid_layout.addWidget(self.end_date_input, 1, 1, 1, 2)
         grid_layout.addWidget(self.end_time_input, 1, 3)
         
         main_layout.addLayout(grid_layout)
@@ -113,13 +109,22 @@ class EventEditWidget(QWidget):
         self.all_day_checkbox.stateChanged.connect(self.toggle_time_edits)
         self.toggle_time_edits(self.all_day_checkbox.isChecked())
 
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if obj == self.start_date_input:
+                self.show_calendar(self.start_date_input)
+                return True
+            elif obj == self.end_date_input:
+                self.show_calendar(self.end_date_input)
+                return True
+        return super().eventFilter(obj, event)
+
     def show_calendar(self, target_line_edit):
         popup = CalendarPopup(self, target_line_edit.text())
         popup.date_selected.connect(lambda date: target_line_edit.setText(date.toString("yyyy-MM-dd")))
         
-        button = self.sender()
-        popup_pos = self.mapToGlobal(button.pos())
-        popup_pos.setY(popup_pos.y() + button.height())
+        popup_pos = self.mapToGlobal(target_line_edit.pos())
+        popup_pos.setY(popup_pos.y() + target_line_edit.height())
         popup.move(popup_pos)
         popup.show()
 

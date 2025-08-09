@@ -18,7 +18,7 @@
     QLineEdit:focus, QTextEdit:focus { border-color: #0078D7; }
     QComboBox { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px 5px; }
     QComboBox::drop-down { border: none; }
-    QComboBox::down-arrow { image: url(./views/down_arrow.png); width: 12px; height: 12px; }
+    QComboBox::down-arrow { image: url(icons/combo_arrow_dark.svg); width: 12px; height: 12px; }
     QComboBox QAbstractItemView { background-color: #424242; border: 1px solid #5A5A5A; selection-background-color: #0078D7; }
     QScrollBar:vertical { border: none; background: #2E2E2E; width: 10px; margin: 0px 0px 0px 0px; }
     QScrollBar::handle:vertical { background: #5A5A5A; min-height: 20px; border-radius: 5px; }
@@ -41,8 +41,38 @@
         image: url(icons/checkbox_checked.svg);
     }
     QDateTimeEdit { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px; }
-    QDateTimeEdit::up-button, QDateTimeEdit::down-button { width: 0px; }
-    QDateTimeEdit::drop-down { border: none; }
+QTimeEdit { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px; }
+QTimeEdit::up-button {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #5A5A5A;
+    border-top-right-radius: 3px;
+}
+QTimeEdit::down-button {
+    subcontrol-origin: padding;
+    subcontrol-position: bottom right;
+    width: 20px;
+    border-left: 1px solid #5A5A5A;
+    border-bottom-right-radius: 3px;
+}
+QTimeEdit::up-arrow {
+    image: url(icons/up_arrow_dark.svg); 
+    width: 10px;
+    height: 10px;
+}
+QTimeEdit::down-arrow {
+    image: url(icons/down_arrow_dark.svg);
+    width: 10px;
+    height: 10px;
+}
+QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {
+    background-color: #6E6E6E;
+}
+QTimeEdit::up-button:pressed, QTimeEdit::down-button:pressed {
+    background-color: #4D4D4D;
+}
+QDateTimeEdit::drop-down { border: none; }
     QCalendarWidget QWidget { alternate-background-color: #424242; }
     QMessageBox { background-color: #3C3C3C; }
     QMessageBox QLabel { color: #FFFFFF; }

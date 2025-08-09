@@ -89,7 +89,9 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
-    /* TODO: 밝은 테마용 화살표 아이콘 필요 */
+    image: url(icons/combo_arrow_light.svg);
+    width: 12px;
+    height: 12px;
 }
 
 QComboBox QAbstractItemView {
@@ -152,6 +154,42 @@ QDateTimeEdit {
     border: 1px solid #C0C0C0;
     border-radius: 4px;
     padding: 3px;
+}
+QTimeEdit {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    padding: 3px;
+}
+QTimeEdit::up-button {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #C0C0C0;
+    border-top-right-radius: 3px;
+}
+QTimeEdit::down-button {
+    subcontrol-origin: padding;
+    subcontrol-position: bottom right;
+    width: 20px;
+    border-left: 1px solid #C0C0C0;
+    border-bottom-right-radius: 3px;
+}
+QTimeEdit::up-arrow {
+    image: url(icons/up_arrow_light.svg); 
+    width: 10px;
+    height: 10px;
+}
+QTimeEdit::down-arrow {
+    image: url(icons/down_arrow_light.svg);
+    width: 10px;
+    height: 10px;
+}
+QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {
+    background-color: #D5D5D5;
+}
+QTimeEdit::up-button:pressed, QTimeEdit::down-button:pressed {
+    background-color: #C5C5C5;
 }
 
 QCalendarWidget QWidget {
