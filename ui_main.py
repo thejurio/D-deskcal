@@ -14,12 +14,17 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout,
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QAction, QCursor, QIcon
 
-from pynput import keyboard
+import keyboard
+from hotkey_manager import HotkeyManager
 from auth_manager import AuthManager
 from settings_manager import load_settings, save_settings
-from config import (DEFAULT_WINDOW_GEOMETRY, DEFAULT_LOCK_MODE_ENABLED, 
-                    DEFAULT_LOCK_MODE_KEY, DEFAULT_WINDOW_MODE,
-                    DEFAULT_NOTIFICATION_DURATION)
+from config import (
+                    DEFAULT_WINDOW_GEOMETRY,
+                    DEFAULT_LOCK_MODE_ENABLED,
+                    DEFAULT_LOCK_MODE_KEY,
+                    DEFAULT_WINDOW_MODE,
+                    DEFAULT_NOTIFICATION_DURATION
+)
 
 from data_manager import DataManager
 from views.month_view import MonthViewWidget
@@ -57,6 +62,9 @@ class MainWidget(QWidget):
         self.settings = settings
         self.auth_manager = AuthManager()
         self.data_manager = DataManager(settings, self.auth_manager)
+        self.hotkey_manager = HotkeyManager(settings)
+        self.hotkey_manager.hotkey_triggered.connect(self.handle_hotkey)
+        self.hotkey_manager.register_and_start()
         self.current_date = datetime.date.today()
         self.is_resizing = False
         self.is_moving = False
@@ -65,8 +73,6 @@ class MainWidget(QWidget):
 
         self._interaction_unlocked = False
         self.lock_key_is_pressed = False
-        self.keyboard_listener = None
-        self.start_keyboard_listener()
         
         self.initUI()
         
@@ -78,6 +84,39 @@ class MainWidget(QWidget):
         
         self.apply_window_settings()
         self.sync_startup_setting()
+
+        self.lock_status_timer = QTimer(self)
+        self.lock_status_timer.timeout.connect(self.check_lock_status)
+        self.lock_status_timer.start(50)
+
+    def check_lock_status(self):
+        if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
+            if not self._interaction_unlocked:
+                self.unlock_interactions()
+            return
+
+        lock_key = self.settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY).lower()
+        is_pressed = keyboard.is_pressed(lock_key)
+
+        if is_pressed and not self.lock_key_is_pressed:
+            self.lock_key_is_pressed = True
+            self.unlock_interactions()
+        elif not is_pressed and self.lock_key_is_pressed:
+            self.lock_key_is_pressed = False
+            if QApplication.instance().mouseButtons() == Qt.MouseButton.NoButton:
+                self.lock_interactions()
+
+    def handle_hotkey(self, action_name):
+        if action_name == "ai_add_event":
+            if self.active_dialog is not None:
+                self.tray_icon.showMessage(
+                    "알림",
+                    "다른 창이 열려 있어 AI 일정 추가를 실행할 수 없습니다.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    3000
+                )
+                return
+            self.open_ai_input_dialog()
 
     def show_notification_popup(self, title, message):
         if not hasattr(self, 'notification_popups'):
@@ -93,7 +132,7 @@ class MainWidget(QWidget):
         popup_y = screen_geometry.height() - popup.height() - 15 - offset
         popup.move(popup_x, popup_y)
         
-        popup.show()
+        popup.show() 
         
         popup.destroyed.connect(lambda: self.notification_popups.remove(popup))
         self.notification_popups.append(popup)
@@ -134,61 +173,28 @@ class MainWidget(QWidget):
             return True
         return self._interaction_unlocked
 
-    def _is_lock_key(self, key):
-        lock_key_str = self.settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY).lower()
-        if lock_key_str == 'ctrl':
-            return key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]
-        if lock_key_str == 'alt':
-            return key in [keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr]
-        if lock_key_str == 'shift':
-            return key in [keyboard.Key.shift_l, keyboard.Key.shift_r]
-        if hasattr(key, 'char') and key.char:
-            return key.char.lower() == lock_key_str
-        return False
-
-    def on_key_press(self, key):
-        if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
-            if self._is_lock_key(key) and not self._interaction_unlocked:
-                self._interaction_unlocked = True
-                self.lock_key_is_pressed = True
-                QTimer.singleShot(0, self.unlock_interactions)
-
-    def on_key_release(self, key):
-        if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
-            if self._is_lock_key(key):
-                self.lock_key_is_pressed = False
-                self._interaction_unlocked = False
-                if QApplication.instance().mouseButtons() == Qt.MouseButton.NoButton:
-                    self.lock_interactions()
-
-    def start_keyboard_listener(self):
-        if self.keyboard_listener is None:
-            self.keyboard_listener = keyboard.Listener(on_press=self.on_key_press, on_release=self.on_key_release)
-            self.keyboard_listener.start()
-
-    def stop_keyboard_listener(self):
-        if self.keyboard_listener:
-            self.keyboard_listener.stop()
-            self.keyboard_listener = None
-
     def lock_interactions(self):
-        if sys.platform != "win32": return
-        try:
-            hwnd = self.winId()
-            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style | win32con.WS_EX_TRANSPARENT)
-        except Exception as e:
-            print(f"Lock interactions error: {e}")
+        if self._interaction_unlocked:
+            self._interaction_unlocked = False
+            if sys.platform == "win32":
+                try:
+                    hwnd = self.winId()
+                    ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+                    win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style | win32con.WS_EX_TRANSPARENT)
+                except Exception as e:
+                    print(f"Lock interactions error: {e}")
 
     def unlock_interactions(self):
-        if sys.platform != "win32": return
-        try:
-            hwnd = self.winId()
-            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style & ~win32con.WS_EX_TRANSPARENT)
-            self.activateWindow()
-        except Exception as e:
-            print(f"Unlock interactions error: {e}")
+        if not self._interaction_unlocked:
+            self._interaction_unlocked = True
+            if sys.platform == "win32":
+                try:
+                    hwnd = self.winId()
+                    ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+                    win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style & ~win32con.WS_EX_TRANSPARENT)
+                    self.activateWindow()
+                except Exception as e:
+                    print(f"Unlock interactions error: {e}")
 
     def apply_window_settings(self):
         mode = self.settings.get("window_mode", DEFAULT_WINDOW_MODE)
@@ -274,7 +280,7 @@ class MainWidget(QWidget):
         self.data_manager.data_updated.connect(self.on_data_updated)
         self.data_manager.error_occurred.connect(self.show_error_message)
         
-        month_button, week_button = QPushButton("월력"), QPushButton("주간")
+        month_button, week_button = QPushButton("월간"), QPushButton("주간")
         month_button.setCheckable(True)
         week_button.setCheckable(True)
         
@@ -413,7 +419,7 @@ class MainWidget(QWidget):
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
         save_settings(self.settings)
         self.data_manager.stop_caching_thread()
-        self.stop_keyboard_listener()
+        self.hotkey_manager.stop()
         self.tray_icon.hide()
         QApplication.instance().quit()
 
@@ -516,7 +522,6 @@ class MainWidget(QWidget):
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=self._get_dialog_pos())
             self.active_dialog = settings_dialog
             
-            # [핵심 수정] 시그널 직접 연결
             settings_dialog.transparency_changed.connect(self.apply_background_opacity)
             settings_dialog.theme_changed.connect(self.apply_theme)
             
@@ -538,6 +543,9 @@ class MainWidget(QWidget):
                 
                 if "start_on_boot" in changed_fields:
                     self.sync_startup_setting()
+
+                if "ai_add_event_hotkey" in changed_fields:
+                    self.hotkey_manager.register_and_start()
 
                 grid_structure_changes = {"start_day_of_week", "hide_weekends"}
                 if any(field in changed_fields for field in grid_structure_changes):
@@ -578,7 +586,6 @@ class MainWidget(QWidget):
             return
 
         try:
-            # TODO: 로딩 스피너 표시
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             parsed_events = gemini_parser.parse_events_with_gemini(api_key, text_to_analyze)
             QApplication.restoreOverrideCursor()
@@ -596,7 +603,6 @@ class MainWidget(QWidget):
                     return
 
                 for event in final_events:
-                    # DataManager가 요구하는 형식으로 변환
                     is_deadline_only = event.get('isDeadlineOnly', False)
                     is_all_day = event.get('isAllDay', False)
                     

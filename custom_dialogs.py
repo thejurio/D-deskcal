@@ -2,7 +2,7 @@ import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QKeySequence
 
 class BaseDialog(QDialog):
     def __init__(self, parent=None, settings=None, pos: QPoint = None):
@@ -572,6 +572,9 @@ class AIEventInputDialog(BaseDialog):
         self.setWindowTitle("AI로 일정 추가")
         self.setModal(True)
         self.setMinimumSize(450, 300)
+        
+        # 항상 위에 표시되도록 플래그 추가
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -603,3 +606,161 @@ class AIEventInputDialog(BaseDialog):
 
     def get_text(self):
         return self.text_input.toPlainText()
+
+class HotkeyInputDialog(BaseDialog):
+    def __init__(self, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
+        self.setWindowTitle("단축키 설정")
+        self.setModal(True)
+        self.setFixedSize(350, 180)
+
+        self.hotkey_str = ""
+        self.key_map = self._get_key_map()
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(20, 15, 20, 15)
+
+        info_label = QLabel("등록할 단축키 조합을 누르세요.\n(예: Ctrl + Shift + F1)")
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        content_layout.addWidget(info_label)
+
+        self.hotkey_display = QLabel("...")
+        self.hotkey_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hotkey_display.setObjectName("hotkey_display")
+        self.hotkey_display.setMinimumHeight(40)
+        content_layout.addWidget(self.hotkey_display)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        self.ok_button = QPushButton("확인")
+        self.ok_button.clicked.connect(self.accept)
+        self.ok_button.setEnabled(False)
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.ok_button)
+        content_layout.addLayout(button_layout)
+
+    def _get_key_map(self):
+        key_map = {}
+        for key_name in dir(Qt.Key):
+            if key_name.startswith('Key_'):
+                key_value = getattr(Qt.Key, key_name)
+                key_map[key_value] = key_name.replace('Key_', '')
+        return key_map
+
+    def keyPressEvent(self, event):
+        event.accept()
+        key = event.key()
+        modifiers = event.modifiers()
+
+        if key in (Qt.Key.Key_unknown, Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
+            return
+
+        mod_list = []
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            mod_list.append("Ctrl")
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            mod_list.append("Shift")
+        if modifiers & Qt.KeyboardModifier.AltModifier:
+            mod_list.append("Alt")
+
+        key_str = self.key_map.get(key, QKeySequence(key).toString().upper())
+        
+        if not key_str or key_str.isspace():
+             return
+
+        if key_str not in mod_list:
+            mod_list.append(key_str)
+
+        self.hotkey_str = " + ".join(mod_list)
+        self.hotkey_display.setText(self.hotkey_str)
+        self.ok_button.setEnabled(True)
+
+    def get_hotkey(self):
+        return self.hotkey_str
+
+class HotkeyInputDialog(BaseDialog):
+    def __init__(self, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
+        self.setWindowTitle("단축키 설정")
+        self.setModal(True)
+        self.setFixedSize(350, 180)
+
+        self.hotkey_str = ""
+        self.key_map = self._get_key_map()
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(20, 15, 20, 15)
+
+        info_label = QLabel("등록할 단축키 조합을 누르세요.\n(예: Ctrl + Shift + F1)")
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        content_layout.addWidget(info_label)
+
+        self.hotkey_display = QLabel("...")
+        self.hotkey_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hotkey_display.setObjectName("hotkey_display")
+        self.hotkey_display.setMinimumHeight(40)
+        content_layout.addWidget(self.hotkey_display)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        self.ok_button = QPushButton("확인")
+        self.ok_button.clicked.connect(self.accept)
+        self.ok_button.setEnabled(False)
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.ok_button)
+        content_layout.addLayout(button_layout)
+
+    def _get_key_map(self):
+        key_map = {}
+        for key_name in dir(Qt.Key):
+            if key_name.startswith('Key_'):
+                key_value = getattr(Qt.Key, key_name)
+                key_map[key_value] = key_name.replace('Key_', '')
+        return key_map
+
+    def keyPressEvent(self, event):
+        event.accept()
+        key = event.key()
+        modifiers = event.modifiers()
+
+        if key in (Qt.Key.Key_unknown, Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
+            return
+
+        mod_list = []
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            mod_list.append("Ctrl")
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            mod_list.append("Shift")
+        if modifiers & Qt.KeyboardModifier.AltModifier:
+            mod_list.append("Alt")
+
+        key_str = self.key_map.get(key, QKeySequence(key).toString().upper())
+        
+        if not key_str or key_str.isspace():
+             return
+
+        if key_str not in mod_list:
+            mod_list.append(key_str)
+
+        self.hotkey_str = " + ".join(mod_list)
+        self.hotkey_display.setText(self.hotkey_str)
+        self.ok_button.setEnabled(True)
+
+    def get_hotkey(self):
+        return self.hotkey_str

@@ -156,6 +156,10 @@ class AIConfirmationDialog(BaseDialog):
 
         self.setWindowTitle("AI 분석 결과 확인")
         self.setMinimumSize(600, 500)
+        
+        # 항상 위에 표시되도록 플래그 추가
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
         self.initUI()
 
     def initUI(self):

@@ -1,0 +1,12 @@
+--- CRITICAL ERROR ---
+Timestamp: 2025-08-08 00:19:04.007596
+Traceback (most recent call last):
+  File "c:\dcwidget\ui_main.py", line 649, in <module>
+    widget = MainWidget()
+             ^^^^^^^^^^^^
+  File "c:\dcwidget\ui_main.py", line 102, in __init__
+    self.hotkey_manager.update_hotkeys()
+  File "c:\dcwidget\hotkey_manager.py", line 80, in update_hotkeys
+    self._lock_hotkey = settings_manager.get('lock_hotkey', 'f11')
+                        ^^^^^^^^^^^^^^^^
+NameError: name 'settings_manager' is not defined. Did you mean: 'self.settings_manager'?
