@@ -130,19 +130,15 @@ class MonthViewWidget(BaseViewWidget):
         self.sync_status_container.addWidget(QWidget()) # 0번 페이지: 빈 위젯
         self.sync_status_container.addWidget(self.sync_icon) # 1번 페이지: 회전 아이콘
 
-        ai_add_button = QPushButton()
-        ai_add_button.setIcon(QIcon("icons/search.svg")) # 임시 아이콘
-        ai_add_button.setIconSize(QSize(20, 20))
-        ai_add_button.setObjectName("ai_add_button")
-        ai_add_button.setFixedSize(30, 28)
-        ai_add_button.setToolTip("AI로 일정 추가")
-        ai_add_button.clicked.connect(self.main_widget.open_ai_input_dialog)
+        center_nav_layout = QHBoxLayout()
+        center_nav_layout.setSpacing(0)
+        center_nav_layout.setContentsMargins(25, 0, 0, 0) # 왼쪽 여백 25px 추가
+        center_nav_layout.addWidget(self.month_button)
+        center_nav_layout.addWidget(self.sync_status_container)
 
         nav_layout.addWidget(prev_button)
         nav_layout.addStretch(1)
-        nav_layout.addWidget(self.month_button)
-        nav_layout.addWidget(self.sync_status_container)
-        nav_layout.addWidget(ai_add_button)
+        nav_layout.addLayout(center_nav_layout)
         nav_layout.addStretch(1)
         nav_layout.addWidget(next_button)
         # --- 여기까지 수정 ---
