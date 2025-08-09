@@ -203,9 +203,7 @@ class MainWidget(QWidget):
         flags &= ~Qt.WindowType.WindowStaysOnTopHint
         flags &= ~Qt.WindowType.WindowStaysOnBottomHint
 
-        if mode == "AlwaysOnTop":
-            flags |= Qt.WindowType.WindowStaysOnTopHint
-        elif mode == "AlwaysOnBottom":
+        if mode == "AlwaysOnBottom":
             flags |= Qt.WindowType.WindowStaysOnBottomHint
         
         self.setWindowFlags(flags)

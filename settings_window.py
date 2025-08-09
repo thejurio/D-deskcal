@@ -271,14 +271,7 @@ class SettingsWindow(BaseDialog):
 
         layout.addWidget(self._create_section_label("창 동작"))
         form_layout_behavior = QFormLayout()
-        self.window_mode_combo = QComboBox()
-        self.window_mode_options = {"AlwaysOnTop": "항상 위에", "Normal": "일반", "AlwaysOnBottom": "항상 아래에"}
-        for value, text in self.window_mode_options.items(): self.window_mode_combo.addItem(text, value)
-        current_window_mode = self.temp_settings.get("window_mode", DEFAULT_WINDOW_MODE)
-        self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData(current_window_mode))
-        self.window_mode_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("window_mode"))
-        form_layout_behavior.addRow("창 위치:", self.window_mode_combo)
-        
+
         self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
         is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
         self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
@@ -372,7 +365,7 @@ class SettingsWindow(BaseDialog):
 
     def on_lock_mode_toggled(self, state):
         self._mark_as_changed("lock_mode_enabled"); is_checked = bool(state); self.lock_key_combo.setEnabled(is_checked)
-        if not is_checked: self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData("Normal")); self._mark_as_changed("window_mode")
+        # if not is_checked: self.window_mode_combo.setCurrentIndex(self.window_mode_combo.findData("Normal")); self._mark_as_changed("window_mode")
 
     def on_notifications_toggled(self, state):
         self._mark_as_changed("notifications_enabled"); is_checked = bool(state)
@@ -467,7 +460,7 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["hide_weekends"] = self.hide_weekends_checkbox.isChecked()
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
-        self.temp_settings["window_mode"] = self.window_mode_combo.currentData()
+        # self.temp_settings["window_mode"] = self.window_mode_combo.currentData()
         self.temp_settings["lock_mode_enabled"] = self.lock_mode_checkbox.isChecked()
         self.temp_settings["lock_mode_key"] = self.lock_key_combo.currentData()
         self.temp_settings["start_on_boot"] = self.startup_checkbox.isChecked()

@@ -85,7 +85,7 @@ class HotkeyManager(QObject):
         """락(lock) 내부에서 모든 단축키를 해제하는 도우미 메서드."""
         print("[HotkeyManager] 모든 단축키 리스너를 해제합니다...")
         try:
-            keyboard.unhook_all_hotkeys()
+            keyboard.unhook_all()
             print("[HotkeyManager] 모든 단축키가 성공적으로 해제되었습니다.")
         except Exception as e:
             # unhook_all_hotkeys는 실패할 경우가 거의 없지만, 만약을 대비해 로깅합니다.
