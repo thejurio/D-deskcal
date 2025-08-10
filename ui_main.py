@@ -725,7 +725,8 @@ class MainWidget(QWidget):
 
                 elif result == EventEditorWindow.DeleteRole:
                     event_to_delete = editor.get_event_data()
-                    self.data_manager.delete_event(event_to_delete)
+                    deletion_mode = editor.get_deletion_mode() # Get the user's choice
+                    self.data_manager.delete_event(event_to_delete, deletion_mode=deletion_mode)
 
     def show_error_message(self, message, ok_only=False, title="오류"):
         if not self.is_interaction_unlocked():

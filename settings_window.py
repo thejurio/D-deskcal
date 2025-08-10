@@ -32,7 +32,7 @@ class SettingsWindow(BaseDialog):
 
         self.setWindowTitle("설정")
         self.setModal(True)
-        self.setMinimumSize(560, 500)
+        self.setMinimumSize(530, 620)
         
         margin_widget = QWidget()
         margin_widget.setObjectName("settings_margin_background")
@@ -52,7 +52,7 @@ class SettingsWindow(BaseDialog):
         top_layout.setSpacing(0)
         self.nav_list = QListWidget()
         self.nav_list.setObjectName("settings_nav")
-        self.nav_list.setFixedWidth(140)
+        self.nav_list.setFixedWidth(160)
         self.nav_list.setFont(QFont("Malgun Gothic", 10))
         self.stack = QStackedWidget()
         self.stack.setObjectName("settings_stack")

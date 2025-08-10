@@ -32,10 +32,10 @@ class BaseCalendarProvider(ABC):
         pass
 
     @abstractmethod
-    def delete_event(self, event_id):
+    def delete_event(self, event_data, data_manager=None, deletion_mode='all'):
         """
-        기존 이벤트를 삭제해야 합니다.
-        반환값: 성공 여부(bool)
+        ... (docstring) ...
+        deletion_mode: 'instance', 'future', or 'all'
         """
         pass
 

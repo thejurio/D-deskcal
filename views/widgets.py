@@ -20,7 +20,7 @@ class EventLabelWidget(QLabel):
 
         summary = event.get('summary', '제목 없음')
         if 'recurrence' in event:
-            summary = f"🔄 {summary}"
+            summary = f"{summary}"
         
         self.setText(summary)
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -74,7 +74,7 @@ class EventLabelWidget(QLabel):
 
         original_text = self.event_data.get('summary', '제목 없음')
         if 'recurrence' in self.event_data:
-            original_text = f"🔄 {original_text}"
+            original_text = f"{original_text}"
 
         elided_text = font_metrics.elidedText(original_text, Qt.TextElideMode.ElideRight, self.width())
         super().setText(elided_text)

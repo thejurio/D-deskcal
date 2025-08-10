@@ -24,7 +24,7 @@
     "start_on_boot": false,
     "notifications_enabled": true,
     "notification_minutes": 1,
-    "last_selected_calendar_id": "thejurio@gmail.com",
+    "last_selected_calendar_id": "local_calendar",
     "geometry": [
         760,
         172,

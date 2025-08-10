@@ -859,3 +859,55 @@ class APIKeyInputDialog(BaseDialog):
             self.verification_thread.quit()
             self.verification_thread.wait()
         super().closeEvent(event)
+
+class RecurringDeleteDialog(BaseDialog):
+    """
+    A dialog to ask the user how to delete a recurring event.
+    """
+    def __init__(self, parent=None, settings=None, pos=None):
+        super().__init__(parent, settings, pos)
+        self.setWindowTitle("반복 일정 삭제")
+        self.selected_option = None  # To store the user's choice
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+        
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(20, 15, 20, 15)
+        content_layout.setSpacing(10)
+
+        label = QLabel("이것은 반복 일정입니다. 어떻게 삭제하시겠습니까?")
+        label.setWordWrap(True)
+        content_layout.addWidget(label)
+
+        # Create buttons
+        self.instance_button = QPushButton("이 일정만 삭제")
+        self.future_button = QPushButton("이 일정 및 향후 모든 일정 삭제")
+        self.all_button = QPushButton("모든 일정 삭제")
+        self.cancel_button = QPushButton("취소")
+
+        # Connect signals
+        self.instance_button.clicked.connect(lambda: self.set_option_and_accept('instance'))
+        self.future_button.clicked.connect(lambda: self.set_option_and_accept('future'))
+        self.all_button.clicked.connect(lambda: self.set_option_and_accept('all'))
+        self.cancel_button.clicked.connect(self.reject)
+        
+        # Layout
+        button_layout = QVBoxLayout()
+        button_layout.addWidget(self.instance_button)
+        button_layout.addWidget(self.future_button)
+        button_layout.addWidget(self.all_button)
+        button_layout.addSpacing(10)
+        button_layout.addWidget(self.cancel_button, 0, Qt.AlignmentFlag.AlignRight)
+        
+        content_layout.addLayout(button_layout)
+
+    def set_option_and_accept(self, option):
+        self.selected_option = option
+        self.accept()
+
+    def get_selected_option(self):
+        return self.selected_option

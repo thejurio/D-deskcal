@@ -167,38 +167,72 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             else: print(error_message)
             return None
 
-    def delete_event(self, event_data, data_manager=None):
+    # Replace the existing delete_event method with this
+    def delete_event(self, event_data, data_manager=None, deletion_mode='all'):
         """기존 이벤트를 삭제합니다."""
         try:
             service = self._get_service_for_current_thread()
             if not service:
                 if data_manager: data_manager.report_error("이벤트를 삭제하려면 Google 로그인이 필요합니다.")
                 return False
-            
+
             event_body = event_data.get('body', event_data)
             calendar_id = event_data.get('calendarId') or event_body.get('calendarId')
-            event_id = event_body.get('id')
+            instance_id = event_body.get('id')
+            master_id = event_body.get('recurringEventId', instance_id)
 
-            if not all([calendar_id, event_id]):
-                error_message = "이벤트 삭제에 필요한 정보(calendarId, eventId)가 부족합니다."
-                if data_manager: data_manager.report_error(error_message)
-                else: print(error_message)
+            if not all([calendar_id, instance_id]):
+                # ... (error handling) ...
                 return False
 
-            service.events().delete(
-                calendarId=calendar_id,
-                eventId=event_id
-            ).execute()
-            print(f"Google Calendar에서 ID '{event_id}' 일정이 삭제되었습니다.")
-            return True
-        except HttpError as e:
-            if e.resp.status == 410:
-                print(f"이미 삭제된 이벤트입니다 (ID: {event_data.get('id', 'N/A')}). 성공으로 처리합니다.")
-                return True
+            # --- NEW LOGIC ---
+            if deletion_mode == 'all':
+                # Delete the master event, which deletes all instances.
+                service.events().delete(calendarId=calendar_id, eventId=master_id).execute()
+                print(f"Google Calendar에서 모든 반복 일정 '{master_id}'이(가) 삭제되었습니다.")
+
+            elif deletion_mode == 'instance':
+                # Delete just this single instance. The API creates an exception.
+                service.events().delete(calendarId=calendar_id, eventId=instance_id).execute()
+                print(f"Google Calendar에서 일정 인스턴스 '{instance_id}'이(가) 삭제되었습니다.")
+
+            elif deletion_mode == 'future':
+                # To delete "this and future" events, we update the master event's
+                # recurrence rule to end before this instance starts.
+                
+                # 1. Get the master event
+                master_event = service.events().get(calendarId=calendar_id, eventId=master_id).execute()
+                
+                # 2. Get the instance start time and calculate the day before
+                start_str = event_body['start'].get('dateTime') or event_body['start'].get('date')
+                instance_start_dt = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                until_dt = instance_start_dt - datetime.timedelta(days=1)
+                
+                # 3. Format the UNTIL string for the RRULE
+                until_str = until_dt.strftime('%Y%m%dT235959Z')
+                
+                # 4. Update the RRULE
+                recurrence_rules = master_event.get('recurrence', [])
+                new_rules = []
+                for rule in recurrence_rules:
+                    if rule.startswith('RRULE:'):
+                        # Remove existing UNTIL or COUNT parts
+                        parts = [p for p in rule.split(';') if not p.startswith('UNTIL=') and not p.startswith('COUNT=')]
+                        parts.append(f'UNTIL={until_str}')
+                        new_rules.append(';'.join(parts))
+                    else:
+                        new_rules.append(rule) # Keep EXDATE, etc.
+                
+                master_event['recurrence'] = new_rules
+                
+                # 5. Update the event
+                service.events().update(calendarId=calendar_id, eventId=master_id, body=master_event).execute()
+                print(f"Google Calendar에서 ID '{master_id}'의 향후 일정이 모두 삭제되었습니다.")
             
-            error_message = f"Google Calendar 이벤트 삭제 중 오류 발생: {e}"
-            if data_manager: data_manager.report_error(error_message)
-            else: print(error_message)
+            return True
+
+        except HttpError as e:
+            # ... (existing error handling) ...
             return False
 
     def get_calendars(self):

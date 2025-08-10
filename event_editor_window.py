@@ -1,16 +1,16 @@
 import datetime
 import uuid
 from dateutil.rrule import rrulestr, YEARLY, MONTHLY, WEEKLY, DAILY
-
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                              QTextEdit, QPushButton, QCheckBox, QComboBox,
                              QWidget, QCalendarWidget, QTimeEdit, QSizePolicy)
-from PyQt6.QtGui import QIcon, QColor, QPixmap
+from PyQt6.QtGui import QIcon, QColor, QPixmap, QCursor
 from PyQt6.QtCore import QDateTime, Qt, QTimer, QEvent, pyqtSignal
 
-from custom_dialogs import CustomMessageBox, BaseDialog
+from custom_dialogs import CustomMessageBox, BaseDialog, RecurringDeleteDialog
 from config import LOCAL_CALENDAR_PROVIDER_NAME
 from recurrence_dialog import RecurrenceRuleDialog
+from custom_dialogs import CustomMessageBox, BaseDialog, RecurringDeleteDialog
 
 class DateSelector(QWidget):
     """
@@ -92,6 +92,37 @@ class EventEditorWindow(BaseDialog):
         self.populate_data()
 
         QTimer.singleShot(0, self.adjustSize)
+
+    def show_delete_confirmation(event_data, parent_widget, settings):
+        """
+        [신규 추가] 삭제 확인 로직을 처리하는 정적 메서드.
+        이제 이 함수가 반복/일반 일정에 맞는 올바른 확인창을 띄우고,
+        사용자의 선택(삭제 모드)을 반환합니다.
+        반환값: 'instance', 'future', 'all' 또는 취소 시 None
+        """
+        summary = event_data.get('summary', '(제목 없음)')
+        deletion_mode = 'all'  # 일반 일정의 기본 삭제 모드
+
+        is_recurring = ('recurrence' in event_data or
+                        event_data.get('recurringEventId') or
+                        ('_' in event_data.get('id', '') and event_data.get('provider') == LOCAL_CALENDAR_PROVIDER_NAME))
+
+        if is_recurring:
+            # 반복 일정의 경우: 3가지 옵션 선택창 사용
+            dialog = RecurringDeleteDialog(parent_widget, settings=settings, pos=QCursor.pos())
+            if dialog.exec():
+                return dialog.get_selected_option()
+            else:
+                return None  # 사용자가 취소함
+        else:
+            # 일반 일정의 경우: 기존의 단순 확인창 사용
+            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+            msg_box = CustomMessageBox(parent_widget, title='삭제 확인', text=text, settings=settings, pos=QCursor.pos())
+            if msg_box.exec():
+                return deletion_mode  # 'all' 반환
+            else:
+                return None  # 사용자가 취소함
+    # ▲▲▲ 여기까지 추가 ▲▲▲
 
     def initUI(self):
         main_layout = QVBoxLayout(self)
@@ -305,11 +336,27 @@ class EventEditorWindow(BaseDialog):
 
     def request_delete(self):
         summary = self.summary_edit.text()
-        text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
-        if 'recurrence' in self.event_data:
-            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
-        msg_box = CustomMessageBox(self, title='삭제 확인', text=text, settings=self.settings)
-        if msg_box.exec(): self.done(self.DeleteRole)
+        self.deletion_mode = 'all' # Default deletion mode
+
+        # Check if the event is a recurring event instance or master
+        is_recurring = ('recurrence' in self.event_data or 
+                        self.event_data.get('recurringEventId') or 
+                        ('_' in self.event_data.get('id', '') and self.event_data.get('provider') == LOCAL_CALENDAR_PROVIDER_NAME))
+
+        if is_recurring:
+            # Use our new dialog for recurring events
+            dialog = RecurringDeleteDialog(self, settings=self.settings, pos=self.pos())
+            if dialog.exec():
+                self.deletion_mode = dialog.get_selected_option()
+                self.done(self.DeleteRole)
+            else:
+                return # User cancelled
+        else:
+            # Use the standard confirmation for single events
+            text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
+            msg_box = CustomMessageBox(self, title='삭제 확인', text=text, settings=self.settings)
+            if msg_box.exec():
+                self.done(self.DeleteRole)
 
     def toggle_time_edit(self, state):
         is_all_day = (state == Qt.CheckState.Checked.value)
@@ -372,6 +419,9 @@ class EventEditorWindow(BaseDialog):
         self.update_recurrence_button_text()
         self.toggle_time_edit(self.all_day_checkbox.checkState())
 
+    def get_deletion_mode(self):
+        return getattr(self, 'deletion_mode', 'all')
+    
     def get_event_data(self):
         summary, description = self.summary_edit.text(), self.description_edit.toPlainText()
         is_all_day = self.all_day_checkbox.isChecked()

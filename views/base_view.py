@@ -5,6 +5,8 @@ from PyQt6.QtGui import QCursor, QAction, QColor
 import datetime
 
 from custom_dialogs import CustomMessageBox, EventPopover
+from event_editor_window import EventEditorWindow
+from config import LOCAL_CALENDAR_PROVIDER_NAME
 
 class BaseViewWidget(QWidget):
     add_event_requested = pyqtSignal(object)
@@ -172,29 +174,34 @@ class BaseViewWidget(QWidget):
     def refresh(self):
         raise NotImplementedError("This method must be implemented by subclasses.")
 
+    # views/base_view.py 파일의 BaseViewWidget 클래스 내부에 위치
+
     def confirm_delete_event(self, event_data):
-        summary = event_data.get('summary', '(제목 없음)')
-        event_id = event_data.get('id', '')
-        
-        is_recurring_instance = '_' in event_id and event_data.get('provider') == 'LocalCalendarProvider'
-        is_recurring_master = 'recurrence' in event_data
-
-        text = f"'{summary}' 일정을 정말 삭제하시겠습니까?"
-        if is_recurring_master:
-            text = f"'{summary}'은(는) 반복 일정입니다.\n이 일정을 삭제하면 모든 관련 반복 일정이 삭제됩니다.\n\n정말 삭제하시겠습니까?"
-        elif is_recurring_instance:
-            text = f"'{summary}'은(는) 반복 일정의 일부입니다.\n현재 버전에서는 이 항목만 따로 삭제할 수 없습니다.\n\n전체 반복 일정을 삭제하시겠습니까?"
-
-        msg_box = CustomMessageBox(
-            self, title='삭제 확인', text=text,
-            settings=self.main_widget.settings, pos=QCursor.pos()
+        """
+        [수정됨] EventEditorWindow의 정적 메서드를 직접 호출하여
+        수정창을 띄우지 않고 바로 삭제 확인창을 보여줍니다.
+        또한, DataManager가 요구하는 데이터 형식으로 변환하여 전달합니다.
+        """
+        # EventEditorWindow에서 삭제 확인 로직을 가져와 직접 사용
+        chosen_mode = EventEditorWindow.show_delete_confirmation(
+            event_data, self, self.main_widget.settings
         )
-        if msg_box.exec():
-            if is_recurring_instance:
-                original_id = event_data.get('originalId', event_id.split('_')[0])
-                event_data['body']['id'] = original_id
-                event_data['id'] = original_id
-            self.data_manager.delete_event(event_data)
+
+        if chosen_mode:
+            # 사용자가 삭제를 확정했을 경우, DataManager 호출
+            event_to_delete = event_data.copy()
+
+            # DataManager가 'body' 키를 포함하는 래핑된 딕셔너리를 예상하므로,
+            # 'body' 키가 없는 경우 데이터 구조를 맞춰줍니다.
+            if 'body' not in event_to_delete:
+                 event_to_delete = {
+                    'calendarId': event_data.get('calendarId'),
+                    'provider': event_data.get('provider'),
+                    'body': event_data
+                 }
+            
+            self.data_manager.delete_event(event_to_delete, deletion_mode=chosen_mode)
+    # ▲▲▲ [핵심 수정] 여기까지 입니다. ▲▲▲
 
     def show_context_menu(self, global_pos, target_event, date_info=None):
         menu = QMenu(self)

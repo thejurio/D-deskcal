@@ -631,17 +631,22 @@ class DataManager(QObject):
                     return True
         return False
 
-    def delete_event(self, event_data):
+    # In class DataManager, modify the delete_event method
+    def delete_event(self, event_data, deletion_mode='all'):
         provider_name = event_data.get('provider')
         for provider in self.providers:
             if provider.name == provider_name:
-                if provider.delete_event(event_data, self):
+                # Pass the deletion_mode to the provider
+                if provider.delete_event(event_data, data_manager=self, deletion_mode=deletion_mode):
                     event_body = event_data.get('body', event_data)
                     event_id_to_delete = event_body.get('id')
                     self.unmark_event_as_completed(event_id_to_delete)
+
+                    # For future and all deletions, we may need to sync more than one month,
+                    # but for simplicity, we'll stick to syncing the start month for now.
                     start_str = event_body['start'].get('date') or event_body['start'].get('dateTime')[:10]
                     event_date = datetime.date.fromisoformat(start_str)
-                    # P1 동기화 요청
+
                     self.force_sync_month(event_date.year, event_date.month)
                     return True
         return False
@@ -884,22 +889,37 @@ class DataManager(QObject):
                     return True
         return False
 
-    def delete_event(self, event_data):
+# data_manager.py 파일의 DataManager 클래스 내부
+
+# ▼▼▼ [핵심 수정] 이 함수를 찾아서 아래 코드로 교체합니다. ▼▼▼
+    def delete_event(self, event_data, deletion_mode='all'):
+        """
+        [수정됨] deletion_mode 인자를 받아서 각 Provider에 전달합니다.
+        """
         provider_name = event_data.get('provider')
         for provider in self.providers:
             if provider.name == provider_name:
-                if provider.delete_event(event_data, self):
+                # Provider의 delete_event 함수에 deletion_mode를 그대로 전달합니다.
+                if provider.delete_event(event_data, data_manager=self, deletion_mode=deletion_mode):
                     event_body = event_data.get('body', event_data)
                     event_id_to_delete = event_body.get('id')
+                    
+                    # '완료' 상태였던 이벤트를 삭제하는 경우, 완료 목록에서도 제거합니다.
                     self.unmark_event_as_completed(event_id_to_delete)
-                    start_str = event_body['start'].get('date') or event_body['start'].get('dateTime')[:10]
-                    event_date = datetime.date.fromisoformat(start_str)
-                    cache_key = (event_date.year, event_date.month)
-                    if cache_key in self.event_cache:
-                        self.event_cache[cache_key] = [e for e in self.event_cache[cache_key] if e.get('id') != event_id_to_delete]
-                    self.data_updated.emit(event_date.year, event_date.month)
+                    
+                    # UI 새로고침을 위해 데이터 변경 신호를 보냅니다.
+                    start_str = event_body['start'].get('date') or event_body['start'].get('dateTime', '')[:10]
+                    try:
+                        event_date = datetime.date.fromisoformat(start_str)
+                        self.force_sync_month(event_date.year, event_date.month)
+                    except (ValueError, TypeError):
+                        # 날짜 정보가 불완전하더라도 최소한 현재 뷰라도 새로고침을 시도합니다.
+                        if self.last_requested_month:
+                            self.force_sync_month(self.last_requested_month[0], self.last_requested_month[1])
+
                     return True
         return False
+    # ▲▲▲ 여기까지 교체 ▲▲▲
 
     def load_initial_month(self):
         print("초기 데이터 로딩을 요청합니다...")
