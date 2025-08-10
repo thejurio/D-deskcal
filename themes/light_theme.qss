@@ -212,6 +212,50 @@ QToolTip {
     padding: 5px;
 }
 
+/* QSpinBox 스타일 추가 */
+QSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    padding: 3px;
+    padding-right: 18px; /* 화살표 공간 확보 */
+}
+QSpinBox:focus {
+    border-color: #0078D7;
+}
+QSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 16px;
+    height: 14px;
+    border-left: 1px solid #C0C0C0;
+    border-top-right-radius: 3px;
+}
+QSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 16px;
+    height: 14px;
+    border-left: 1px solid #C0C0C0;
+    border-bottom-right-radius: 3px;
+}
+QSpinBox::up-arrow {
+    image: url(icons/up_arrow_light.svg); 
+    width: 10px;
+    height: 10px;
+}
+QSpinBox::down-arrow {
+    image: url(icons/down_arrow_light.svg);
+    width: 10px;
+    height: 10px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #D5D5D5;
+}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+    background-color: #C5C5C5;
+}
+
 /* Calendar Grid Lines */
 #calendar_grid DayCellWidget {
     border-right: 1px solid #E0E0E0;
@@ -230,4 +274,76 @@ MonthViewWidget, WeekViewWidget {
     qproperty-otherMonthColor: #AAAAAA;
     qproperty-todayBackgroundColor: #CCE5FF;
     qproperty-todayForegroundColor: #004C99;
+}
+
+/* ========================================= */
+/* QCalendarWidget 스타일 추가 (밝은 테마용) */
+/* ========================================= */
+QCalendarWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #D0D0D0;
+    border-radius: 5px;
+}
+
+/* 상단 네비게이션 바 (월/년 표시) */
+QCalendarWidget #qt_calendar_navigationbar {
+    background-color: #F0F0F0;
+    border-bottom: 1px solid #E0E0E0;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    padding: 4px;
+}
+
+/* 네비게이션 바 안의 버튼들 ( <, > ) */
+QCalendarWidget QToolButton {
+    color: #333333;
+    background-color: transparent;
+    border: none;
+    margin: 2px;
+    padding: 5px;
+    border-radius: 3px;
+    icon-size: 16px;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #E0E0E0;
+}
+
+QCalendarWidget QToolButton:pressed {
+    background-color: #D0D0D0;
+}
+
+/* 월, 년도 선택하는 콤보박스 */
+QCalendarWidget QComboBox {
+    padding: 1px 2px 1px 2px;
+    font-size: 11pt;
+}
+
+/* 요일 표시 라벨 (일, 월, 화...) */
+QCalendarWidget QTableView QHeaderView::section {
+    background-color: #FFFFFF;
+    color: #555555;
+    font-size: 9pt;
+    font-weight: bold;
+    padding: 4px 0;
+    border: none;
+    border-bottom: 1px solid #F0F0F0;
+}
+
+/* 날짜가 표시되는 전체 그리드 뷰 */
+QCalendarWidget QTableView {
+    selection-background-color: #0078D7; /* 날짜 선택 시 배경색 */
+    selection-color: #FFFFFF; /* 날짜 선택 시 글자색 */
+    background-color: #FFFFFF;
+}
+
+/* 오늘 날짜 셀 스타일 */
+QCalendarWidget QTableView::item:selected#qt_calendar_today {
+    background-color: #006AC5;
+}
+
+/* 이전/다음 달의 날짜 스타일 */
+QCalendarWidget QTableView::item:disabled {
+    color: #C0C0C0;
+    background-color: #FBFBFB;
 }

@@ -9,7 +9,7 @@ if sys.platform == "win32":
     import win32api
     import windows_startup
 
-from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout,
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QAction, QCursor, QIcon
@@ -73,15 +73,15 @@ class MainWidget(QWidget):
 
         self._interaction_unlocked = False
         self.lock_key_is_pressed = False
-        
+
         self.initUI()
-        
+
         self.data_manager.sync_timer.timeout.connect(self.data_manager.request_current_month_sync)
         self.data_manager.notification_triggered.connect(self.show_notification_popup)
 
         if sys.platform == "win32":
             self.set_as_desktop_child()
-        
+
         self.apply_window_settings()
         self.sync_startup_setting()
 
@@ -123,17 +123,17 @@ class MainWidget(QWidget):
             self.notification_popups = []
 
         offset = len(self.notification_popups) * 10
-        
+
         duration = self.settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
         popup = NotificationPopup(title, message, duration_seconds=duration)
-        
+
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         popup_x = screen_geometry.width() - popup.width() - 15
         popup_y = screen_geometry.height() - popup.height() - 15 - offset
         popup.move(popup_x, popup_y)
-        
-        popup.show() 
-        
+
+        popup.show()
+
         popup.destroyed.connect(lambda: self.notification_popups.remove(popup))
         self.notification_popups.append(popup)
 
@@ -205,7 +205,7 @@ class MainWidget(QWidget):
 
         if mode == "AlwaysOnBottom":
             flags |= Qt.WindowType.WindowStaysOnBottomHint
-        
+
         self.setWindowFlags(flags)
         self.show()
 
@@ -238,24 +238,24 @@ class MainWidget(QWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
-        
+
         geometry = self.settings.get("geometry", DEFAULT_WINDOW_GEOMETRY)
         self.setGeometry(*geometry)
-        
+
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         min_width = int(screen_geometry.width() * 0.20)
         min_height = int(screen_geometry.height() * 0.25)
         self.setMinimumSize(min_width, min_height)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
         self.background_widget = QWidget()
         self.background_widget.setObjectName("main_background")
         self.background_widget.setMouseTracking(True)
-        
+
         self.apply_background_opacity()
-        
+
         content_layout_wrapper = QVBoxLayout(self.background_widget)
         content_layout_wrapper.setContentsMargins(0,0,0,0)
 
@@ -265,23 +265,23 @@ class MainWidget(QWidget):
 
         bottom_bar_layout = QHBoxLayout()
         bottom_bar_layout.addStretch(1)
-        
+
         size_grip = CustomSizeGrip(self.background_widget)
         size_grip.grip_pressed.connect(self.start_resize)
         size_grip.grip_released.connect(self.end_resize)
 
         bottom_bar_layout.addWidget(size_grip, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
         content_layout_wrapper.addLayout(bottom_bar_layout)
-        
+
         main_layout.addWidget(self.background_widget)
 
         self.data_manager.data_updated.connect(self.on_data_updated)
         self.data_manager.error_occurred.connect(self.show_error_message)
-        
+
         month_button, week_button = QPushButton("월간"), QPushButton("주간")
         month_button.setCheckable(True)
         week_button.setCheckable(True)
-        
+
         today_button = QPushButton("오늘")
         today_button.setObjectName("today_button")
         today_button.clicked.connect(self.go_to_today)
@@ -316,7 +316,7 @@ class MainWidget(QWidget):
         left_half.addWidget(search_button)
         left_half.addStretch(1)
         left_half.addWidget(month_button)
-        
+
         right_half = QHBoxLayout()
         right_half.addWidget(week_button)
         right_half.addStretch(1)
@@ -326,7 +326,7 @@ class MainWidget(QWidget):
 
         view_mode_layout.addLayout(left_half, 1)
         view_mode_layout.addLayout(right_half, 1)
-        
+
         content_layout.addLayout(view_mode_layout)
 
         self.stacked_widget = QStackedWidget()
@@ -334,7 +334,7 @@ class MainWidget(QWidget):
 
         self.month_view = MonthViewWidget(self)
         self.week_view = WeekViewWidget(self)
-        
+
         self.month_view.add_event_requested.connect(self.open_event_editor)
         self.month_view.edit_event_requested.connect(self.open_event_editor)
         self.month_view.navigation_requested.connect(self.handle_month_navigation)
@@ -347,13 +347,13 @@ class MainWidget(QWidget):
 
         self.stacked_widget.addWidget(self.month_view)
         self.stacked_widget.addWidget(self.week_view)
-        
+
         month_button.clicked.connect(lambda: self.change_view(0, month_button, [week_button]))
         week_button.clicked.connect(lambda: self.change_view(1, week_button, [month_button]))
-        
+
         month_button.setChecked(True)
         self.oldPos = None
-        
+
         self.set_current_date(self.current_date, is_initial=True)
         self.setup_tray_icon()
 
@@ -430,7 +430,7 @@ class MainWidget(QWidget):
         self.current_date = new_date
         self.month_view.current_date = new_date
         self.week_view.current_date = new_date
-        
+
         self.data_manager.notify_date_changed(self.current_date, direction=direction)
         self.refresh_current_view()
 
@@ -461,7 +461,7 @@ class MainWidget(QWidget):
     def apply_background_opacity(self, opacity=None):
         if opacity is None:
             opacity = self.settings.get("window_opacity", 0.95)
-        
+
         theme_name = self.settings.get("theme", "dark")
         alpha = int(opacity * 255)
 
@@ -486,7 +486,7 @@ class MainWidget(QWidget):
 
     def initial_load(self):
         self.data_manager.load_initial_month()
-    
+
     def on_data_updated(self, year, month):
         if not self.is_resizing:
             self.refresh_current_view()
@@ -519,26 +519,26 @@ class MainWidget(QWidget):
 
             settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=self._get_dialog_pos())
             self.active_dialog = settings_dialog
-            
+
             settings_dialog.transparency_changed.connect(self.apply_background_opacity)
             settings_dialog.theme_changed.connect(self.apply_theme)
-            
+
             result = settings_dialog.exec()
             self.active_dialog = None
-            
+
             if result == QDialog.DialogCode.Accepted:
                 changed_fields = settings_dialog.get_changed_fields()
-                
+
                 if "window_opacity" in changed_fields:
                     self.apply_background_opacity()
                 if "theme" in changed_fields:
                     self.apply_theme(self.settings.get("theme", "dark"))
                 if "sync_interval_minutes" in changed_fields:
                     self.data_manager.update_sync_timer()
-                
+
                 if any(field in changed_fields for field in ["window_mode", "lock_mode_enabled", "lock_mode_key"]):
                     self.apply_window_settings()
-                
+
                 if "start_on_boot" in changed_fields:
                     self.sync_startup_setting()
 
@@ -548,7 +548,7 @@ class MainWidget(QWidget):
                 grid_structure_changes = {"start_day_of_week", "hide_weekends"}
                 if any(field in changed_fields for field in grid_structure_changes):
                     self.refresh_current_view()
-                    return 
+                    return
 
                 if "calendar_colors" in changed_fields:
                     self.handle_visual_preview()
@@ -568,7 +568,7 @@ class MainWidget(QWidget):
     def open_ai_input_dialog(self):
         if not self.is_interaction_unlocked():
             return
-            
+
         input_dialog = AIEventInputDialog(self, self.settings, pos=self._get_dialog_pos())
         if not input_dialog.exec():
             return
@@ -587,15 +587,15 @@ class MainWidget(QWidget):
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             parsed_events = gemini_parser.parse_events_with_gemini(api_key, text_to_analyze)
             QApplication.restoreOverrideCursor()
-            
+
             if not parsed_events:
                 self.show_error_message("텍스트에서 유효한 일정 정보를 찾지 못했습니다.")
                 return
-            
+
             confirmation_dialog = AIConfirmationDialog(parsed_events, self.data_manager, self, self.settings, pos=self._get_dialog_pos())
             if confirmation_dialog.exec():
                 final_events, calendar_id, provider_name = confirmation_dialog.get_final_events_and_calendar()
-                
+
                 if not calendar_id:
                     self.show_error_message("일정을 추가할 캘린더를 선택해주세요.")
                     return
@@ -603,7 +603,7 @@ class MainWidget(QWidget):
                 for event in final_events:
                     is_deadline_only = event.get('isDeadlineOnly', False)
                     is_all_day = event.get('isAllDay', False)
-                    
+
                     event_body = {
                         'summary': event['title'],
                         'start': {},
@@ -617,7 +617,7 @@ class MainWidget(QWidget):
                         event_body['start']['date'] = event['endDate']
                         end_date_obj = datetime.date.fromisoformat(event['endDate']) + datetime.timedelta(days=1)
                         event_body['end']['date'] = end_date_obj.isoformat()
-                    
+
                     elif is_all_day:
                         event_body['start']['date'] = event['startDate']
                         end_date_obj = datetime.date.fromisoformat(event['endDate']) + datetime.timedelta(days=1)
@@ -633,8 +633,9 @@ class MainWidget(QWidget):
                         'body': event_body
                     }
                     self.data_manager.add_event(event_to_add)
-                
+
                 self.settings['last_selected_calendar_id'] = calendar_id
+                save_settings(self.settings) # AI 추가 후에도 캘린더 ID 저장
                 self.show_error_message(f"{len(final_events)}개의 일정을 성공적으로 추가했습니다.", ok_only=True, title="알림")
 
         except Exception as e:
@@ -650,14 +651,14 @@ class MainWidget(QWidget):
     def go_to_event(self, event_data):
         start_info = event_data.get('start', {})
         date_str = start_info.get('dateTime', start_info.get('date'))
-        
+
         if not date_str:
             self.open_event_editor(event_data)
             return
 
         if date_str.endswith('Z'):
             date_str = date_str[:-1]
-        
+
         target_dt = datetime.datetime.fromisoformat(date_str)
         target_date = target_dt.date()
 
@@ -669,7 +670,7 @@ class MainWidget(QWidget):
             stylesheet = load_stylesheet(f'themes/{theme_name}_theme.qss')
             app = QApplication.instance()
             app.setStyleSheet(stylesheet)
-            
+
             self.apply_background_opacity()
 
             for widget in app.topLevelWidgets():
@@ -679,7 +680,7 @@ class MainWidget(QWidget):
 
             self.month_view.refresh()
             self.week_view.refresh()
-            
+
         except FileNotFoundError:
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
@@ -694,7 +695,7 @@ class MainWidget(QWidget):
                 editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
                 editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
-            
+
             if editor:
                 self.active_dialog = editor
                 result = editor.exec()
@@ -704,15 +705,28 @@ class MainWidget(QWidget):
                     if not event_data.get('calendarId'):
                         self.show_error_message("캘린더 목록이 아직 로딩되지 않았습니다. 잠시 후 다시 시도해주세요.")
                         return
-                    
+
                     is_recurring = 'recurrence' in event_data.get('body', {})
-                    if editor.mode == 'new': 
+                    if editor.mode == 'new':
                         self.data_manager.add_event(event_data)
-                    else: 
+                    else:
+
                         self.data_manager.update_event(event_data)
+
                     self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
+                    save_settings(self.settings)
+
                     if is_recurring:
-                        QTimer.singleShot(500, self.data_manager.request_full_sync)
+                        # --- BUG FIX ---
+                        event_body = event_data.get('body', {})
+                        start_info = event_body.get('start', {})
+                        date_str = start_info.get('dateTime', start_info.get('date'))
+                        event_date = datetime.date.fromisoformat(date_str[:10])
+                        year_to_sync = event_date.year
+                        month_to_sync = event_date.month
+
+                        QTimer.singleShot(500, lambda: self.data_manager.force_sync_month(year_to_sync, month_to_sync))
+
                 elif result == EventEditorWindow.DeleteRole:
                     event_to_delete = editor.get_event_data()
                     self.data_manager.delete_event(event_to_delete)
@@ -758,7 +772,7 @@ class MainWidget(QWidget):
         menu.setWindowOpacity(menu_opacity)
         self.add_common_context_menu_actions(menu)
         menu.exec(event.globalPos())
-        
+
     def closeEvent(self, event):
         event.ignore()
         self.hide()
@@ -797,7 +811,7 @@ class MainWidget(QWidget):
     def mouseReleaseEvent(self, event):
         if not self.is_interaction_unlocked() and not self.lock_key_is_pressed:
             return
-        
+
         if event.button() == Qt.MouseButton.LeftButton:
             if self.is_moving:
                 self.snap_to_screen_edges()
@@ -817,7 +831,7 @@ class MainWidget(QWidget):
         snap_threshold = 45
         win_rect = self.frameGeometry()
         screens = QApplication.screens()
-        
+
         closest_screen = None
         min_dist = float('inf')
 
@@ -828,7 +842,7 @@ class MainWidget(QWidget):
             if dist < min_dist:
                 min_dist = dist
                 closest_screen = screen
-        
+
         if not closest_screen:
             closest_screen = QApplication.primaryScreen()
 
