@@ -1,6 +1,5 @@
 # ai_confirmation_dialog.py (전체 코드)
 
-import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QLineEdit, QComboBox, QTextEdit,
                              QCalendarWidget, QTimeEdit, QGridLayout)

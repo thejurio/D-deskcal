@@ -3,9 +3,9 @@ import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil import parser as dateutil_parser # [수정] dateutil.parser 임포트
 from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollArea, 
-                             QPushButton, QMenu, QToolTip, QStackedWidget)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QPoint, QRectF, QSize
-from PyQt6.QtGui import QAction, QCursor, QPainter, QColor, QPen, QFontMetrics
+                             QPushButton, QToolTip, QStackedWidget)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QRectF, QSize
+from PyQt6.QtGui import QCursor, QPainter, QColor, QPen
 
 from custom_dialogs import WeekSelectionDialog
 from .widgets import draw_event

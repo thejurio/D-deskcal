@@ -1,11 +1,9 @@
 # recurrence_dialog.py (최종 수정 완료)
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-                             QCheckBox, QWidget, QComboBox, QSpinBox, QDateEdit,
-                             QRadioButton, QButtonGroup, QLineEdit, QCalendarWidget, QStackedWidget)
-from PyQt6.QtCore import Qt, QDate, QEvent, QPoint, pyqtSignal, QDateTime
-from PyQt6.QtGui import QIcon
-from dateutil.rrule import rrule, rrulestr, DAILY, WEEKLY, MONTHLY, YEARLY, MO, TU, WE, TH, FR, SA, SU
+from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+                             QWidget, QComboBox, QSpinBox, QRadioButton, QButtonGroup, QLineEdit, QCalendarWidget, QStackedWidget)
+from PyQt6.QtCore import Qt, QDate, QEvent, pyqtSignal
+from dateutil.rrule import rrulestr, DAILY, WEEKLY, MONTHLY, YEARLY, MO, TU, WE, TH, FR, SA, SU
 
 from custom_dialogs import BaseDialog
 

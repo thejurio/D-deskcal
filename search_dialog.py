@@ -2,8 +2,7 @@
 import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
                              QPushButton, QListWidget, QListWidgetItem, QLabel, QGraphicsOpacityEffect)
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from custom_dialogs import BaseDialog
 

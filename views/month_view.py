@@ -3,10 +3,10 @@ import datetime
 import calendar
 from collections import defaultdict
 from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, 
-                             QPushButton, QMenu, QSizePolicy, QApplication, QStackedWidget)
-from PyQt6.QtGui import QFont, QCursor, QPainter, QColor, QAction, QFontMetrics, QPixmap, QTransform, QIcon
-from PyQt6.QtCore import (Qt, pyqtSignal, QTimer, QRect, QSize, QPropertyAnimation, 
-                          pyqtProperty, QSequentialAnimationGroup)
+                             QPushButton, QSizePolicy, QStackedWidget)
+from PyQt6.QtGui import QCursor, QPainter, QFontMetrics
+from PyQt6.QtCore import (Qt, pyqtSignal, QTimer, QSize, QPropertyAnimation, 
+                          pyqtProperty)
 from PyQt6.QtSvg import QSvgRenderer
 
 from custom_dialogs import NewDateSelectionDialog, MoreEventsDialog
@@ -149,15 +149,15 @@ class MonthViewWidget(BaseViewWidget):
         self.calendar_grid.setSpacing(0)
         self.main_layout.addLayout(self.calendar_grid)
 
-    def on_sync_state_changed(self, is_syncing):
-        # --- [핵심 수정] QStackedWidget 페이지 전환 및 애니메이션 제어 ---
-        if is_syncing:
-            self.sync_status_container.setCurrentIndex(1)
-            self.sync_icon.start()
-        else:
-            self.sync_icon.stop()
-            self.sync_status_container.setCurrentIndex(0)
-        # --- 여기까지 수정 ---
+    def on_sync_state_changed(self, is_syncing, year, month):
+        # 현재 보고 있는 월에 대한 동기화 상태만 UI에 반영
+        if year == self.current_date.year and month == self.current_date.month:
+            if is_syncing:
+                self.sync_status_container.setCurrentIndex(1)
+                self.sync_icon.start()
+            else:
+                self.sync_icon.stop()
+                self.sync_status_container.setCurrentIndex(0)
 
     def open_date_selection_dialog(self):
         if not self.main_widget.is_interaction_unlocked(): return
@@ -284,9 +284,12 @@ class MonthViewWidget(BaseViewWidget):
         for i in range(self.calendar_grid.columnCount()):
             self.calendar_grid.setColumnStretch(i, 1)
         
-        QTimer.singleShot(10, self.draw_events)
+        self.schedule_draw_events()
 
-    def draw_events(self):
+    def schedule_draw_events(self):
+        QTimer.singleShot(10, self._draw_events_internal)
+
+    def _draw_events_internal(self):
         if not self.date_to_cell_map: return
 
         for cell in self.date_to_cell_map.values():

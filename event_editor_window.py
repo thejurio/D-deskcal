@@ -1,19 +1,16 @@
 import datetime
 import uuid
-from dateutil.rrule import rrulestr, rrule, YEARLY, MONTHLY, WEEKLY, DAILY
-from dateutil import tz
-import pytz
+from dateutil.rrule import rrulestr, YEARLY, MONTHLY, WEEKLY, DAILY
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QTextEdit, QPushButton, QCheckBox, QDateTimeEdit, QComboBox,
-                             QWidget, QStackedWidget, QCalendarWidget, QTimeEdit, QSizePolicy)
+from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+                             QTextEdit, QPushButton, QCheckBox, QComboBox,
+                             QWidget, QCalendarWidget, QTimeEdit, QSizePolicy)
 from PyQt6.QtGui import QIcon, QColor, QPixmap
-from PyQt6.QtCore import QDateTime, Qt, QTimer, QEvent, QPoint, pyqtSignal
+from PyQt6.QtCore import QDateTime, Qt, QTimer, QEvent, pyqtSignal
 
 from custom_dialogs import CustomMessageBox, BaseDialog
-from config import GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME
+from config import LOCAL_CALENDAR_PROVIDER_NAME
 from recurrence_dialog import RecurrenceRuleDialog
-from settings_manager import load_settings, save_settings
 
 class DateSelector(QWidget):
     """
@@ -276,10 +273,10 @@ class EventEditorWindow(BaseDialog):
                 dtstart = datetime.datetime.combine(dtstart, datetime.time.min)
             rule = rrulestr(rrule_str.replace("RRULE:", ""), dtstart=dtstart)
             parts, interval = [], rule._interval
-            if rule._freq == YEARLY: parts.append(f"매년" if interval == 1 else f"{interval}년마다")
-            elif rule._freq == MONTHLY: parts.append(f"매월" if interval == 1 else f"{interval}개월마다")
-            elif rule._freq == WEEKLY: parts.append(f"매주" if interval == 1 else f"{interval}주마다")
-            elif rule._freq == DAILY: parts.append(f"매일" if interval == 1 else f"{interval}일마다")
+            if rule._freq == YEARLY: parts.append("매년" if interval == 1 else f"{interval}년마다")
+            elif rule._freq == MONTHLY: parts.append("매월" if interval == 1 else f"{interval}개월마다")
+            elif rule._freq == WEEKLY: parts.append("매주" if interval == 1 else f"{interval}주마다")
+            elif rule._freq == DAILY: parts.append("매일" if interval == 1 else f"{interval}일마다")
             if rule._freq == WEEKLY and rule._byweekday:
                 days = ["월", "화", "수", "목", "금", "토", "일"]
                 selected_days = sorted(rule._byweekday)

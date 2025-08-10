@@ -1,18 +1,16 @@
 import sys
 import datetime
 import copy
-import os
 
 if sys.platform == "win32":
     import win32gui
     import win32con
-    import win32api
     import windows_startup
 
-from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout,
-                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon, QMessageBox)
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout,
+                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
-from PyQt6.QtGui import QAction, QCursor, QIcon
+from PyQt6.QtGui import QAction, QIcon
 
 import keyboard
 from hotkey_manager import HotkeyManager
@@ -362,11 +360,6 @@ class MainWidget(QWidget):
         self.tray_icon.setToolTip("Glassy Calendar")
 
         tray_menu = QMenu()
-        show_action = QAction("열기", self)
-        show_action.triggered.connect(self.show_window)
-        tray_menu.addAction(show_action)
-
-        tray_menu.addSeparator()
 
         add_event_action = QAction("일정 추가", self)
         add_event_action.triggered.connect(lambda: self.open_event_editor(datetime.date.today()))
@@ -422,16 +415,11 @@ class MainWidget(QWidget):
         QApplication.instance().quit()
 
     def set_current_date(self, new_date, is_initial=False):
-        direction = "none"
-        if not is_initial:
-            if new_date > self.current_date: direction = "forward"
-            elif new_date < self.current_date: direction = "backward"
-
         self.current_date = new_date
         self.month_view.current_date = new_date
         self.week_view.current_date = new_date
 
-        self.data_manager.notify_date_changed(self.current_date, direction=direction)
+        # data_manager.get_events()가 notify_date_changed를 호출하므로, 여기서 직접 호출할 필요 없음
         self.refresh_current_view()
 
     def handle_month_navigation(self, direction):
@@ -488,8 +476,16 @@ class MainWidget(QWidget):
         self.data_manager.load_initial_month()
 
     def on_data_updated(self, year, month):
-        if not self.is_resizing:
-            self.refresh_current_view()
+        if self.is_resizing:
+            return
+
+        current_widget = self.stacked_widget.currentWidget()
+        if hasattr(current_widget, 'current_date'):
+            if current_widget.current_date.year == year and current_widget.current_date.month == month:
+                if hasattr(current_widget, 'schedule_draw_events'):
+                    current_widget.schedule_draw_events()
+                else:
+                    self.refresh_current_view()
 
     def change_view(self, index, checked_button=None, other_buttons=None):
         self.stacked_widget.setCurrentIndex(index)

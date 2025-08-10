@@ -74,6 +74,6 @@ def verify_api_key(api_key):
         # 보통 잘못된 키는 PermissionDenied 오류를 발생시킵니다.
         if "API_KEY_INVALID" in str(e):
              return False, "API 키가 잘못되었습니다."
-        return False, f"확인 실패: 네트워크 또는 키 권한 문제"
+        return False, "확인 실패: 네트워크 또는 키 권한 문제"
 
 

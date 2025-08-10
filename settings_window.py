@@ -1,16 +1,14 @@
 # settings_window.py
 import copy
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPushButton, 
+from PyQt6.QtWidgets import (QVBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QHBoxLayout,
-                             QColorDialog, QComboBox, QSlider, QSizePolicy,
-                             QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit, QLineEdit)
+                             QColorDialog, QComboBox, QSlider, QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit, QLineEdit)
 from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime, QObject, QThread
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime
 
 from custom_dialogs import BaseDialog, HotkeyInputDialog, CustomMessageBox, APIKeyInputDialog, SingleKeyInputDialog
 from config import (
                     DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, 
-                    DEFAULT_WINDOW_MODE,
                     DEFAULT_NOTIFICATIONS_ENABLED, DEFAULT_NOTIFICATION_MINUTES,
                     DEFAULT_ALL_DAY_NOTIFICATION_ENABLED, DEFAULT_ALL_DAY_NOTIFICATION_TIME,
                     DEFAULT_NOTIFICATION_DURATION)

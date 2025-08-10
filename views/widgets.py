@@ -1,12 +1,10 @@
 # views/widgets.py
 from PyQt6.QtWidgets import QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics, QTextDocument, QPainterPath
+from PyQt6.QtGui import QPainter, QColor, QFontMetrics, QTextDocument, QPainterPath
 
 # views/widgets.py
-from PyQt6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
-from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QTextOption, QFontMetrics, QTextDocument, QPainterPath
+from PyQt6.QtWidgets import QGraphicsOpacityEffect
 # views/widgets.py 의 EventLabelWidget 클래스
 class EventLabelWidget(QLabel):
     edit_requested = pyqtSignal(dict)

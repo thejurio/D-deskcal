@@ -1,6 +1,6 @@
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                             QWidget, QComboBox, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit, QLineEdit)
+                             QWidget, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QObject, QThread
 from PyQt6.QtGui import QAction, QKeySequence
 import gemini_parser

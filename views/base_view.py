@@ -1,11 +1,10 @@
 # views/base_view.py
-from PyQt6.QtWidgets import QWidget, QMenu, QToolTip, QApplication
+from PyQt6.QtWidgets import QWidget, QMenu, QApplication
 from PyQt6.QtCore import pyqtSignal, QTimer, pyqtProperty
 from PyQt6.QtGui import QCursor, QAction, QColor
 import datetime
 
-from custom_dialogs import CustomMessageBox, BaseDialog, EventPopover
-from .widgets import EventLabelWidget
+from custom_dialogs import CustomMessageBox, EventPopover
 
 class BaseViewWidget(QWidget):
     add_event_requested = pyqtSignal(object)

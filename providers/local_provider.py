@@ -5,7 +5,7 @@ from dateutil.rrule import rrulestr
 
 from .base_provider import BaseCalendarProvider
 from config import (DB_FILE, LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
-                    DEFAULT_LOCAL_CALENDAR_COLOR, DEFAULT_LOCAL_CALENDAR_EMOJI)
+                    DEFAULT_LOCAL_CALENDAR_COLOR)
 
 class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, db_connection=None):

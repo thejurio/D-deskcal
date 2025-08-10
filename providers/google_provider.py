@@ -1,12 +1,11 @@
 import datetime
-import os.path
 import threading
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from providers.base_provider import BaseCalendarProvider
-from config import (GOOGLE_CALENDAR_PROVIDER_NAME, DEFAULT_EVENT_COLOR)
+from config import (GOOGLE_CALENDAR_PROVIDER_NAME)
 
 class GoogleCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, auth_manager):
