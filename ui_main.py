@@ -1,6 +1,7 @@
 import sys
 import datetime
 import copy
+import logging
 
 if sys.platform == "win32":
     import win32gui
@@ -890,6 +891,13 @@ class MainWidget(QWidget):
             self.move(new_pos)
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        filename='error.log',
+        filemode='a'
+    )
+    
     settings = load_settings()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)

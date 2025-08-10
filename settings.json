@@ -27,12 +27,9 @@
     "all_day_notification_enabled": true,
     "all_day_notification_time": "09:00",
     "geometry": [
-        789,
-        56,
-        702,
-        682
-    ],
-    "ai_add_event_hotkey": "Ctrl + F10",
-    "gemini_api_key": "AIzaSyBNGWOIvVTTYP4GLroRNN9gFMduWiZhsFs",
-    "last_selected_calendar_id": "family01556510902891015712@group.calendar.google.com"
+        774,
+        0,
+        687,
+        660
+    ]
 }

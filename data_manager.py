@@ -3,8 +3,11 @@ import datetime
 import json
 import time
 import sqlite3
+import logging
 from collections import deque, OrderedDict
 from contextlib import contextmanager
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from dateutil import parser as dateutil_parser
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition
 
 from providers.google_provider import GoogleCalendarProvider
@@ -13,6 +16,8 @@ from config import (DB_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL,
                     GOOGLE_CALENDAR_PROVIDER_NAME, DEFAULT_EVENT_COLOR, DEFAULT_NOTIFICATIONS_ENABLED, 
                     DEFAULT_NOTIFICATION_MINUTES, DEFAULT_ALL_DAY_NOTIFICATION_ENABLED,
                     DEFAULT_ALL_DAY_NOTIFICATION_TIME)
+
+logger = logging.getLogger(__name__)
 
 def get_month_view_dates(year, month, start_day_of_week):
     """월간 뷰에 표시될 모든 날짜(이전/현재/다음 달 포함)의 시작일과 종료일을 반환합니다."""
@@ -88,7 +93,7 @@ class CachingManager(QObject):
 
             # 1. 현재 월을 P1(최우선)으로 설정하고, 다른 P1 작업은 모두 취소
             self._task_queue.interrupt_and_add_high_priority(current_month_task)
-            print(f"P1 작업 설정: {year}년 {month}월 즉시 동기화")
+            logger.info(f"P1 작업 설정: {year}년 {month}월 즉시 동기화")
 
             # 2. 주변 월을 P2, P3 우선순위로 추가
             base_date = datetime.date(year, month, 15)
@@ -103,7 +108,7 @@ class CachingManager(QObject):
                 if task_data[1] not in self.data_manager.event_cache:
                     self._task_queue.add_task(3, task_data)
 
-            print(f"새로운 캐싱 계획 수립: {year}년 {month}월 주변. 대기열: {len(self._task_queue)}개")
+            logger.info(f"새로운 캐싱 계획 수립: {year}년 {month}월 주변. 대기열: {len(self._task_queue)}개")
 
     def request_current_month_sync(self):
         with QMutexLocker(self._mutex):
@@ -111,7 +116,7 @@ class CachingManager(QObject):
                 # 자동 동기화는 P2 우선순위로 처리하여 사용자 요청에 방해되지 않도록 함
                 task_data = ("month", self._last_viewed_month)
                 self._task_queue.add_task(2, task_data)
-                print(f"자동 동기화 요청됨 (P2): {self._last_viewed_month}")
+                logger.info(f"자동 동기화 요청됨 (P2): {self._last_viewed_month}")
 
     def _get_month_tuple(self, base_date, days_delta):
         target_date = base_date + datetime.timedelta(days=days_delta)
@@ -122,7 +127,7 @@ class CachingManager(QObject):
         self.resume_sync()
 
     def run(self):
-        print("지능형 캐싱 매니저 스레드가 시작되었습니다.")
+        logger.info("지능형 캐싱 매니저 스레드가 시작되었습니다.")
         while self._is_running:
             task_data = self._task_queue.get_next_task()
 
@@ -134,7 +139,7 @@ class CachingManager(QObject):
                 
                 is_p1_task = (year, month) == self._last_viewed_month
                 action_text = "P1 동기화" if is_p1_task else "백그라운드 캐싱"
-                print(f"{action_text} 수행: {year}년 {month}월")
+                logger.info(f"{action_text} 수행: {year}년 {month}월")
 
                 # DataManager를 통해 동기화 상태 알림
                 self.data_manager.set_sync_state(True, year, month)
@@ -156,7 +161,7 @@ class CachingManager(QObject):
                 time.sleep(0.2 if is_p1_task else 0.5)
             else:
                 time.sleep(1)
-        print("지능형 캐싱 매니저 스레드가 종료되었습니다.")
+        logger.info("지능형 캐싱 매니저 스레드가 종료되었습니다.")
         self.finished.emit()
 
     def _manage_cache_size(self):
@@ -183,26 +188,26 @@ class CachingManager(QObject):
                 if not candidates: break
 
                 farthest_month = max(candidates, key=candidates.get)
-                print(f"월간 캐시 용량 초과. 가장 먼 항목 제거: {farthest_month}")
+                logger.info(f"월간 캐시 용량 초과. 가장 먼 항목 제거: {farthest_month}")
                 del self.data_manager.event_cache[farthest_month]
                 self.data_manager._remove_month_from_cache_db(farthest_month[0], farthest_month[1])
 
     def pause_sync(self):
         self._activity_lock.lock()
         self._pause_requested = True
-        print("백그라운드 작업 일시정지 요청됨.")
+        logger.info("백그라운드 작업 일시정지 요청됨.")
 
     def resume_sync(self):
         if self._pause_requested:
             self._pause_requested = False
             self._activity_lock.unlock()
             self._resume_condition.wakeAll()
-            print("백그라운드 작업 재개됨.")
+            logger.info("백그라운드 작업 재개됨.")
 
     def _wait_if_paused(self):
         locker = QMutexLocker(self._activity_lock)
         while self._pause_requested:
-            print("사용자 활동으로 인해 백그라운드 작업 대기 중...")
+            logger.info("사용자 활동으로 인해 백그라운드 작업 대기 중...")
             self._resume_condition.wait(self._activity_lock)
         locker.unlock()
 
@@ -216,7 +221,7 @@ class CalendarListFetcher(QObject):
         self._is_running = True
 
     def run(self):
-        print("캘린더 목록 비동기 로더 스레드 시작...")
+        logger.info("캘린더 목록 비동기 로더 스레드 시작...")
         all_calendars = []
         for provider in self.providers:
             if not self._is_running: break
@@ -224,13 +229,13 @@ class CalendarListFetcher(QObject):
                 try:
                     all_calendars.extend(provider.get_calendars())
                 except Exception as e:
-                    print(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생: {e}")
+                    logger.error(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생", exc_info=True)
         
         if self._is_running:
             self.calendars_fetched.emit(all_calendars)
         
         self.finished.emit()
-        print("캘린더 목록 비동기 로더 스레드 종료.")
+        logger.info("캘린더 목록 비동기 로더 스레드 종료.")
 
     def stop(self):
         self._is_running = False
@@ -320,7 +325,9 @@ class DataManager(QObject):
                 cursor.execute("CREATE TABLE IF NOT EXISTS completed_events (event_id TEXT PRIMARY KEY)")
                 conn.commit()
         except sqlite3.Error as e:
-            print(f"완료 이벤트 DB 테이블 초기화 중 오류 발생: {e}")
+            msg = "완료 이벤트 데이터베이스를 초기화하는 중 오류가 발생했습니다."
+            logger.error(msg, exc_info=True)
+            self.report_error(f"{msg}\n{e}")
 
     def _load_completed_event_ids(self):
         try:
@@ -328,9 +335,11 @@ class DataManager(QObject):
                 cursor = conn.cursor()
                 cursor.execute("SELECT event_id FROM completed_events")
                 self.completed_event_ids = {row[0] for row in cursor.fetchall()}
-            print(f"DB에서 {len(self.completed_event_ids)}개의 완료된 이벤트 상태를 로드했습니다.")
+            logger.info(f"DB에서 {len(self.completed_event_ids)}개의 완료된 이벤트 상태를 로드했습니다.")
         except sqlite3.Error as e:
-            print(f"DB에서 완료 이벤트 로드 중 오류 발생: {e}")
+            msg = "완료 이벤트 상태를 불러오는 중 오류가 발생했습니다."
+            logger.error(msg, exc_info=True)
+            self.report_error(f"{msg}\n{e}")
 
     def is_event_completed(self, event_id):
         return event_id in self.completed_event_ids
@@ -344,9 +353,11 @@ class DataManager(QObject):
                 conn.commit()
             self.completed_event_ids.add(event_id)
             self.event_completion_changed.emit()
-            print(f"이벤트 {event_id}를 완료 처리했습니다.")
+            logger.info(f"이벤트 {event_id}를 완료 처리했습니다.")
         except sqlite3.Error as e:
-            print(f"이벤트 완료 처리 중 DB 오류 발생: {e}")
+            msg = f"이벤트({event_id})를 완료 처리하는 중 오류가 발생했습니다."
+            logger.error(msg, exc_info=True)
+            self.report_error(f"{msg}\n{e}")
 
     def unmark_event_as_completed(self, event_id):
         if event_id not in self.completed_event_ids: return
@@ -357,9 +368,11 @@ class DataManager(QObject):
                 conn.commit()
             self.completed_event_ids.discard(event_id)
             self.event_completion_changed.emit()
-            print(f"이벤트 {event_id}를 진행 중으로 변경했습니다.")
+            logger.info(f"이벤트 {event_id}를 진행 중으로 변경했습니다.")
         except sqlite3.Error as e:
-            print(f"이벤트 진행 중 처리 중 DB 오류 발생: {e}")
+            msg = f"이벤트({event_id})를 진행 중으로 변경하는 중 오류가 발생했습니다."
+            logger.error(msg, exc_info=True)
+            self.report_error(f"{msg}\n{e}")
 
     def _init_cache_db(self):
         try:
@@ -368,7 +381,9 @@ class DataManager(QObject):
                 cursor.execute("CREATE TABLE IF NOT EXISTS event_cache (year INTEGER NOT NULL, month INTEGER NOT NULL, events_json TEXT NOT NULL, PRIMARY KEY (year, month))")
                 conn.commit()
         except sqlite3.Error as e:
-            print(f"캐시 DB 테이블 초기화 중 오류 발생: {e}")
+            msg = "캐시 데이터베이스를 초기화하는 중 오류가 발생했습니다."
+            logger.error(msg, exc_info=True)
+            self.report_error(f"{msg}\n{e}")
 
     def setup_providers(self):
         self.providers = []
@@ -377,15 +392,15 @@ class DataManager(QObject):
                 google_provider = GoogleCalendarProvider(self.settings, self.auth_manager)
                 self.providers.append(google_provider)
             except Exception as e:
-                print(f"Google Provider 생성 중 오류 발생: {e}")
+                logger.error("Google Provider 생성 중 오류 발생", exc_info=True)
         try:
             local_provider = LocalCalendarProvider(self.settings)
             self.providers.append(local_provider)
         except Exception as e:
-            print(f"Local Provider 생성 중 오류 발생: {e}")
+            logger.error("Local Provider 생성 중 오류 발생", exc_info=True)
 
     def on_auth_state_changed(self):
-        print("인증 상태 변경 감지. Provider를 재설정하고 데이터를 새로고침합니다.")
+        logger.info("인증 상태 변경 감지. Provider를 재설정하고 데이터를 새로고침합니다.")
         
         is_logging_out = not self.auth_manager.is_logged_in()
         
@@ -394,7 +409,7 @@ class DataManager(QObject):
         self._default_color_map_cache = None
         
         if is_logging_out:
-            print("로그아웃 감지. Google 캘린더 관련 캐시를 삭제합니다.")
+            logger.info("로그아웃 감지. Google 캘린더 관련 캐시를 삭제합니다.")
             for month_key, events in list(self.event_cache.items()):
                 google_events = [e for e in events if e.get('provider') == GOOGLE_CALENDAR_PROVIDER_NAME]
                 if google_events:
@@ -416,10 +431,10 @@ class DataManager(QObject):
         interval_minutes = self.settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)
         if interval_minutes > 0:
             self.sync_timer.start(interval_minutes * 60 * 1000)
-            print(f"자동 동기화 타이머가 설정되었습니다. 주기: {interval_minutes}분")
+            logger.info(f"자동 동기화 타이머가 설정되었습니다. 주기: {interval_minutes}분")
         else:
             self.sync_timer.stop()
-            print("자동 동기화가 비활성화되었습니다.")
+            logger.info("자동 동기화가 비활성화되었습니다.")
 
     def request_current_month_sync(self):
         self.caching_manager.request_current_month_sync()
@@ -456,9 +471,11 @@ class DataManager(QObject):
                 cursor.execute("SELECT year, month, events_json FROM event_cache")
                 for year, month, events_json in cursor.fetchall():
                     self.event_cache[(year, month)] = json.loads(events_json)
-            print(f"DB에서 {len(self.event_cache)}개의 월간 캐시를 로드했습니다.")
+            logger.info(f"DB에서 {len(self.event_cache)}개의 월간 캐시를 로드했습니다.")
         except sqlite3.Error as e:
-            print(f"DB에서 캐시 로드 중 오류 발생: {e}")
+            msg = "데이터베이스에서 캐시를 불러오는 중 오류가 발생했습니다."
+            logger.error(msg, exc_info=True)
+            self.report_error(f"{msg}\n{e}")
 
     def _save_month_to_cache_db(self, year, month, events):
         try:
@@ -467,7 +484,7 @@ class DataManager(QObject):
                 cursor.execute("INSERT OR REPLACE INTO event_cache (year, month, events_json) VALUES (?, ?, ?)", (year, month, json.dumps(events)))
                 conn.commit()
         except sqlite3.Error as e:
-            print(f"DB에 월간 캐시 저장 중 오류 발생: {e}")
+            logger.error("DB에 월간 캐시 저장 중 오류 발생", exc_info=True)
 
     def _remove_month_from_cache_db(self, year, month):
         try:
@@ -476,7 +493,7 @@ class DataManager(QObject):
                 cursor.execute("DELETE FROM event_cache WHERE year = ? AND month = ?", (year, month))
                 conn.commit()
         except sqlite3.Error as e:
-            print(f"DB에서 월간 캐시 삭제 중 오류 발생: {e}")
+            logger.error("DB에서 월간 캐시 삭제 중 오류 발생", exc_info=True)
 
     def _fetch_events_from_providers(self, year, month):
         all_events = []
@@ -498,7 +515,9 @@ class DataManager(QObject):
                             event['color'] = custom_colors.get(cal_id, default_color)
                     all_events.extend(events)
             except Exception as e:
-                print(f"'{type(provider).__name__}' 이벤트 조회 오류: {e}")
+                msg = f"'{type(provider).__name__}'에서 이벤트를 가져오는 중 오류가 발생했습니다."
+                logger.error(msg, exc_info=True)
+                self.report_error(f"{msg}\n{e}")
         return all_events
 
     # [삭제] _run_immediate_sync, _on_immediate_sync_finished, _on_immediate_data_fetched 메서드 삭제
@@ -514,7 +533,7 @@ class DataManager(QObject):
         return self.event_cache.get(cache_key, [])
 
     def force_sync_month(self, year, month):
-        print(f"현재 보이는 월({year}년 {month}월)을 강제로 즉시 동기화합니다...")
+        logger.info(f"현재 보이는 월({year}년 {month}월)을 강제로 즉시 동기화합니다...")
         self.caching_manager.request_caching_around(year, month)
 
     def get_events_for_period(self, start_date, end_date):
@@ -543,7 +562,7 @@ class DataManager(QObject):
                     if not (event_end_date < start_date or event_start_date > end_date):
                         all_events.append(event)
                 except (ValueError, TypeError) as e:
-                    print(f"이벤트 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
+                    logger.warning(f"이벤트 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
                     continue
         unique_events = {e['id']: e for e in all_events}.values()
         return list(unique_events)
@@ -583,10 +602,10 @@ class DataManager(QObject):
         self.calendar_fetch_thread.deleteLater()
         self.calendar_fetch_thread = None
         self.calendar_fetcher = None
-        print("캘린더 목록 스레드 정리 완료.")
+        logger.info("캘린더 목록 스레드 정리 완료.")
 
     def _on_calendars_fetched(self, calendars):
-        print(f"{len(calendars)}개의 캘린더 목록을 비동기적으로 수신했습니다.")
+        logger.info(f"{len(calendars)}개의 캘린더 목록을 비동기적으로 수신했습니다.")
         self.calendar_list_cache = calendars
         self._default_color_map_cache = None
         self.calendar_list_changed.emit()
@@ -652,7 +671,7 @@ class DataManager(QObject):
         return False
 
     def load_initial_month(self):
-        print("초기 데이터 로딩을 요청합니다...")
+        logger.info("초기 데이터 로딩을 요청합니다...")
         self.get_all_calendars(fetch_if_empty=True)
         today = datetime.date.today()
         self.get_events(today.year, today.month)
@@ -676,7 +695,9 @@ class DataManager(QObject):
                 if results:
                     all_results.extend(results)
             except Exception as e:
-                print(f"'{type(provider).__name__}' 이벤트 검색 오류: {e}")
+                msg = f"'{type(provider).__name__}'에서 이벤트를 검색하는 중 오류가 발생했습니다."
+                logger.error(msg, exc_info=True)
+                self.report_error(f"{msg}\n{e}")
         unique_results = list({event['id']: event for event in all_results}.values())
         self._apply_colors_to_events(unique_results)
         def get_start_time(event):
@@ -766,6 +787,54 @@ class DataManager(QObject):
     def get_provider_by_name(self, name):
         return next((p for p in self.providers if p.name == name), None)
 
+    def get_classified_events_for_week(self, start_of_week):
+        hide_weekends = self.settings.get("hide_weekends", False)
+        num_days = 5 if hide_weekends else 7
+        
+        week_events = self.get_events_for_period(start_of_week, start_of_week + datetime.timedelta(days=num_days-1))
+        selected_ids = self.settings.get("selected_calendars", [])
+        filtered_events = [event for event in week_events if event.get('calendarId') in selected_ids]
+
+        try:
+            user_tz = ZoneInfo(self.settings.get("user_timezone", "UTC"))
+        except ZoneInfoNotFoundError:
+            user_tz = ZoneInfo("UTC")
+
+        time_events, all_day_events = [], []
+        for e in filtered_events:
+            try:
+                start_str = e['start'].get('dateTime', e['start'].get('date'))
+                end_str = e['end'].get('dateTime', e['end'].get('date'))
+
+                if 'dateTime' in e['start']:
+                    aware_start_dt = dateutil_parser.isoparse(start_str)
+                    aware_end_dt = dateutil_parser.isoparse(end_str)
+                    e['start']['local_dt'] = aware_start_dt.astimezone(user_tz)
+                    e['end']['local_dt'] = aware_end_dt.astimezone(user_tz)
+                else: # 종일 이벤트
+                    naive_start_dt = datetime.datetime.fromisoformat(start_str)
+                    naive_end_dt = datetime.datetime.fromisoformat(end_str)
+                    e['start']['local_dt'] = naive_start_dt.replace(tzinfo=user_tz) if naive_start_dt.tzinfo is None else naive_start_dt
+                    e['end']['local_dt'] = naive_end_dt.replace(tzinfo=user_tz) if naive_end_dt.tzinfo is None else naive_end_dt
+
+                if hide_weekends and e['start']['local_dt'].weekday() >= 5:
+                    continue
+
+                is_all_day_native = 'date' in e['start']
+                duration = e['end']['local_dt'] - e['start']['local_dt']
+                is_multi_day = duration.total_seconds() >= 86400
+                is_exactly_24h_midnight = duration.total_seconds() == 86400 and e['start']['local_dt'].time() == datetime.time(0, 0)
+
+                if is_all_day_native or (is_multi_day and not is_exactly_24h_midnight):
+                    all_day_events.append(e)
+                elif 'dateTime' in e['start']:
+                    time_events.append(e)
+            except (ValueError, TypeError) as err:
+                logger.warning(f"주간 뷰 이벤트 시간 파싱 오류: {err}, 이벤트: {e.get('summary')}")
+                continue
+        
+        return time_events, all_day_events
+
     def get_events_for_agenda(self, start_date, days=30):
         """
         [수정됨] 여러 날에 걸친 일정을 각 날짜에 맞게 포함하도록 로직을 개선합니다.
@@ -818,7 +887,7 @@ class DataManager(QObject):
                         agenda[day].append(event_copy)
 
             except (ValueError, TypeError) as e:
-                # print(f"안건 뷰 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
+                # logger.warning(f"안건 뷰 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
                 continue
         
         # 각 날짜별로 이벤트를 시간순으로 정렬
@@ -955,33 +1024,7 @@ class DataManager(QObject):
 # data_manager.py 파일의 DataManager 클래스 내부
 
 # ▼▼▼ [핵심 수정] 이 함수를 찾아서 아래 코드로 교체합니다. ▼▼▼
-    def delete_event(self, event_data, deletion_mode='all'):
-        """
-        [수정됨] deletion_mode 인자를 받아서 각 Provider에 전달합니다.
-        """
-        provider_name = event_data.get('provider')
-        for provider in self.providers:
-            if provider.name == provider_name:
-                # Provider의 delete_event 함수에 deletion_mode를 그대로 전달합니다.
-                if provider.delete_event(event_data, data_manager=self, deletion_mode=deletion_mode):
-                    event_body = event_data.get('body', event_data)
-                    event_id_to_delete = event_body.get('id')
-                    
-                    # '완료' 상태였던 이벤트를 삭제하는 경우, 완료 목록에서도 제거합니다.
-                    self.unmark_event_as_completed(event_id_to_delete)
-                    
-                    # UI 새로고침을 위해 데이터 변경 신호를 보냅니다.
-                    start_str = event_body['start'].get('date') or event_body['start'].get('dateTime', '')[:10]
-                    try:
-                        event_date = datetime.date.fromisoformat(start_str)
-                        self.force_sync_month(event_date.year, event_date.month)
-                    except (ValueError, TypeError):
-                        # 날짜 정보가 불완전하더라도 최소한 현재 뷰라도 새로고침을 시도합니다.
-                        if self.last_requested_month:
-                            self.force_sync_month(self.last_requested_month[0], self.last_requested_month[1])
-
-                    return True
-        return False
+    
     # ▲▲▲ 여기까지 교체 ▲▲▲
 
     def load_initial_month(self):

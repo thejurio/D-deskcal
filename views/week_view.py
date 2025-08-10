@@ -539,49 +539,8 @@ class WeekViewWidget(BaseViewWidget):
         start_of_week = self._get_start_of_week()
         hide_weekends = self.main_widget.settings.get("hide_weekends", False)
         num_days = 5 if hide_weekends else 7
-        
-        week_events = self.data_manager.get_events_for_period(start_of_week, start_of_week + datetime.timedelta(days=num_days-1))
-        selected_ids = self.main_widget.settings.get("selected_calendars", [])
-        filtered_events = [event for event in week_events if event.get('calendarId') in selected_ids]
 
-        try:
-            user_tz = ZoneInfo(self.main_widget.settings.get("user_timezone", "UTC"))
-        except ZoneInfoNotFoundError:
-            user_tz = ZoneInfo("UTC")
-
-        time_events, all_day_events = [], []
-        for e in filtered_events:
-            try:
-                start_str = e['start'].get('dateTime', e['start'].get('date'))
-                end_str = e['end'].get('dateTime', e['end'].get('date'))
-
-                # [핵심 수정] dateutil.parser.isoparse 사용
-                if 'dateTime' in e['start']:
-                    aware_start_dt = dateutil_parser.isoparse(start_str)
-                    aware_end_dt = dateutil_parser.isoparse(end_str)
-                    e['start']['local_dt'] = aware_start_dt.astimezone(user_tz)
-                    e['end']['local_dt'] = aware_end_dt.astimezone(user_tz)
-                else: # 종일 이벤트
-                    naive_start_dt = datetime.datetime.fromisoformat(start_str)
-                    naive_end_dt = datetime.datetime.fromisoformat(end_str)
-                    e['start']['local_dt'] = naive_start_dt.replace(tzinfo=user_tz) if naive_start_dt.tzinfo is None else naive_start_dt
-                    e['end']['local_dt'] = naive_end_dt.replace(tzinfo=user_tz) if naive_end_dt.tzinfo is None else naive_end_dt
-
-                if hide_weekends and e['start']['local_dt'].weekday() >= 5:
-                    continue
-
-                is_all_day_native = 'date' in e['start']
-                duration = e['end']['local_dt'] - e['start']['local_dt']
-                is_multi_day = duration.total_seconds() >= 86400
-                is_exactly_24h_midnight = duration.total_seconds() == 86400 and e['start']['local_dt'].time() == datetime.time(0, 0)
-
-                if is_all_day_native or (is_multi_day and not is_exactly_24h_midnight):
-                    all_day_events.append(e)
-                elif 'dateTime' in e['start']:
-                    time_events.append(e)
-            except (ValueError, TypeError) as err:
-                print(f"이벤트 시간 파싱 오류: {err}, 이벤트: {e.get('summary')}")
-                continue
+        time_events, all_day_events = self.data_manager.get_classified_events_for_week(start_of_week)
 
         calculator = WeekLayoutCalculator(time_events, all_day_events, start_of_week, self.hour_height)
         

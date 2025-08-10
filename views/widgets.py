@@ -185,11 +185,15 @@ class AgendaEventWidget(QWidget):
         try:
             start_str = start.get('dateTime', start.get('date'))
             end_str = end.get('dateTime', end.get('date'))
-            if start_str.endswith('Z'): start_str = start_str[:-1] + '+00:00'
-            if end_str.endswith('Z'): end_str = end_str[:-1] + '+00:00'
+            if start_str and start_str.endswith('Z'): start_str = start_str[:-1] + '+00:00'
+            if end_str and end_str.endswith('Z'): end_str = end_str[:-1] + '+00:00'
 
             start_dt = datetime.datetime.fromisoformat(start_str)
-            end_dt = datetime.datetime.fromisoformat(end_str)
+            if end_str:
+                end_dt = datetime.datetime.fromisoformat(end_str)
+            else:
+                # end 시간이 없는 경우 start 시간과 동일하게 처리하거나 기본 기간을 설정
+                end_dt = start_dt
             
             # 종일 이벤트의 종료일 보정
             if is_all_day:
