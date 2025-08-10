@@ -305,7 +305,7 @@ class MainWidget(QWidget):
         ai_add_button.setIcon(QIcon("icons/gemini.svg"))
         ai_add_button.setIconSize(QSize(20, 20))
         ai_add_button.setObjectName("ai_add_button")
-        ai_add_button.setFixedSize(30, 28)
+        ai_add_button.setFixedSize(30, 30)
         ai_add_button.setToolTip("AI로 일정 추가")
         ai_add_button.clicked.connect(self.open_ai_input_dialog)
 

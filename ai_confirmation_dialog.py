@@ -1,11 +1,15 @@
-# ai_confirmation_dialog.py
+# ai_confirmation_dialog.py (전체 코드)
+
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QLineEdit, QComboBox, QTextEdit,
                              QCalendarWidget, QTimeEdit, QGridLayout)
-from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTime
+from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTime, QEvent
 
 from custom_dialogs import BaseDialog
+# --- 수정된 부분: settings_manager 임포트 추가 ---
+from settings_manager import load_settings, save_settings
+
 
 class CalendarPopup(QDialog):
     """날짜 선택을 위한 달력 팝업"""
@@ -218,6 +222,24 @@ class AIConfirmationDialog(BaseDialog):
             index = self.calendar_combo.findData(last_id)
             if index != -1:
                 self.calendar_combo.setCurrentIndex(index)
+
+    # --- 수정된 부분: accept 메서드 추가 ---
+    def accept(self):
+        """'선택한 일정 등록' 버튼 클릭 시 호출됩니다."""
+        # 현재 선택된 캘린더 ID를 가져옵니다.
+        calendar_id = self.calendar_combo.currentData()
+        
+        # ID가 유효하면 설정에 저장합니다.
+        if calendar_id:
+            try:
+                settings = load_settings()
+                settings['last_selected_calendar_id'] = calendar_id
+                save_settings(settings)
+            except Exception as e:
+                print(f"AI 확인창에서 설정 저장 중 오류 발생: {e}")
+
+        # 부모 클래스의 accept를 호출하여 다이얼로그를 정상적으로 닫습니다.
+        super().accept()
 
     def get_final_events_and_calendar(self):
         final_events = []

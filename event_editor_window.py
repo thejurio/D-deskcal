@@ -1,3 +1,5 @@
+# event_editor_window.py (전체 코드)
+
 import datetime
 import uuid
 from dateutil.rrule import rrulestr, rrule, YEARLY, MONTHLY, WEEKLY, DAILY
@@ -13,6 +15,8 @@ from PyQt6.QtCore import QDateTime, Qt, QTimer, QEvent, QPoint, pyqtSignal
 from custom_dialogs import CustomMessageBox, BaseDialog
 from config import GOOGLE_CALENDAR_PROVIDER_NAME, LOCAL_CALENDAR_PROVIDER_NAME
 from recurrence_dialog import RecurrenceRuleDialog
+# --- 수정된 부분: settings_manager 임포트 추가 ---
+from settings_manager import load_settings, save_settings
 
 class DateSelector(QWidget):
     """
@@ -209,7 +213,9 @@ class EventEditorWindow(BaseDialog):
         # 현재 선택된 ID 저장
         current_selection_id = None
         if self.calendar_combo.count() > 0:
-            current_selection_id = self.calendar_combo.currentData()['id']
+            current_selection_data = self.calendar_combo.currentData()
+            if current_selection_data:
+                current_selection_id = current_selection_data.get('id')
 
         self.calendar_combo.clear()
         
@@ -222,6 +228,8 @@ class EventEditorWindow(BaseDialog):
             return
 
         self.calendar_combo.setEnabled(True)
+        target_cal_id_to_select = None
+        
         for calendar in calendars:
             user_data = {'id': calendar['id'], 'provider': calendar['provider']}
             custom_colors = self.settings.get("calendar_colors", {})
@@ -232,26 +240,36 @@ class EventEditorWindow(BaseDialog):
             icon = QIcon(pixmap)
             self.calendar_combo.addItem(icon, calendar['summary'], userData=user_data)
 
-        # 이전에 선택했던 캘린더를 다시 선택
+        # 기본으로 선택할 캘린더 ID 결정
         if current_selection_id:
-            index = self.calendar_combo.findData({'id': current_selection_id})
-            if index != -1:
-                self.calendar_combo.setCurrentIndex(index)
-        # 또는, 수정 모드일 때 이벤트 데이터의 캘린더를 선택
+            target_cal_id_to_select = current_selection_id
         elif self.mode == 'edit' and self.event_data:
-            target_cal_id = self.event_data.get('calendarId')
-            index = self.calendar_combo.findData({'id': target_cal_id})
-            if index != -1:
-                self.calendar_combo.setCurrentIndex(index)
-        # 또는, 마지막으로 사용한 캘린더를 선택
+            target_cal_id_to_select = self.event_data.get('calendarId')
         else:
-            last_used_id = self.settings.get('last_selected_calendar_id')
-            if last_used_id:
-                index = self.calendar_combo.findData({'id': last_used_id})
-                if index != -1:
-                    self.calendar_combo.setCurrentIndex(index)
+            target_cal_id_to_select = self.settings.get('last_selected_calendar_id')
 
+        # 결정된 ID로 캘린더 선택
+        if target_cal_id_to_select:
+            for i in range(self.calendar_combo.count()):
+                combo_data = self.calendar_combo.itemData(i)
+                if combo_data and combo_data.get('id') == target_cal_id_to_select:
+                    self.calendar_combo.setCurrentIndex(i)
+                    break
+                    
     def accept(self):
+        # --- 수정된 부분: 저장 로직 추가 ---
+        # 사용자가 선택한 캘린더 ID를 설정 파일에 저장
+        selected_calendar_data = self.calendar_combo.currentData()
+        if selected_calendar_data:
+            try:
+                # settings_manager를 사용하여 안전하게 설정 로드 및 저장
+                settings = load_settings()
+                settings['last_selected_calendar_id'] = selected_calendar_data.get('id')
+                save_settings(settings)
+            except Exception as e:
+                print(f"설정 저장 중 오류 발생: {e}")
+        # --- 저장 로직 끝 ---
+        
         # --- 최종 시간 유효성 검사 ---
         start_dt = self.get_start_datetime()
         end_dt = self.get_end_datetime()
@@ -388,19 +406,25 @@ class EventEditorWindow(BaseDialog):
         self.end_time_edit.setTime(qdatetime.time())
 
     def populate_data(self):
+        target_cal_id = None # 초기화
+        
         if self.mode == 'edit' and self.event_data:
             event_id = self.event_data.get('id')
             if event_id and self.data_manager:
                 self.initial_completed_state = self.data_manager.is_event_completed(event_id)
                 self.completed_checkbox.setChecked(self.initial_completed_state)
             target_cal_id = self.event_data.get('calendarId')
-        else:
+        else: # 'new' 모드
             self.completed_checkbox.setVisible(False)
             target_cal_id = self.settings.get('last_selected_calendar_id')
 
+        # 콤보박스에서 해당 캘린더 선택
         if target_cal_id:
-            index = self.calendar_combo.findData({'id': target_cal_id, 'provider': self.event_data.get('provider')})
-            if index != -1: self.calendar_combo.setCurrentIndex(index)
+            for i in range(self.calendar_combo.count()):
+                combo_data = self.calendar_combo.itemData(i)
+                if combo_data and combo_data.get('id') == target_cal_id:
+                    self.calendar_combo.setCurrentIndex(i)
+                    break
 
         if self.mode == 'edit' and self.event_data:
             self.summary_edit.setText(self.event_data.get('summary', ''))

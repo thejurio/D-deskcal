@@ -564,8 +564,8 @@ class WeekViewWidget(BaseViewWidget):
                 else: # 종일 이벤트
                     naive_start_dt = datetime.datetime.fromisoformat(start_str)
                     naive_end_dt = datetime.datetime.fromisoformat(end_str)
-                    e['start']['local_dt'] = user_tz.localize(naive_start_dt) if naive_start_dt.tzinfo is None else naive_start_dt
-                    e['end']['local_dt'] = user_tz.localize(naive_end_dt) if naive_end_dt.tzinfo is None else naive_end_dt
+                    e['start']['local_dt'] = naive_start_dt.replace(tzinfo=user_tz) if naive_start_dt.tzinfo is None else naive_start_dt
+                    e['end']['local_dt'] = naive_end_dt.replace(tzinfo=user_tz) if naive_end_dt.tzinfo is None else naive_end_dt
 
                 if hide_weekends and e['start']['local_dt'].weekday() >= 5:
                     continue
