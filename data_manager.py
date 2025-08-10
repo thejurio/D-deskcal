@@ -3,7 +3,7 @@ import datetime
 import json
 import time
 import sqlite3
-from collections import deque
+from collections import deque, OrderedDict
 from contextlib import contextmanager
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition
 
@@ -766,6 +766,68 @@ class DataManager(QObject):
     def get_provider_by_name(self, name):
         return next((p for p in self.providers if p.name == name), None)
 
+    def get_events_for_agenda(self, start_date, days=30):
+        """
+        [수정됨] 여러 날에 걸친 일정을 각 날짜에 맞게 포함하도록 로직을 개선합니다.
+        """
+        agenda_end_date = start_date + datetime.timedelta(days=days)
+        
+        # 시작일 30일 전부터 조회하여, 현재 뷰에 걸쳐있는 긴 일정을 놓치지 않도록 함
+        search_start_date = start_date - datetime.timedelta(days=30)
+        events_in_period = self.get_events_for_period(search_start_date, agenda_end_date)
+
+        # 날짜별로 이벤트를 담을 OrderedDict 생성
+        agenda = OrderedDict()
+        for i in range(days):
+            current_day = start_date + datetime.timedelta(days=i)
+            agenda[current_day] = []
+
+        for event in events_in_period:
+            try:
+                start_info = event.get('start', {})
+                end_info = event.get('end', {})
+
+                start_str = start_info.get('dateTime', start_info.get('date'))
+                end_str = end_info.get('dateTime', end_info.get('date'))
+
+                # Z를 +00:00으로 변환하여 fromisoformat 호환성 확보
+                if start_str.endswith('Z'): start_str = start_str[:-1] + '+00:00'
+                if end_str.endswith('Z'): end_str = end_str[:-1] + '+00:00'
+                
+                start_dt = datetime.datetime.fromisoformat(start_str)
+                end_dt = datetime.datetime.fromisoformat(end_str)
+
+                # 종일 이벤트의 경우, end_date가 다음 날 0시로 되어 있으므로 하루를 빼서 실제 종료일로 맞춤
+                if 'date' in start_info:
+                    end_dt -= datetime.timedelta(days=1)
+
+                # 안건 뷰의 각 날짜를 순회하며 이벤트가 해당 날짜에 포함되는지 확인
+                for day in agenda.keys():
+                    day_dt_start = datetime.datetime.combine(day, datetime.time.min).astimezone()
+                    day_dt_end = datetime.datetime.combine(day, datetime.time.max).astimezone()
+                    
+                    # 타임존 정보가 없는 경우, 시스템 기본값으로 설정
+                    if start_dt.tzinfo is None: start_dt = start_dt.astimezone()
+                    if end_dt.tzinfo is None: end_dt = end_dt.astimezone()
+
+                    # 이벤트 기간이 현재 날짜와 겹치는지 확인
+                    if start_dt <= day_dt_end and end_dt >= day_dt_start:
+                        # 위젯에서 현재 날짜를 알 수 있도록 'agenda_display_date' 추가
+                        event_copy = event.copy()
+                        event_copy['agenda_display_date'] = day
+                        agenda[day].append(event_copy)
+
+            except (ValueError, TypeError) as e:
+                # print(f"안건 뷰 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
+                continue
+        
+        # 각 날짜별로 이벤트를 시간순으로 정렬
+        for day, events in agenda.items():
+            events.sort(key=lambda e: e['start'].get('dateTime', e['start'].get('date')))
+
+        # 이벤트가 없는 날짜는 제거
+        return OrderedDict((day, events) for day, events in agenda.items() if events)
+
     def get_events_for_period(self, start_date, end_date):
         all_events = []
         months_to_check = set()
@@ -777,7 +839,8 @@ class DataManager(QObject):
             else:
                 current_date = current_date.replace(month=current_date.month + 1, day=1)
         for year, month in months_to_check:
-            monthly_events = self.get_events(year, month)
+            # [수정] get_events는 이제 비동기 요청만 트리거하므로, 직접 캐시를 확인
+            monthly_events = self.event_cache.get((year, month), [])
             for event in monthly_events:
                 try:
                     start_info = event.get('start', {})

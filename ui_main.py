@@ -27,6 +27,7 @@ from config import (
 from data_manager import DataManager
 from views.month_view import MonthViewWidget
 from views.week_view import WeekViewWidget
+from views.agenda_view import AgendaViewWidget
 from settings_window import SettingsWindow
 from event_editor_window import EventEditorWindow
 from search_dialog import SearchDialog
@@ -276,9 +277,12 @@ class MainWidget(QWidget):
         self.data_manager.data_updated.connect(self.on_data_updated)
         self.data_manager.error_occurred.connect(self.show_error_message)
 
-        month_button, week_button = QPushButton("월간"), QPushButton("주간")
+        month_button = QPushButton("월간")
+        week_button = QPushButton("주간")
+        agenda_button = QPushButton("안건")
         month_button.setCheckable(True)
         week_button.setCheckable(True)
+        agenda_button.setCheckable(True)
 
         today_button = QPushButton("오늘")
         today_button.setObjectName("today_button")
@@ -309,21 +313,30 @@ class MainWidget(QWidget):
 
         view_mode_layout = QHBoxLayout()
         view_mode_layout.setSpacing(5)
+        
+        # 좌측: 안건, 검색
+        left_layout = QHBoxLayout()
+        left_layout.addWidget(agenda_button)
+        left_layout.addWidget(search_button)
+        left_layout.addStretch(1)
 
-        left_half = QHBoxLayout()
-        left_half.addWidget(search_button)
-        left_half.addStretch(1)
-        left_half.addWidget(month_button)
+        # 중앙: 월간, 주간
+        center_layout = QHBoxLayout()
+        center_layout.addStretch(1)
+        center_layout.addWidget(month_button)
+        center_layout.addWidget(week_button)
+        center_layout.addStretch(1)
 
-        right_half = QHBoxLayout()
-        right_half.addWidget(week_button)
-        right_half.addStretch(1)
-        right_half.addWidget(ai_add_button)
-        right_half.addWidget(self.lock_button)
-        right_half.addWidget(today_button)
+        # 우측: AI, 잠금, 오늘
+        right_layout = QHBoxLayout()
+        right_layout.addStretch(1)
+        right_layout.addWidget(ai_add_button)
+        right_layout.addWidget(self.lock_button)
+        right_layout.addWidget(today_button)
 
-        view_mode_layout.addLayout(left_half, 1)
-        view_mode_layout.addLayout(right_half, 1)
+        view_mode_layout.addLayout(left_layout)
+        view_mode_layout.addLayout(center_layout)
+        view_mode_layout.addLayout(right_layout)
 
         content_layout.addLayout(view_mode_layout)
 
@@ -332,6 +345,7 @@ class MainWidget(QWidget):
 
         self.month_view = MonthViewWidget(self)
         self.week_view = WeekViewWidget(self)
+        self.agenda_view = AgendaViewWidget(self)
 
         self.month_view.add_event_requested.connect(self.open_event_editor)
         self.month_view.edit_event_requested.connect(self.open_event_editor)
@@ -343,11 +357,19 @@ class MainWidget(QWidget):
         self.week_view.navigation_requested.connect(self.handle_week_navigation)
         self.week_view.date_selected.connect(self.set_current_date)
 
+        self.agenda_view.edit_event_requested.connect(self.open_event_editor)
+        
+        self.data_manager.event_completion_changed.connect(self.month_view.refresh)
+        self.data_manager.event_completion_changed.connect(self.week_view.refresh)
+        self.data_manager.event_completion_changed.connect(self.agenda_view.refresh)
+
         self.stacked_widget.addWidget(self.month_view)
         self.stacked_widget.addWidget(self.week_view)
+        self.stacked_widget.addWidget(self.agenda_view)
 
-        month_button.clicked.connect(lambda: self.change_view(0, month_button, [week_button]))
-        week_button.clicked.connect(lambda: self.change_view(1, week_button, [month_button]))
+        month_button.clicked.connect(lambda: self.change_view(0, month_button, [week_button, agenda_button]))
+        week_button.clicked.connect(lambda: self.change_view(1, week_button, [month_button, agenda_button]))
+        agenda_button.clicked.connect(lambda: self.change_view(2, agenda_button, [month_button, week_button]))
 
         month_button.setChecked(True)
         self.oldPos = None
@@ -620,8 +642,11 @@ class MainWidget(QWidget):
                         event_body['end']['date'] = end_date_obj.isoformat()
 
                     else: # 시간 지정 이벤트
+                        user_timezone = self.settings.get("user_timezone", "Asia/Seoul") # 기본값 설정
                         event_body['start']['dateTime'] = f"{event['startDate']}T{event['startTime']}:00"
+                        event_body['start']['timeZone'] = user_timezone
                         event_body['end']['dateTime'] = f"{event['endDate']}T{event['endTime']}:00"
+                        event_body['end']['timeZone'] = user_timezone
 
                     event_to_add = {
                         'calendarId': calendar_id,
