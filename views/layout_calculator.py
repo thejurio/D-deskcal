@@ -3,22 +3,31 @@ import datetime
 from collections import defaultdict
 
 class MonthLayoutCalculator:
+    """
+    월간 뷰 배치 계산기.
+    - 이벤트를 y 레인으로 배치
+    - 한 주(7일) 경계에서 세그먼트로 분할하고 각 세그먼트에 is_head/is_tail 플래그 부여
+    """
     def __init__(self, events, visible_days, y_offset=25, event_height=20, event_spacing=2):
-        self.events = sorted(events, key=lambda e: (e['start'].get('date', e['start'].get('dateTime', ''))[:10]))
-        self.visible_days = visible_days
-        self.view_start_date = min(visible_days)
-        self.view_end_date = max(visible_days)
-        
+        # 시작일 기준 정렬(종일/시간 구분 없이)
+        self.events = sorted(
+            events,
+            key=lambda e: (e['start'].get('date', e['start'].get('dateTime', ''))[:10])
+        )
+        self.visible_days = sorted(list(visible_days))
+        self.view_start_date = min(self.visible_days) if self.visible_days else None
+        self.view_end_date = max(self.visible_days) if self.visible_days else None
+
         self.y_offset = y_offset
         self.event_height = event_height
         self.event_spacing = event_spacing
 
-        self.occupied_lanes = {}
-        self.event_positions = []
-        self.more_events = {}
+        self.occupied_lanes = {}        # day -> [lane indices]
+        self.event_positions = []       # 기존 호환용(이벤트 단위)
+        self.more_events = {}           # 사용처가 없으면 비어있게 반환
 
     def calculate(self):
-        if not self.events:
+        if not self.events or not self.view_start_date:
             return [], {}
 
         for event in self.events:
@@ -27,47 +36,99 @@ class MonthLayoutCalculator:
             except Exception as e:
                 print(f"이벤트 위치 계산 오류: {e}, 이벤트: {event.get('summary', '')}")
                 continue
-        
+
         return self.event_positions, self.more_events
 
     def _calculate_event_position(self, event):
         start_info, end_info = event['start'], event['end']
         is_all_day = 'date' in start_info
-        start_str = start_info.get('date') or start_info.get('dateTime')
-        end_str = end_info.get('date') or end_info.get('dateTime')
-        
-        event_start_date = datetime.date.fromisoformat(start_str[:10])
-        event_end_date = datetime.date.fromisoformat(end_str[:10])
 
+        start_str = start_info.get('date') or start_info.get('dateTime')
+        end_str   = end_info.get('date')   or end_info.get('dateTime')
+
+        event_start_date = datetime.date.fromisoformat(start_str[:10])
+        event_end_date   = datetime.date.fromisoformat(end_str[:10])
+
+        # 종료일 보정(종일 또는 00:00 종료)
         if is_all_day and len(end_str) == 10:
             event_end_date -= datetime.timedelta(days=1)
         elif not is_all_day and event_start_date != event_end_date and end_str[11:] == '00:00:00':
-             event_end_date -= datetime.timedelta(days=1)
+            event_end_date -= datetime.timedelta(days=1)
+
+        if self.view_start_date is None:
+            return
 
         draw_start_date = max(event_start_date, self.view_start_date)
-        draw_end_date = min(event_end_date, self.view_end_date)
+        draw_end_date   = min(event_end_date, self.view_end_date)
 
         if draw_start_date > draw_end_date:
             return
 
-        event_span_days = [draw_start_date + datetime.timedelta(d) for d in range((draw_end_date - draw_start_date).days + 1)]
-        
+        # 가시 범위 내 일자들
+        span_days = [draw_start_date + datetime.timedelta(d)
+                     for d in range((draw_end_date - draw_start_date).days + 1)]
+
+        # 레인 할당(해당 구간 전체에 동일 레인)
         y_level = 0
         while True:
-            if not any(y_level in self.occupied_lanes.get(d, []) for d in event_span_days):
+            if not any(y_level in self.occupied_lanes.get(d, []) for d in span_days):
                 break
             y_level += 1
+
+        # 주 단위로 세그먼트 분할
+        segments = []
+        if span_days:
+            def week_index(day):
+                return (day - self.view_start_date).days // 7
+
+            current_week = week_index(span_days[0])
+            seg_start = span_days[0]
+            prev_day = span_days[0]
+
+            for day in span_days[1:]:
+                if week_index(day) != current_week:
+                    seg_end = prev_day
+                    segments.append((seg_start, seg_end, current_week))
+                    seg_start = day
+                    current_week = week_index(day)
+                prev_day = day
+            # 마지막 세그먼트
+            segments.append((seg_start, prev_day, current_week))
+
+        # 세그먼트 메타데이터 구성
+        segment_dicts = []
+        for seg_start, seg_end, wk in segments:
+            days = [seg_start + datetime.timedelta(d)
+                    for d in range((seg_end - seg_start).days + 1)]
+            is_head = (seg_start == event_start_date)     # 이벤트가 이 세그먼트에서 시작
+            is_tail = (seg_end   == event_end_date)       # 이벤트가 이 세그먼트에서 종료
+            is_single = is_head and is_tail and (len(segments) == 1)
+
+            segment_dicts.append({
+                'segment_start': seg_start,
+                'segment_end': seg_end,
+                'days': days,
+                'week_index': wk,
+                'is_head': is_head,
+                'is_tail': is_tail,
+                'is_single': is_single,
+                'y_level': y_level,
+                'event': event,
+                'is_all_day': is_all_day
+            })
 
         position_info = {
             'event': event,
             'y_level': y_level,
             'start_date': event_start_date,
             'end_date': event_end_date,
-            'days_in_view': event_span_days
+            'days_in_view': span_days,     # 기존 호환용
+            'segments': segment_dicts      # 새로 추가
         }
         self.event_positions.append(position_info)
 
-        for day in event_span_days:
+        # 레인 점유 기록
+        for day in span_days:
             self.occupied_lanes.setdefault(day, []).append(y_level)
 
 class WeekLayoutCalculator:

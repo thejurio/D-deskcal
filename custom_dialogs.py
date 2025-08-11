@@ -1,8 +1,8 @@
 import datetime
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QWidget, QStackedWidget, QGridLayout, QScrollArea, QMenu, QGraphicsOpacityEffect, QTextEdit, QLineEdit)
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QObject, QThread
-from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QObject, QThread, QEvent, QTimer
+from PyQt6.QtGui import QAction, QKeySequence, QCursor
 import gemini_parser
 
 class BaseDialog(QDialog):
@@ -428,6 +428,15 @@ class MoreEventsDialog(BaseDialog):
         close_button_layout.addWidget(close_button)
         self.content_layout.addLayout(close_button_layout)
         
+        # ▼ 팝오버 상태
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(500)
+        self._hover_timer.timeout.connect(self._show_hover_popover)
+        self._hover_target_btn = None
+        self._hover_event_data = None
+        self._current_popover = None
+
         self.edit_requested.connect(self.accept)
         self.delete_requested.connect(self.accept)
         
@@ -443,7 +452,11 @@ class MoreEventsDialog(BaseDialog):
         sorted_events = sorted(self.events, key=lambda e: (e['start'].get('dateTime', e['start'].get('date'))))
         for event in sorted_events:
             event_button = QPushButton(event.get('summary', '(제목 없음)'))
-            
+                        # ▼ 버튼에 호버 이벤트 연결
+            event_button.setMouseTracking(True)
+            event_button.installEventFilter(self)
+            event_button._event_data = event
+
             if self.data_manager:
                 finished = self.data_manager.is_event_completed(event.get('id'))
                 style_sheet = f"background-color: {event.get('color', '#555555')}; text-align: left; padding-left: 10px;"
@@ -463,6 +476,43 @@ class MoreEventsDialog(BaseDialog):
             
         event_list_layout.addStretch(1)
         self.scroll_area.setWidget(event_list_widget)
+
+    def eventFilter(self, obj, ev):
+        if isinstance(obj, QPushButton):
+            if ev.type() in (QEvent.Type.Enter, QEvent.Type.HoverEnter):
+                self._hover_target_btn = obj
+                self._hover_event_data = getattr(obj, "_event_data", None)
+                self._hover_timer.start()
+            elif ev.type() in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
+                self._hover_timer.stop()
+                self._close_hover_popover()
+        return super().eventFilter(obj, ev)
+
+    def _show_hover_popover(self):
+        if not self._hover_event_data:
+            return
+        self._close_hover_popover()
+        self._current_popover = EventPopover(self._hover_event_data, self.settings, self)
+
+        # BaseView의 배치 로직과 동일(커서/화면 기준 정렬):contentReference[oaicite:8]{index=8}
+        popover_size = self._current_popover.sizeHint()
+        cursor_pos = QCursor.pos()
+        screen_rect = self.screen().availableGeometry() if self.screen() else \
+                      self.parent().screen().availableGeometry()
+
+        x = cursor_pos.x() + 15 if cursor_pos.x() < screen_rect.center().x() else cursor_pos.x() - popover_size.width() - 15
+        y = cursor_pos.y() + 15 if cursor_pos.y() < screen_rect.center().y() else cursor_pos.y() - popover_size.height() - 15
+
+        x = max(screen_rect.left(), min(x, screen_rect.right() - popover_size.width()))
+        y = max(screen_rect.top(),  min(y, screen_rect.bottom() - popover_size.height()))
+
+        self._current_popover.move(x, y)
+        self._current_popover.show()
+
+    def _close_hover_popover(self):
+        if self._current_popover:
+            self._current_popover.close()
+            self._current_popover = None
 
     def show_context_menu(self, pos, event_data):
         menu = QMenu(self)
