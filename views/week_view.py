@@ -335,18 +335,11 @@ class WeekViewWidget(BaseViewWidget):
         prev_button.clicked.connect(self.go_to_previous_week)
         next_button.clicked.connect(self.go_to_next_week)
         
-        self.sync_icon = RotatingIcon("icons/refresh.svg")
-        self.sync_status_container = QStackedWidget()
-        self.sync_status_container.setFixedSize(QSize(24, 24))
-        self.sync_status_container.addWidget(QWidget())
-        self.sync_status_container.addWidget(self.sync_icon)
-
         center_layout = QHBoxLayout()
         center_layout.setContentsMargins(0,0,0,0)
         center_layout.setSpacing(5)
         center_layout.addStretch(11)
         center_layout.addWidget(self.week_range_label)
-        center_layout.addWidget(self.sync_status_container)
         center_layout.addStretch(10)
 
         nav_layout.addWidget(prev_button)
@@ -376,12 +369,8 @@ class WeekViewWidget(BaseViewWidget):
         self.timeline.setStyleSheet("background-color: #FF3333;")
 
     def on_sync_state_changed(self, is_syncing):
-        if is_syncing:
-            self.sync_status_container.setCurrentIndex(1)
-            self.sync_icon.start()
-        else:
-            self.sync_icon.stop()
-            self.sync_status_container.setCurrentIndex(0)
+        # Sync icon removed - no visual indication during sync
+        pass
 
     def open_week_selection_dialog(self):
         if not self.main_widget.is_interaction_unlocked():

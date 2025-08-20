@@ -79,15 +79,15 @@ class MainWidget(QWidget):
         self.data_manager.sync_timer.timeout.connect(self.data_manager.request_current_month_sync)
         self.data_manager.notification_triggered.connect(self.show_notification_popup)
 
-        if sys.platform == "win32":
-            self.set_as_desktop_child()
-
         self.apply_window_settings()
         self.sync_startup_setting()
 
         self.lock_status_timer = QTimer(self)
         self.lock_status_timer.timeout.connect(self.check_lock_status)
         self.lock_status_timer.start(50)
+
+        if sys.platform == "win32":
+            QTimer.singleShot(100, self.force_set_desktop_widget_mode)
 
     def check_lock_status(self):
         if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
@@ -152,21 +152,25 @@ class MainWidget(QWidget):
         except Exception as e:
             print(f"자동 시작 설정 동기화 중 오류 발생: {e}")
 
-    def set_as_desktop_child(self):
+    def force_set_desktop_widget_mode(self):
+        if sys.platform != "win32":
+            return
         try:
-            progman = win32gui.FindWindow("Progman", None)
-            win32gui.SendMessageTimeout(progman, 0x052C, 0, 0, win32con.SMTO_NORMAL, 1000)
-            worker_w = 0
-            def find_worker_w(hwnd, param):
-                if win32gui.FindWindowEx(hwnd, 0, "SHELLDLL_DefView", None):
-                    nonlocal worker_w
-                    worker_w = win32gui.FindWindowEx(0, hwnd, "WorkerW", None)
-                return True
-            win32gui.EnumWindows(find_worker_w, None)
             hwnd = self.winId()
-            win32gui.SetParent(hwnd, worker_w)
+            
+            # Set window style to prevent minimization by Win+D
+            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            ex_style &= ~win32con.WS_EX_APPWINDOW  # Remove from taskbar
+            ex_style |= win32con.WS_EX_TOOLWINDOW  # Tool window style (prevents Win+D minimization)
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style)
+            
+            # Set window to always stay at bottom (behind all other windows)
+            win32gui.SetWindowPos(hwnd, win32con.HWND_BOTTOM, 0, 0, 0, 0,
+                                  win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+
         except Exception as e:
-            print(f"바탕화면 자식창 설정 실패: {e}")
+            print(f"바탕화면 위젯 동작 설정 실패: {e}")
+    
 
     def is_interaction_unlocked(self):
         if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
@@ -197,21 +201,7 @@ class MainWidget(QWidget):
                     print(f"Unlock interactions error: {e}")
 
     def apply_window_settings(self):
-        mode = self.settings.get("window_mode", DEFAULT_WINDOW_MODE)
-        flags = self.windowFlags()
-
-        flags &= ~Qt.WindowType.WindowStaysOnTopHint
-        flags &= ~Qt.WindowType.WindowStaysOnBottomHint
-
-        if mode == "AlwaysOnBottom":
-            flags |= Qt.WindowType.WindowStaysOnBottomHint
-
-        self.setWindowFlags(flags)
         self.show()
-
-        if mode == "AlwaysOnBottom" and sys.platform == "win32":
-            self._push_to_desktop_bottom()
-
         if self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
             self.lock_interactions()
         else:
@@ -424,6 +414,7 @@ class MainWidget(QWidget):
         if sys.platform != "win32": return
         try:
             hwnd = self.winId()
+            # Always keep window at the bottom layer
             win32gui.SetWindowPos(hwnd, win32con.HWND_BOTTOM, 0, 0, 0, 0,
                                   win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
         except Exception as e:
@@ -576,13 +567,16 @@ class MainWidget(QWidget):
                     if "calendar_colors" not in changed_fields:
                         self.handle_visual_preview()
 
-            else:
+            else: # Cancelled
                 self.settings.clear()
                 self.settings.update(original_settings_snapshot)
                 self.apply_background_opacity()
                 self.apply_theme(self.settings.get("theme", "dark"))
                 self.apply_window_settings()
                 self.refresh_current_view()
+
+            if sys.platform == "win32":
+                self.force_set_desktop_widget_mode()
 
     def open_ai_input_dialog(self):
         if not self.is_interaction_unlocked():
@@ -838,6 +832,8 @@ class MainWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             if self.is_moving:
                 self.snap_to_screen_edges()
+                # Ensure window stays at bottom after moving
+                QTimer.singleShot(50, self._push_to_desktop_bottom)
 
             if self.is_resizing:
                 self.end_resize()

@@ -128,8 +128,9 @@ class BaseViewWidget(QWidget):
             # 커서가 아래쪽에 있으면 팝오버는 커서 위쪽에 표시
             y = cursor_pos.y() - popover_size.height() - 15
         
-        # 팝오버가 화면 밖으로 나가지 않도록 최종 보정
-        screen_rect = QApplication.primaryScreen().availableGeometry()
+        # 팝오버가 화면 밖으로 나가지 않도록 최종 보정 (현재 위젯이 있는 화면 기준)
+        screen_rect = self.screen().availableGeometry() if self.screen() else \
+                      QApplication.primaryScreen().availableGeometry()
         if x < screen_rect.left():
             x = screen_rect.left()
         if x + popover_size.width() > screen_rect.right():

@@ -155,17 +155,10 @@ class MonthViewWidget(BaseViewWidget):
         prev_button.clicked.connect(self.go_to_previous_month)
         next_button.clicked.connect(self.go_to_next_month)
 
-        self.sync_icon = RotatingIcon("icons/refresh.svg")
-        self.sync_status_container = QStackedWidget()
-        self.sync_status_container.setFixedSize(QSize(24, 24))
-        self.sync_status_container.addWidget(QWidget())   # idle
-        self.sync_status_container.addWidget(self.sync_icon)
-
         center_nav_layout = QHBoxLayout()
         center_nav_layout.setSpacing(0)
         center_nav_layout.setContentsMargins(25, 0, 0, 0)
         center_nav_layout.addWidget(self.month_button)
-        center_nav_layout.addWidget(self.sync_status_container)
 
         nav_layout.addWidget(prev_button)
         nav_layout.addStretch(1)
@@ -184,13 +177,8 @@ class MonthViewWidget(BaseViewWidget):
     # 동기화 인디케이터
     # ---------------------------
     def on_sync_state_changed(self, is_syncing, year, month):
-        if year == self.current_date.year and month == self.current_date.month:
-            if is_syncing:
-                self.sync_status_container.setCurrentIndex(1)
-                self.sync_icon.start()
-            else:
-                self.sync_icon.stop()
-                self.sync_status_container.setCurrentIndex(0)
+        # Sync icon removed - no visual indication during sync
+        pass
                 
     # MonthViewWidget 내부에 추가
     def go_to_previous_month(self):
@@ -349,7 +337,7 @@ class MonthViewWidget(BaseViewWidget):
 
             if current_day_obj == today:
                 cell_widget.setStyleSheet(
-                    "background-color: rgba(0, 120, 215, 51); border-radius: 5px;"
+                    "background-color: rgba(0, 120, 215, 51); border-radius: 5px; border: none;"
                 )
                 cell_widget.day_label.setStyleSheet(
                     f"color: {colors['today_fg'].name()}; font-weight: bold; background-color: transparent;"
