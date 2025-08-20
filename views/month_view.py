@@ -103,7 +103,20 @@ class DayCellWidget(QWidget):
     def mouseDoubleClickEvent(self, event):
         if not self.main_widget.is_interaction_unlocked():
             return
-        # 부모가 새 일정 추가 처리
+        
+        # 클릭된 위치를 부모 좌표계로 변환
+        parent_pos = self.mapToParent(event.pos())
+        parent_posf = QPointF(parent_pos)
+        
+        # 부모에서 해당 위치의 이벤트 확인
+        if hasattr(self.parent(), 'get_event_at'):
+            ev = self.parent().get_event_at(parent_posf)
+            if ev:
+                # 일정이 있으면 편집 요청
+                self.parent().edit_event_requested.emit(ev)
+                return
+        
+        # 일정이 없으면 새 일정 추가 처리
         self.add_event_requested.emit(self.date_obj)
 
     def clear_events(self):
@@ -198,7 +211,7 @@ class MonthViewWidget(BaseViewWidget):
         if not self.main_widget.is_interaction_unlocked():
             return
         dialog = NewDateSelectionDialog(
-            self.current_date, self,
+            self.current_date, None,
             settings=self.main_widget.settings,
             pos=QCursor.pos()
         )
@@ -213,7 +226,7 @@ class MonthViewWidget(BaseViewWidget):
         if not self.main_widget.is_interaction_unlocked():
             return
         dialog = MoreEventsDialog(
-            date_obj, events, self,
+            date_obj, events, None,
             settings=self.main_widget.settings,
             pos=QCursor.pos(), data_manager=self.data_manager
         )
@@ -336,9 +349,9 @@ class MonthViewWidget(BaseViewWidget):
             )
 
             if current_day_obj == today:
-                cell_widget.setStyleSheet(
-                    "background-color: rgba(0, 120, 215, 51); border-radius: 5px; border: none;"
-                )
+                cell_widget.setProperty("isToday", True)
+                cell_widget.style().unpolish(cell_widget)
+                cell_widget.style().polish(cell_widget)
                 cell_widget.day_label.setStyleSheet(
                     f"color: {colors['today_fg'].name()}; font-weight: bold; background-color: transparent;"
                 )
@@ -574,10 +587,26 @@ class MonthViewWidget(BaseViewWidget):
         # QPoint -> QPointF 변환
         if isinstance(pos, QPoint):
             pos = QPointF(pos)
-        for item in reversed(self._render_boxes):  # 위에 그린 것부터
+        
+        # 더 정확한 히트 테스트를 위해 여러 방법 시도
+        found_events = []
+        
+        # 방법 1: 기존 방식
+        for item in reversed(self._render_boxes):
             if item['rect'].contains(pos):
-                return item['event']
-        return None
+                found_events.append(item['event'])
+        
+        # 방법 2: 약간의 마진을 두고 검사 (터치 영역 확대)
+        if not found_events:
+            margin = 2.0  # 2픽셀 마진
+            expanded_pos = QPointF(pos.x(), pos.y())
+            for item in reversed(self._render_boxes):
+                rect = item['rect']
+                expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
+                if expanded_rect.contains(expanded_pos):
+                    found_events.append(item['event'])
+        
+        return found_events[0] if found_events else None
 
     # ---------------------------
     # 팝오버 처리(공통)
@@ -621,11 +650,16 @@ class MonthViewWidget(BaseViewWidget):
     def mouseDoubleClickEvent(self, event):
         if not self.main_widget.is_interaction_unlocked():
             return
-        ev = self.get_event_at(event.position())
+        
+        # 이벤트 위치에서 일정 찾기
+        pos = event.position()
+        ev = self.get_event_at(pos)
+        
         if ev:
+            # 일정이 발견되면 편집 모드로 열기
             self.edit_event_requested.emit(ev)
         else:
-            # 어느 날짜 셀인지 찾아서 새 일정 추가
+            # 일정이 없으면 새 일정 추가 모드
             target = self.childAt(event.pos().toPoint())
             while target and not isinstance(target, DayCellWidget):
                 target = target.parent()

@@ -8,7 +8,7 @@ from collections import deque, OrderedDict
 from contextlib import contextmanager
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil import parser as dateutil_parser
-from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition, QThreadPool, QRunnable
 
 from providers.google_provider import GoogleCalendarProvider
 from providers.local_provider import LocalCalendarProvider
@@ -149,7 +149,8 @@ class CachingManager(QObject):
                 # 작업이 중단되지 않았을 경우에만 캐시 업데이트
                 if self._is_running:
                     if events is not None:
-                        self.data_manager.event_cache[(year, month)] = events
+                        # Local-first: 임시 이벤트 보존하면서 캐시 업데이트
+                        self.data_manager._merge_events_preserving_temp(year, month, events)
                         self.data_manager._save_month_to_cache_db(year, month, events)
                         self.data_manager.data_updated.emit(year, month)
                         if not is_p1_task:
@@ -611,64 +612,291 @@ class DataManager(QObject):
         self.calendar_list_changed.emit()
 
     def add_event(self, event_data):
+        """Local-first event addition: UI 즉시 업데이트 → 백그라운드 동기화"""
         provider_name = event_data.get('provider')
+        logger.info(f"Local-first add_event 시작: provider={provider_name}")
+        
+        # Provider 존재 확인
+        found_provider = None
         for provider in self.providers:
             if provider.name == provider_name:
-                new_event = provider.add_event(event_data, self)
-                if new_event:
-                    if 'provider' not in new_event: new_event['provider'] = provider_name
-                    cal_id = new_event.get('calendarId')
-                    if cal_id:
-                        all_calendars = self.get_all_calendars(fetch_if_empty=False)
-                        cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
-                        default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
-                        new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                    start_str = new_event['start'].get('date') or new_event['start'].get('dateTime')[:10]
-                    event_date = datetime.date.fromisoformat(start_str)
-                    # P1 동기화 요청
-                    self.force_sync_month(event_date.year, event_date.month)
-                    return True
-        return False
+                found_provider = provider
+                break
+        
+        if not found_provider:
+            logger.warning(f"Provider '{provider_name}' not found. Available providers: {[p.name for p in self.providers]}")
+            return False
+        
+        # 1. 즉시 optimistic event 생성
+        optimistic_event = self._create_optimistic_event(event_data)
+        logger.info(f"Optimistic event 생성: id={optimistic_event.get('id')}")
+        
+        # 2. 즉시 로컬 캐시 업데이트
+        event_date = self._get_event_date(optimistic_event)
+        self._update_cache_immediately(optimistic_event, event_date)
+        logger.info(f"로컬 캐시 업데이트 완료: {event_date}")
+        
+        # 3. 즉시 UI 업데이트 발신
+        self.data_updated.emit(event_date.year, event_date.month)
+        logger.info(f"UI 업데이트 시그널 발신: {event_date.year}-{event_date.month}")
+        
+        # 4. 백그라운드에서 원격 동기화
+        self._queue_remote_add_event(event_data, optimistic_event)
+        
+        return True
+        
+    def _create_optimistic_event(self, event_data):
+        """즉시 UI 업데이트를 위한 임시 이벤트 생성"""
+        import uuid
+        
+        event_body = event_data.get('body', {})
+        optimistic_event = event_body.copy()
+        
+        # 임시 ID 생성 (실제 API ID로 나중에 교체됨)
+        if 'id' not in optimistic_event:
+            optimistic_event['id'] = f"temp_{uuid.uuid4().hex[:8]}"
+        
+        # 필수 필드들 설정
+        optimistic_event['calendarId'] = event_data.get('calendarId')
+        optimistic_event['provider'] = event_data.get('provider')
+        optimistic_event['_sync_state'] = 'pending'  # 동기화 상태 추가
+        
+        # 색상 정보 설정
+        cal_id = optimistic_event.get('calendarId')
+        if cal_id:
+            all_calendars = self.get_all_calendars(fetch_if_empty=False)
+            cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+            default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
+            optimistic_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+        
+        return optimistic_event
     
-    def update_event(self, event_data):
-        provider_name = event_data.get('provider')
-        for provider in self.providers:
-            if provider.name == provider_name:
-                updated_event = provider.update_event(event_data, self)
-                if updated_event:
-                    if 'provider' not in updated_event: updated_event['provider'] = provider_name
-                    cal_id = updated_event.get('calendarId')
-                    if cal_id:
-                        all_calendars = self.get_all_calendars(fetch_if_empty=False)
-                        cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
-                        default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
-                        updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                    start_str = updated_event['start'].get('date') or updated_event['start'].get('dateTime')[:10]
-                    event_date = datetime.date.fromisoformat(start_str)
-                    # P1 동기화 요청
-                    self.force_sync_month(event_date.year, event_date.month)
-                    return True
-        return False
+    def _get_event_date(self, event):
+        """이벤트의 날짜 추출"""
+        start_str = event['start'].get('date') or event['start'].get('dateTime')[:10]
+        return datetime.date.fromisoformat(start_str)
+    
+    def _update_cache_immediately(self, event, event_date):
+        """즉시 로컬 캐시 업데이트"""
+        cache_key = (event_date.year, event_date.month)
+        if cache_key in self.event_cache:
+            self.event_cache[cache_key].append(event)
+        else:
+            self.event_cache[cache_key] = [event]
+    
+    def _queue_remote_add_event(self, event_data, optimistic_event):
+        """백그라운드에서 원격 동기화 실행"""
+        class RemoteAddTask(QRunnable):
+            def __init__(self, data_manager, event_data, optimistic_event):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.optimistic_event = optimistic_event
+                
+            def run(self):
+                provider_name = self.event_data.get('provider')
+                temp_id = self.optimistic_event['id']
+                
+                for provider in self.data_manager.providers:
+                    if provider.name == provider_name:
+                        try:
+                            logger.info(f"원격 API 호출 시작: provider={provider_name}, temp_id={temp_id}")
+                            # 실제 원격 API 호출
+                            real_event = provider.add_event(self.event_data, self.data_manager)
+                            if real_event:
+                                logger.info(f"원격 API 호출 성공: real_id={real_event.get('id')}")
+                                # 성공: 임시 이벤트를 실제 이벤트로 교체
+                                self.data_manager._replace_optimistic_event(temp_id, real_event, provider_name)
+                            else:
+                                logger.warning(f"원격 API 호출 실패: provider.add_event returned None")
+                                # 실패: 동기화 실패 상태로 마크
+                                self.data_manager._mark_event_sync_failed(temp_id, "원격 추가 실패")
+                        except Exception as e:
+                            logger.error(f"원격 이벤트 추가 예외 발생: {e}")
+                            self.data_manager._mark_event_sync_failed(temp_id, str(e))
+                        break
+        
+        # 백그라운드 스레드에서 실행
+        task = RemoteAddTask(self, event_data, optimistic_event)
+        QThreadPool.globalInstance().start(task)
+    
+    def _replace_optimistic_event(self, temp_id, real_event, provider_name):
+        """임시 이벤트를 실제 이벤트로 교체"""
+        logger.info(f"임시 이벤트 교체 시작: temp_id={temp_id}, real_id={real_event.get('id')}")
+        
+        if 'provider' not in real_event:
+            real_event['provider'] = provider_name
+        
+        # 색상 정보 추가
+        cal_id = real_event.get('calendarId')
+        if cal_id:
+            all_calendars = self.get_all_calendars(fetch_if_empty=False)
+            cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+            default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
+            real_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+        
+        real_event['_sync_state'] = 'synced'
+        
+        # 캐시에서 임시 이벤트 찾아서 교체
+        event_date = self._get_event_date(real_event)
+        cache_key = (event_date.year, event_date.month)
+        
+        found_and_replaced = False
+        if cache_key in self.event_cache:
+            events = self.event_cache[cache_key]
+            for i, event in enumerate(events):
+                if event.get('id') == temp_id:
+                    events[i] = real_event
+                    found_and_replaced = True
+                    logger.info(f"임시 이벤트 교체 완료: {temp_id} -> {real_event.get('id')}")
+                    break
+        
+        if not found_and_replaced:
+            logger.warning(f"임시 이벤트를 찾을 수 없음: temp_id={temp_id}, cache_key={cache_key}")
+            # 임시 이벤트를 찾을 수 없는 경우 새로 추가
+            if cache_key in self.event_cache:
+                self.event_cache[cache_key].append(real_event)
+            else:
+                self.event_cache[cache_key] = [real_event]
+            logger.info(f"실제 이벤트를 새로 추가함: {real_event.get('id')}")
+        
+        # UI 업데이트
+        self.data_updated.emit(event_date.year, event_date.month)
+    
+    def _mark_event_sync_failed(self, temp_id, error_msg):
+        """이벤트 동기화 실패 마크"""
+        logger.warning(f"이벤트 동기화 실패: temp_id={temp_id}, error={error_msg}")
+        
+        # 모든 캐시에서 해당 이벤트 찾아서 실패 상태로 마크
+        found_event = False
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if event.get('id') == temp_id:
+                    event['_sync_state'] = 'failed'
+                    event['_sync_error'] = error_msg
+                    found_event = True
+                    logger.info(f"임시 이벤트 실패 상태로 마크: {temp_id}")
+                    # UI 업데이트하여 실패 상태 표시
+                    year, month = cache_key
+                    self.data_updated.emit(year, month)
+                    return
+        
+        if not found_event:
+            logger.error(f"실패 마크할 임시 이벤트를 찾을 수 없음: temp_id={temp_id}")
+    
+    def _merge_events_preserving_temp(self, year, month, new_events):
+        """임시 이벤트를 보존하면서 새로운 이벤트로 캐시 업데이트"""
+        cache_key = (year, month)
+        existing_events = self.event_cache.get(cache_key, [])
+        
+        # 기존 캐시에서 임시 이벤트와 실패한 이벤트 찾기
+        temp_events = []
+        for event in existing_events:
+            event_id = event.get('id', '')
+            sync_state = event.get('_sync_state')
+            
+            # 임시 이벤트이거나 동기화 실패한 이벤트는 보존
+            if 'temp_' in event_id or sync_state in ['pending', 'failed']:
+                temp_events.append(event)
+        
+        # 새로운 이벤트와 보존할 임시 이벤트 합치기
+        merged_events = list(new_events)  # 새로운 이벤트들
+        
+        for temp_event in temp_events:
+            temp_id = temp_event.get('id')
+            
+            # 새로운 이벤트 중에 같은 ID가 있는지 확인 (실제 이벤트로 이미 동기화된 경우)
+            already_synced = any(event.get('id') == temp_id for event in new_events)
+            
+            if not already_synced:
+                merged_events.append(temp_event)
+                logger.info(f"임시 이벤트 보존됨: {temp_id} (상태: {temp_event.get('_sync_state')})")
+        
+        # 캐시 업데이트
+        self.event_cache[cache_key] = merged_events
+        logger.info(f"캐시 병합 완료: {year}-{month}, 전체={len(merged_events)}개 (임시={len(temp_events)}개 보존)")
 
-    # In class DataManager, modify the delete_event method
+    # Local-first delete_event method
     def delete_event(self, event_data, deletion_mode='all'):
-        provider_name = event_data.get('provider')
-        for provider in self.providers:
-            if provider.name == provider_name:
-                # Pass the deletion_mode to the provider
-                if provider.delete_event(event_data, data_manager=self, deletion_mode=deletion_mode):
-                    event_body = event_data.get('body', event_data)
-                    event_id_to_delete = event_body.get('id')
-                    self.unmark_event_as_completed(event_id_to_delete)
-
-                    # For future and all deletions, we may need to sync more than one month,
-                    # but for simplicity, we'll stick to syncing the start month for now.
-                    start_str = event_body['start'].get('date') or event_body['start'].get('dateTime')[:10]
-                    event_date = datetime.date.fromisoformat(start_str)
-
-                    self.force_sync_month(event_date.year, event_date.month)
-                    return True
-        return False
+        """Local-first event deletion: UI 즉시 업데이트 → 백그라운드 동기화"""
+        event_body = event_data.get('body', event_data)
+        event_id = event_body.get('id')
+        
+        # 1. 즉시 로컬 캐시에서 이벤트 찾기 및 백업
+        deleted_event, cache_key = self._find_and_backup_event(event_id)
+        if not deleted_event:
+            return False  # 이벤트를 찾을 수 없음
+        
+        # 2. 즉시 로컬 캐시에서 이벤트 제거
+        self._remove_event_from_cache(event_id)
+        
+        # 3. 즉시 완료 상태 정리
+        self.unmark_event_as_completed(event_id)
+        
+        # 4. 즉시 UI 업데이트
+        year, month = cache_key
+        self.data_updated.emit(year, month)
+        
+        # 5. 백그라운드에서 원격 동기화
+        self._queue_remote_delete_event(event_data, deleted_event, deletion_mode)
+        
+        return True
+    
+    def _remove_event_from_cache(self, event_id):
+        """캐시에서 이벤트 제거"""
+        for cache_key, events in self.event_cache.items():
+            self.event_cache[cache_key] = [e for e in events if e.get('id') != event_id]
+    
+    def _queue_remote_delete_event(self, event_data, deleted_event, deletion_mode):
+        """백그라운드에서 원격 삭제 동기화"""
+        class RemoteDeleteTask(QRunnable):
+            def __init__(self, data_manager, event_data, deleted_event, deletion_mode):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.deleted_event = deleted_event
+                self.deletion_mode = deletion_mode
+                
+            def run(self):
+                provider_name = self.event_data.get('provider')
+                event_id = self.deleted_event['id']
+                
+                for provider in self.data_manager.providers:
+                    if provider.name == provider_name:
+                        try:
+                            # 실제 원격 API 호출
+                            success = provider.delete_event(self.event_data, data_manager=self.data_manager, deletion_mode=self.deletion_mode)
+                            if success:
+                                # 성공: 삭제 확인 (추가 작업 없음)
+                                logger.info(f"이벤트 {event_id} 원격 삭제 성공")
+                            else:
+                                # 실패: 이벤트를 캐시에 복원
+                                self.data_manager._restore_deleted_event(self.deleted_event, "원격 삭제 실패")
+                        except Exception as e:
+                            logger.error(f"원격 이벤트 삭제 실패: {e}")
+                            self.data_manager._restore_deleted_event(self.deleted_event, str(e))
+                        break
+        
+        # 백그라운드 스레드에서 실행
+        task = RemoteDeleteTask(self, event_data, deleted_event, deletion_mode)
+        QThreadPool.globalInstance().start(task)
+    
+    def _restore_deleted_event(self, deleted_event, error_msg):
+        """삭제 실패 시 이벤트 복원"""
+        deleted_event['_sync_state'] = 'failed'
+        deleted_event['_sync_error'] = error_msg
+        
+        # 이벤트 날짜로 적절한 캐시에 복원
+        event_date = self._get_event_date(deleted_event)
+        cache_key = (event_date.year, event_date.month)
+        
+        if cache_key in self.event_cache:
+            self.event_cache[cache_key].append(deleted_event)
+        else:
+            self.event_cache[cache_key] = [deleted_event]
+        
+        # UI 업데이트하여 복원된 이벤트 표시
+        self.data_updated.emit(event_date.year, event_date.month)
 
     def load_initial_month(self):
         logger.info("초기 데이터 로딩을 요청합니다...")
@@ -971,55 +1199,170 @@ class DataManager(QObject):
         self._default_color_map_cache = None
         self.calendar_list_changed.emit()
 
-    def add_event(self, event_data):
-        provider_name = event_data.get('provider')
-        for provider in self.providers:
-            if provider.name == provider_name:
-                new_event = provider.add_event(event_data, self)
-                if new_event:
-                    if 'provider' not in new_event: new_event['provider'] = provider_name
-                    cal_id = new_event.get('calendarId')
-                    if cal_id:
-                        all_calendars = self.get_all_calendars(fetch_if_empty=False)
-                        cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
-                        default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
-                        new_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                    start_str = new_event['start'].get('date') or new_event['start'].get('dateTime')[:10]
-                    event_date = datetime.date.fromisoformat(start_str)
-                    cache_key = (event_date.year, event_date.month)
-                    if cache_key in self.event_cache:
-                        self.event_cache[cache_key].append(new_event)
-                    else:
-                        self.event_cache[cache_key] = [new_event]
-                    self.data_updated.emit(event_date.year, event_date.month)
-                    return True
-        return False
     
     def update_event(self, event_data):
-        provider_name = event_data.get('provider')
-        for provider in self.providers:
-            if provider.name == provider_name:
-                updated_event = provider.update_event(event_data, self)
-                if updated_event:
-                    if 'provider' not in updated_event: updated_event['provider'] = provider_name
-                    cal_id = updated_event.get('calendarId')
-                    if cal_id:
-                        all_calendars = self.get_all_calendars(fetch_if_empty=False)
-                        cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
-                        default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
-                        updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
-                    start_str = updated_event['start'].get('date') or updated_event['start'].get('dateTime')[:10]
-                    event_date = datetime.date.fromisoformat(start_str)
-                    cache_key = (event_date.year, event_date.month)
-                    if cache_key in self.event_cache:
-                        event_id = updated_event.get('id')
-                        self.event_cache[cache_key] = [e for e in self.event_cache[cache_key] if e.get('id') != event_id]
-                        self.event_cache[cache_key].append(updated_event)
-                    else:
-                        self.event_cache[cache_key] = [updated_event]
-                    self.data_updated.emit(event_date.year, event_date.month)
-                    return True
-        return False
+        """Local-first event update: UI 즉시 업데이트 → 백그라운드 동기화"""
+        # Check if calendar has changed (move operation needed)
+        original_calendar_id = event_data.get('originalCalendarId')
+        original_provider = event_data.get('originalProvider')
+        new_calendar_id = event_data.get('calendarId')
+        new_provider = event_data.get('provider')
+        
+        # If calendar changed, perform move operation (already local-first via add_event and delete_event)
+        if (original_calendar_id and original_provider and 
+            (original_calendar_id != new_calendar_id or original_provider != new_provider)):
+            
+            # Delete from original location
+            original_event_data = {
+                'calendarId': original_calendar_id,
+                'provider': original_provider,
+                'body': event_data.get('body', {})
+            }
+            self.delete_event(original_event_data)
+            
+            # Add to new location (remove original tracking info)
+            new_event_data = event_data.copy()
+            new_event_data.pop('originalCalendarId', None)
+            new_event_data.pop('originalProvider', None)
+            return self.add_event(new_event_data)
+        
+        # Otherwise, local-first normal update
+        event_body = event_data.get('body', {})
+        event_id = event_body.get('id')
+        
+        # 1. 즉시 로컬 캐시에서 기존 이벤트 찾기 및 백업
+        original_event, cache_key = self._find_and_backup_event(event_id)
+        if not original_event:
+            return False  # 이벤트를 찾을 수 없음
+        
+        # 2. 즉시 optimistic 업데이트 적용
+        updated_event = self._create_optimistic_updated_event(original_event, event_data)
+        self._replace_event_in_cache(event_id, updated_event, cache_key)
+        
+        # 3. 즉시 UI 업데이트
+        year, month = cache_key
+        self.data_updated.emit(year, month)
+        
+        # 4. 백그라운드에서 원격 동기화
+        self._queue_remote_update_event(event_data, updated_event, original_event)
+        
+        return True
+    
+    def _find_and_backup_event(self, event_id):
+        """이벤트 ID로 캐시에서 이벤트 찾기 및 백업"""
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if event.get('id') == event_id:
+                    # 백업본 생성 (롤백용)
+                    backup_event = event.copy()
+                    return backup_event, cache_key
+        return None, None
+    
+    def _create_optimistic_updated_event(self, original_event, event_data):
+        """기존 이벤트를 업데이트된 내용으로 즉시 수정"""
+        updated_event = original_event.copy()
+        
+        # 새로운 데이터로 업데이트
+        event_body = event_data.get('body', {})
+        updated_event.update(event_body)
+        
+        # 메타 정보 추가
+        updated_event['calendarId'] = event_data.get('calendarId')
+        updated_event['provider'] = event_data.get('provider')
+        updated_event['_sync_state'] = 'pending'
+        
+        # 색상 정보 재설정
+        cal_id = updated_event.get('calendarId')
+        if cal_id:
+            all_calendars = self.get_all_calendars(fetch_if_empty=False)
+            cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+            default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
+            updated_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+        
+        return updated_event
+    
+    def _replace_event_in_cache(self, event_id, updated_event, cache_key):
+        """캐시에서 이벤트 교체"""
+        if cache_key in self.event_cache:
+            events = self.event_cache[cache_key]
+            for i, event in enumerate(events):
+                if event.get('id') == event_id:
+                    events[i] = updated_event
+                    break
+    
+    def _queue_remote_update_event(self, event_data, updated_event, original_event):
+        """백그라운드에서 원격 업데이트 동기화"""
+        class RemoteUpdateTask(QRunnable):
+            def __init__(self, data_manager, event_data, updated_event, original_event):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.updated_event = updated_event
+                self.original_event = original_event
+                
+            def run(self):
+                provider_name = self.event_data.get('provider')
+                event_id = self.updated_event['id']
+                
+                for provider in self.data_manager.providers:
+                    if provider.name == provider_name:
+                        try:
+                            # 실제 원격 API 호출
+                            real_updated_event = provider.update_event(self.event_data, self.data_manager)
+                            if real_updated_event:
+                                # 성공: 동기화 상태 업데이트
+                                self.data_manager._mark_event_sync_success(event_id, real_updated_event, provider_name)
+                            else:
+                                # 실패: 원본 이벤트로 롤백
+                                self.data_manager._rollback_failed_update(event_id, self.original_event, "원격 업데이트 실패")
+                        except Exception as e:
+                            logger.error(f"원격 이벤트 업데이트 실패: {e}")
+                            self.data_manager._rollback_failed_update(event_id, self.original_event, str(e))
+                        break
+        
+        # 백그라운드 스레드에서 실행
+        task = RemoteUpdateTask(self, event_data, updated_event, original_event)
+        QThreadPool.globalInstance().start(task)
+    
+    def _mark_event_sync_success(self, event_id, real_event, provider_name):
+        """이벤트 동기화 성공 처리"""
+        if 'provider' not in real_event:
+            real_event['provider'] = provider_name
+        
+        # 색상 정보 추가
+        cal_id = real_event.get('calendarId')
+        if cal_id:
+            all_calendars = self.get_all_calendars(fetch_if_empty=False)
+            cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+            default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
+            real_event['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+        
+        real_event['_sync_state'] = 'synced'
+        
+        # 캐시에서 이벤트 교체
+        for cache_key, events in self.event_cache.items():
+            for i, event in enumerate(events):
+                if event.get('id') == event_id:
+                    events[i] = real_event
+                    # UI 업데이트
+                    year, month = cache_key
+                    self.data_updated.emit(year, month)
+                    return
+    
+    def _rollback_failed_update(self, event_id, original_event, error_msg):
+        """업데이트 실패 시 롤백"""
+        original_event['_sync_state'] = 'failed'
+        original_event['_sync_error'] = error_msg
+        
+        # 캐시에서 원본 이벤트로 복원
+        for cache_key, events in self.event_cache.items():
+            for i, event in enumerate(events):
+                if event.get('id') == event_id:
+                    events[i] = original_event
+                    # UI 업데이트하여 롤백 상태 표시
+                    year, month = cache_key
+                    self.data_updated.emit(year, month)
+                    return
 
 # data_manager.py 파일의 DataManager 클래스 내부
 

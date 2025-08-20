@@ -28,12 +28,12 @@
     "all_day_notification_time": "09:00",
     "geometry": [
         1232,
-        99,
+        0,
         687,
         660
     ],
     "gemini_api_key": "AIzaSyBNGWOIvVTTYP4GLroRNN9gFMduWiZhsFs",
-    "last_selected_calendar_id": "thejurio@gmail.com",
+    "last_selected_calendar_id": "local_calendar",
     "unlock_key": "control",
-    "ai_add_event_hotkey": "Alt + F11"
+    "ai_add_event_hotkey": "Ctrl + K"
 }

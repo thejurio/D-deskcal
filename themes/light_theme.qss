@@ -261,6 +261,13 @@ QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
     border-right: 1px solid #E0E0E0;
     border-bottom: 1px solid #E0E0E0;
 }
+
+/* Today's date highlighting */
+#calendar_grid DayCellWidget[isToday="true"] {
+    background-color: rgba(0, 120, 215, 51);
+    border-radius: 5px;
+    border: none;
+}
 #calendar_grid {
     border-left: 1px solid #E0E0E0;
     border-top: 1px solid #E0E0E0;

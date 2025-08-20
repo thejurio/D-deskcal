@@ -79,6 +79,14 @@ class EventEditorWindow(BaseDialog):
         self.custom_rrule = None
         self.data_manager = data_manager
         self.initial_completed_state = False
+        
+        # Track original calendar info for move detection
+        if isinstance(data, dict):
+            self.original_calendar_id = data.get('calendarId')
+            self.original_provider = data.get('provider')
+        else:
+            self.original_calendar_id = None
+            self.original_provider = None
 
         self.setWindowTitle("일정 추가" if self.mode == 'new' else "일정 수정")
         self.setMinimumWidth(450)
@@ -456,4 +464,11 @@ class EventEditorWindow(BaseDialog):
         elif self.calendar_combo.currentData()['provider'] == LOCAL_CALENDAR_PROVIDER_NAME:
             event_body['id'] = str(uuid.uuid4())
         selected_calendar_data = self.calendar_combo.currentData()
-        return {'calendarId': selected_calendar_data['id'], 'provider': selected_calendar_data['provider'], 'body': event_body}
+        result = {'calendarId': selected_calendar_data['id'], 'provider': selected_calendar_data['provider'], 'body': event_body}
+        
+        # Add original calendar info for move detection
+        if self.mode == 'edit' and self.original_calendar_id and self.original_provider:
+            result['originalCalendarId'] = self.original_calendar_id
+            result['originalProvider'] = self.original_provider
+            
+        return result

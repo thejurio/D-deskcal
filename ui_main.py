@@ -10,7 +10,7 @@ if sys.platform == "win32":
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout,
                              QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QEvent
 from PyQt6.QtGui import QAction, QIcon
 
 import keyboard
@@ -90,6 +90,10 @@ class MainWidget(QWidget):
             QTimer.singleShot(100, self.force_set_desktop_widget_mode)
 
     def check_lock_status(self):
+        # Skip lock status checking when a dialog is active
+        if self.active_dialog is not None:
+            return
+            
         if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
             if not self._interaction_unlocked:
                 self.unlock_interactions()
@@ -171,6 +175,19 @@ class MainWidget(QWidget):
         except Exception as e:
             print(f"바탕화면 위젯 동작 설정 실패: {e}")
     
+    def focusInEvent(self, event):
+        """메인 윈도우가 포커스를 받을 때 항상 최하위로 보냄"""
+        super().focusInEvent(event)
+        # Always keep main window at desktop level
+        QTimer.singleShot(0, self.force_set_desktop_widget_mode)
+    
+    def changeEvent(self, event):
+        """메인 윈도우 상태 변경 시 항상 최하위 유지"""
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange or event.type() == QEvent.Type.ActivationChange:
+            # Always keep main window at desktop level
+            QTimer.singleShot(0, self.force_set_desktop_widget_mode)
+    
 
     def is_interaction_unlocked(self):
         if not self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED):
@@ -196,7 +213,9 @@ class MainWidget(QWidget):
                     hwnd = self.winId()
                     ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
                     win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style & ~win32con.WS_EX_TRANSPARENT)
-                    self.activateWindow()
+                    # Don't activate main window - keep it at desktop level
+                    # Force it back to bottom after unlocking interactions
+                    QTimer.singleShot(0, self.force_set_desktop_widget_mode)
                 except Exception as e:
                     print(f"Unlock interactions error: {e}")
 
@@ -207,6 +226,8 @@ class MainWidget(QWidget):
         else:
             self.unlock_interactions()
         self.update_lock_icon()
+        # Ensure main window stays at desktop level
+        QTimer.singleShot(100, self.force_set_desktop_widget_mode)
 
     def toggle_lock_mode(self):
         is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
@@ -402,7 +423,8 @@ class MainWidget(QWidget):
 
     def show_window(self):
         self.show()
-        self.activateWindow()
+        # Don't activate main window - keep it at desktop level
+        QTimer.singleShot(0, self.force_set_desktop_widget_mode)
 
     def _get_dialog_pos(self):
         screen = QApplication.screenAt(self.pos())
@@ -527,7 +549,7 @@ class MainWidget(QWidget):
         with self.data_manager.user_action_priority():
             original_settings_snapshot = copy.deepcopy(self.settings)
 
-            settings_dialog = SettingsWindow(self.data_manager, self.settings, self, pos=self._get_dialog_pos())
+            settings_dialog = SettingsWindow(self.data_manager, self.settings, None, pos=self._get_dialog_pos())
             self.active_dialog = settings_dialog
 
             settings_dialog.transparency_changed.connect(self.apply_background_opacity)
@@ -582,7 +604,7 @@ class MainWidget(QWidget):
         if not self.is_interaction_unlocked():
             return
 
-        input_dialog = AIEventInputDialog(self, self.settings, pos=self._get_dialog_pos())
+        input_dialog = AIEventInputDialog(None, self.settings, pos=self._get_dialog_pos())
         if not input_dialog.exec():
             return
 
@@ -605,7 +627,7 @@ class MainWidget(QWidget):
                 self.show_error_message("텍스트에서 유효한 일정 정보를 찾지 못했습니다.")
                 return
 
-            confirmation_dialog = AIConfirmationDialog(parsed_events, self.data_manager, self, self.settings, pos=self._get_dialog_pos())
+            confirmation_dialog = AIConfirmationDialog(parsed_events, self.data_manager, None, self.settings, pos=self._get_dialog_pos())
             if confirmation_dialog.exec():
                 final_events, calendar_id, provider_name = confirmation_dialog.get_final_events_and_calendar()
 
@@ -708,9 +730,9 @@ class MainWidget(QWidget):
             editor = None
             cursor_pos = self._get_dialog_pos()
             if isinstance(data, (datetime.date, datetime.datetime)):
-                editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
+                editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=None, pos=cursor_pos, data_manager=self.data_manager)
             elif isinstance(data, dict):
-                editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=self, pos=cursor_pos, data_manager=self.data_manager)
+                editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=None, pos=cursor_pos, data_manager=self.data_manager)
 
             if editor:
                 self.active_dialog = editor
@@ -726,7 +748,6 @@ class MainWidget(QWidget):
                     if editor.mode == 'new':
                         self.data_manager.add_event(event_data)
                     else:
-
                         self.data_manager.update_event(event_data)
 
                     self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
@@ -758,7 +779,7 @@ class MainWidget(QWidget):
             )
         else:
             dialog = CustomMessageBox(
-                parent=self,
+                parent=None,
                 title=title,
                 text=message,
                 settings=self.settings,
