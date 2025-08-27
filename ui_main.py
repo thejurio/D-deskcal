@@ -726,48 +726,50 @@ class MainWidget(QWidget):
         if self.active_dialog is not None:
             self.active_dialog.activateWindow()
             return
-        with self.data_manager.user_action_priority():
-            editor = None
-            cursor_pos = self._get_dialog_pos()
-            if isinstance(data, (datetime.date, datetime.datetime)):
-                editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=None, pos=cursor_pos, data_manager=self.data_manager)
-            elif isinstance(data, dict):
-                editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=None, pos=cursor_pos, data_manager=self.data_manager)
+            
+        # user_action_priority 컨텍스트에서 데드락 발생하므로 제거
+        editor = None
+        cursor_pos = self._get_dialog_pos()
+        
+        if isinstance(data, (datetime.date, datetime.datetime)):
+            editor = EventEditorWindow(mode='new', data=data, settings=self.settings, parent=None, pos=cursor_pos, data_manager=self.data_manager)
+        elif isinstance(data, dict):
+            editor = EventEditorWindow(mode='edit', data=data, settings=self.settings, parent=None, pos=cursor_pos, data_manager=self.data_manager)
 
-            if editor:
-                self.active_dialog = editor
-                result = editor.exec()
-                self.active_dialog = None
-                if result == QDialog.DialogCode.Accepted:
-                    event_data = editor.get_event_data()
-                    if not event_data.get('calendarId'):
-                        self.show_error_message("캘린더 목록이 아직 로딩되지 않았습니다. 잠시 후 다시 시도해주세요.")
-                        return
+        if editor:
+            self.active_dialog = editor
+            result = editor.exec()
+            self.active_dialog = None
+            if result == QDialog.DialogCode.Accepted:
+                event_data = editor.get_event_data()
+                if not event_data.get('calendarId'):
+                    self.show_error_message("캘린더 목록이 아직 로딩되지 않았습니다. 잠시 후 다시 시도해주세요.")
+                    return
 
-                    is_recurring = 'recurrence' in event_data.get('body', {})
-                    if editor.mode == 'new':
-                        self.data_manager.add_event(event_data)
-                    else:
-                        self.data_manager.update_event(event_data)
+                is_recurring = 'recurrence' in event_data.get('body', {})
+                if editor.mode == 'new':
+                    self.data_manager.add_event(event_data)
+                else:
+                    self.data_manager.update_event(event_data)
 
-                    self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
-                    save_settings(self.settings)
+                self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
+                save_settings(self.settings)
 
-                    if is_recurring:
-                        # --- BUG FIX ---
-                        event_body = event_data.get('body', {})
-                        start_info = event_body.get('start', {})
-                        date_str = start_info.get('dateTime', start_info.get('date'))
-                        event_date = datetime.date.fromisoformat(date_str[:10])
-                        year_to_sync = event_date.year
-                        month_to_sync = event_date.month
+                if is_recurring:
+                    # --- BUG FIX ---
+                    event_body = event_data.get('body', {})
+                    start_info = event_body.get('start', {})
+                    date_str = start_info.get('dateTime', start_info.get('date'))
+                    event_date = datetime.date.fromisoformat(date_str[:10])
+                    year_to_sync = event_date.year
+                    month_to_sync = event_date.month
 
-                        QTimer.singleShot(500, lambda: self.data_manager.force_sync_month(year_to_sync, month_to_sync))
+                    QTimer.singleShot(500, lambda: self.data_manager.force_sync_month(year_to_sync, month_to_sync))
 
-                elif result == EventEditorWindow.DeleteRole:
-                    event_to_delete = editor.get_event_data()
-                    deletion_mode = editor.get_deletion_mode() # Get the user's choice
-                    self.data_manager.delete_event(event_to_delete, deletion_mode=deletion_mode)
+            elif result == EventEditorWindow.DeleteRole:
+                event_to_delete = editor.get_event_data()
+                deletion_mode = editor.get_deletion_mode() # Get the user's choice
+                self.data_manager.delete_event(event_to_delete, deletion_mode=deletion_mode)
 
     def show_error_message(self, message, ok_only=False, title="오류"):
         if not self.is_interaction_unlocked():

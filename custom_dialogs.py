@@ -578,20 +578,10 @@ class EventPopover(BaseDialog):
     def apply_popover_opacity(self):
         if not self.settings: return
         
+        # 투명도만 적용하고 배경색/테두리는 테마 파일에서 처리
         main_opacity = self.settings.get("window_opacity", 0.95)
         popover_opacity = min(1.0, main_opacity + 0.1)
-        alpha = int(popover_opacity * 255)
-        
-        theme_name = self.settings.get("theme", "dark")
-        base_color = "30, 30, 30" if theme_name == "dark" else "250, 250, 250"
-
-        style = f"""
-            QWidget#popover_background {{
-                background-color: rgba({base_color}, {alpha});
-                border-radius: 8px;
-            }}
-        """
-        self.setStyleSheet(style)
+        self.setWindowOpacity(popover_opacity)
 
     def format_event_time(self, event_data):
         start = event_data.get('start', {})

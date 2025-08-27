@@ -138,6 +138,12 @@ QMenu::item:selected {
     color: #FFFFFF;
 }
 
+QWidget#popover_background { 
+    background-color: #FFFFFF; 
+    border: 1px solid #C0C0C0; 
+    border-radius: 8px; 
+}
+
 QCheckBox::indicator {
     width: 16px;
     height: 16px;

@@ -29,6 +29,7 @@
     QMenu::item { padding: 5px 20px; }
     QMenu::item:selected { background-color: #0078D7; }
     QMenu::separator { height: 1px; background: #5A5A5A; margin: 5px 0; }
+    QWidget#popover_background { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 8px; }
     QCheckBox::indicator {
         width: 16px;
         height: 16px;
