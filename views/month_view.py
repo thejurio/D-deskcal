@@ -138,8 +138,8 @@ class MonthViewWidget(BaseViewWidget):
         self.installEventFilter(self)  # 자기 자신도 필터링
         self.initUI()
 
-        # 데이터 갱신 연결
-        self.data_manager.event_completion_changed.connect(self.refresh)
+        # 데이터 갱신 연결 (디바운스된 스마트 업데이트 사용)
+        self.data_manager.event_completion_changed.connect(lambda: self._update_debounce_timer.start())
         self.data_manager.sync_state_changed.connect(self.on_sync_state_changed)
 
         # 페인터 렌더링 캐시
@@ -155,11 +155,85 @@ class MonthViewWidget(BaseViewWidget):
         
         # paintEvent용 마우스 추적 변수 (BaseView 팝오버 시스템 사용)
         self._current_hover_event = None
+        
+        # 팝오버 안정성을 위한 지연 타이머
+        self._leave_timer = QTimer()
+        self._leave_timer.setSingleShot(True)
+        self._leave_timer.setInterval(10)  # 10ms - 극한의 응답성
+        self._leave_timer.timeout.connect(self._delayed_hover_leave)
+        
+        # 스마트 업데이트 시스템
+        self._last_event_hash = None
+        self._is_rendering = False
+        self._pending_updates = []
+        
+        # 배치 업데이트 디바운스 시스템
+        self._update_debounce_timer = QTimer()
+        self._update_debounce_timer.setSingleShot(True)
+        self._update_debounce_timer.setInterval(50)  # 50ms 디바운스
+        self._update_debounce_timer.timeout.connect(self._debounced_smart_refresh)
 
-    # BaseView 쪽에서 호출됨
+    # BaseView 쪽에서 호출됨  
     def on_data_updated(self, year, month):
         if year == self.current_date.year and month == self.current_date.month:
-            self.refresh()
+            # 디바운스된 업데이트 사용 (짧은 시간 내 여러 신호를 하나로 합침)
+            self._update_debounce_timer.start()
+    
+    def _debounced_smart_refresh(self):
+        """디바운스된 스마트 리프레시"""
+        self.smart_refresh()
+    
+    def _calculate_events_hash(self):
+        """현재 표시할 이벤트들의 해시값 계산"""
+        all_events = self.data_manager.get_events(
+            self.current_date.year, self.current_date.month
+        )
+        selected_ids = self.main_widget.settings.get("selected_calendars", [])
+        filtered_events = [
+            e for e in all_events if (not selected_ids or e.get('calendarId') in selected_ids)
+        ]
+        
+        # 이벤트 ID와 수정 시간으로 해시 생성
+        event_signatures = []
+        for event in filtered_events:
+            signature = (
+                event.get('id', ''),
+                event.get('updated', ''),
+                event.get('summary', ''),
+                str(event.get('start', {})),
+                str(event.get('end', {})),
+                event.get('color', '')
+            )
+            event_signatures.append(signature)
+        
+        return hash(tuple(sorted(event_signatures)))
+    
+    def smart_refresh(self):
+        """스마트 업데이트: 실제 변경사항이 있을 때만 리프레시"""
+        print(f"DEBUG: smart_refresh called")
+        
+        # 팝오버가 활성화되어 있으면 업데이트 지연
+        if self.current_popover and self.current_popover.isVisible():
+            print(f"DEBUG: Popover active - delaying refresh")
+            self._pending_updates.append('refresh')
+            return
+        
+        # 렌더링 중이면 업데이트 지연  
+        if self._is_rendering:
+            print(f"DEBUG: Rendering in progress - delaying refresh")
+            self._pending_updates.append('refresh')
+            return
+            
+        current_hash = self._calculate_events_hash()
+        
+        # 해시가 같으면 변경사항 없음 - 리프레시 스킵
+        if current_hash == self._last_event_hash:
+            print(f"DEBUG: Hash unchanged - skipping refresh")
+            return
+            
+        print(f"DEBUG: Hash changed - performing refresh")
+        self._last_event_hash = current_hash
+        self.refresh()
     
     def resizeEvent(self, event):
         """리사이즈 시 실시간으로 이벤트 위치 재계산"""
@@ -204,19 +278,33 @@ class MonthViewWidget(BaseViewWidget):
     # 동기화 인디케이터
     # ---------------------------
     def on_sync_state_changed(self, is_syncing, year, month):
-        """동기화 상태 변경 시 팝오버 깜빡임 방지"""
-        if is_syncing:
-            # 동기화 시작 시 팝오버 숨기기
-            if self.current_popover:
-                self.current_popover.hide()
-            self.popover_timer.stop()
-        else:
-            # 동기화 완료 후 팝오버 복원
-            if self.current_popover:
-                self.current_popover.show()
-            # 현재 호버된 이벤트가 있으면 팝오버 다시 시작
-            if self._current_hover_event:
-                self.popover_timer.start()
+        """동기화 상태 변경 알림 (이제 동기화 일시정지는 팝오버 생성/소멸 시 처리)"""
+        pass
+    
+    def show_popover(self):
+        """팝오버 표시 시 동기화 일시정지 및 렌더링 보호"""
+        # 동기화 일시정지
+        if hasattr(self.data_manager, 'caching_manager') and hasattr(self.data_manager.caching_manager, 'pause_sync'):
+            self.data_manager.caching_manager.pause_sync()
+        
+        # 기존 BaseView의 show_popover 호출
+        super().show_popover()
+        
+        # 팝오버가 생성되었으면 close 이벤트 연결
+        if self.current_popover:
+            # 기존 close 메서드 백업하고 새로운 close 메서드로 교체
+            original_close = self.current_popover.close
+            
+            def enhanced_close():
+                original_close()
+                # 동기화 재개
+                if hasattr(self.data_manager, 'caching_manager') and hasattr(self.data_manager.caching_manager, 'resume_sync'):
+                    self.data_manager.caching_manager.resume_sync()
+                # 펜딩된 업데이트 처리
+                if self._pending_updates:
+                    QTimer.singleShot(100, self._process_pending_updates)
+            
+            self.current_popover.close = enhanced_close
                 
     # MonthViewWidget 내부에 추가
     def go_to_previous_month(self):
@@ -265,6 +353,9 @@ class MonthViewWidget(BaseViewWidget):
     def refresh(self):
         if getattr(self, "is_resizing", False):
             return
+
+        # 해시 업데이트 (실제 refresh 실행 시)
+        self._last_event_hash = self._calculate_events_hash()
 
         # 기존 그리드 제거
         if self.calendar_grid is not None:
@@ -417,6 +508,7 @@ class MonthViewWidget(BaseViewWidget):
             
         # 진행 중 플래그 설정
         self._drawing_in_progress = True
+        self._is_rendering = True
 
         # 더보기/자리 차지 위젯 초기화
         for cell in self.date_to_cell_map.values():
@@ -578,7 +670,28 @@ class MonthViewWidget(BaseViewWidget):
         
         # 진행 중 플래그 해제
         self._drawing_in_progress = False
+        self._is_rendering = False
+        
+        # 펜딩 업데이트 처리
+        if self._pending_updates:
+            QTimer.singleShot(50, self._process_pending_updates)
 
+    def _process_pending_updates(self):
+        """렌더링 완료 후 펜딩된 업데이트들 처리"""
+        if not self._pending_updates:
+            return
+            
+        # 팝오버가 여전히 활성화되어 있으면 조금 더 기다림
+        if self.current_popover and self.current_popover.isVisible():
+            QTimer.singleShot(100, self._process_pending_updates)
+            return
+        
+        updates = self._pending_updates.copy()
+        self._pending_updates.clear()
+        
+        for update in updates:
+            if update == 'refresh':
+                self.smart_refresh()
 
     # ---------------------------
     # 캡슐(좌/우 라운딩) 그리기
@@ -674,14 +787,37 @@ class MonthViewWidget(BaseViewWidget):
         ev = self.get_event_at(pos_qpoint)
         
         if ev is not None:
-            if self._current_hover_event != ev:
+            # leave 타이머 중단 (이벤트가 있으면 leave하지 않음)
+            self._leave_timer.stop()
+            
+            # 이벤트 ID로 비교 (객체 비교 대신 ID 비교로 깜빡임 방지)
+            current_id = self._current_hover_event.get('id') if self._current_hover_event and hasattr(self._current_hover_event, 'get') else None
+            new_id = ev.get('id') if hasattr(ev, 'get') else None
+            
+            if current_id != new_id:
                 self._current_hover_event = ev
-                # BaseView의 팝오버 시스템 사용
-                self.handle_hover_enter(self, ev)
+                if hasattr(ev, 'get'):
+                    # BaseView의 팝오버 시스템 사용
+                    self.handle_hover_enter(self, ev)
         else:
             if self._current_hover_event is not None:
-                self.handle_hover_leave(self)
-                self._current_hover_event = None
+                # 즉시 leave하지 않고 타이머로 지연
+                self._leave_timer.start()
+    
+    def _delayed_hover_leave(self):
+        """지연된 hover leave 처리 - 현재 마우스 위치 재확인"""
+        if self._current_hover_event is not None:
+            # 현재 마우스 위치에서 이벤트가 있는지 다시 확인
+            cursor_pos = self.mapFromGlobal(QCursor.pos())
+            ev = self.get_event_at(cursor_pos)
+            
+            if ev is not None:
+                print("DEBUG: _delayed_hover_leave - mouse still over event, keeping popover")
+                return  # 여전히 이벤트 위에 있으면 leave하지 않음
+            
+            print("DEBUG: _delayed_hover_leave - calling handle_hover_leave")
+            self.handle_hover_leave(self)
+            self._current_hover_event = None
 
     # ---------------------------
     # eventFilter: 자식들이 먹는 마우스 이동을 여기서 처리
@@ -696,8 +832,8 @@ class MonthViewWidget(BaseViewWidget):
                 self._handle_hover_at(pos_in_self)
         elif et in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
             if self._current_hover_event is not None:
-                self.handle_hover_leave(self)
-                self._current_hover_event = None
+                # 지연된 leave 처리
+                self._leave_timer.start()
         return super().eventFilter(obj, ev)
 
     # ---------------------------
