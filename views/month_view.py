@@ -148,11 +148,25 @@ class MonthViewWidget(BaseViewWidget):
         self._event_height = 18
         self._lane_spacing = 2
         self._hover_event = None
+        
+        # 무한 루프 방지를 위한 플래그
+        self._drawing_scheduled = False
+        self._drawing_in_progress = False
+        
+        # paintEvent용 마우스 추적 변수 (BaseView 팝오버 시스템 사용)
+        self._current_hover_event = None
 
     # BaseView 쪽에서 호출됨
     def on_data_updated(self, year, month):
         if year == self.current_date.year and month == self.current_date.month:
             self.refresh()
+    
+    def resizeEvent(self, event):
+        """리사이즈 시 실시간으로 이벤트 위치 재계산"""
+        super().resizeEvent(event)
+        if hasattr(self, 'date_to_cell_map') and self.date_to_cell_map:
+            # 리사이즈가 완료된 후 이벤트 다시 그리기
+            self.schedule_draw_events()
 
     # ---------------------------
     # UI 구성
@@ -190,8 +204,19 @@ class MonthViewWidget(BaseViewWidget):
     # 동기화 인디케이터
     # ---------------------------
     def on_sync_state_changed(self, is_syncing, year, month):
-        # Sync icon removed - no visual indication during sync
-        pass
+        """동기화 상태 변경 시 팝오버 깜빡임 방지"""
+        if is_syncing:
+            # 동기화 시작 시 팝오버 숨기기
+            if self.current_popover:
+                self.current_popover.hide()
+            self.popover_timer.stop()
+        else:
+            # 동기화 완료 후 팝오버 복원
+            if self.current_popover:
+                self.current_popover.show()
+            # 현재 호버된 이벤트가 있으면 팝오버 다시 시작
+            if self._current_hover_event:
+                self.popover_timer.start()
                 
     # MonthViewWidget 내부에 추가
     def go_to_previous_month(self):
@@ -369,14 +394,29 @@ class MonthViewWidget(BaseViewWidget):
         self.schedule_draw_events()
 
     def schedule_draw_events(self):
+        # 무한 루프 방지: 이미 스케줄되어 있거나 진행 중이면 무시
+        if self._drawing_scheduled or self._drawing_in_progress:
+            return
+        
+        self._drawing_scheduled = True
         QTimer.singleShot(10, self._draw_events_internal)
 
     # ---------------------------
     # 이벤트 배치 계산 + 그리기 준비
     # ---------------------------
     def _draw_events_internal(self):
+        # 플래그 초기화
+        self._drawing_scheduled = False
+        
+        # 이미 진행 중이면 무시 (재귀 방지)
+        if self._drawing_in_progress:
+            return
+            
         if not self.date_to_cell_map:
             return
+            
+        # 진행 중 플래그 설정
+        self._drawing_in_progress = True
 
         # 더보기/자리 차지 위젯 초기화
         for cell in self.date_to_cell_map.values():
@@ -535,6 +575,9 @@ class MonthViewWidget(BaseViewWidget):
                     first_visible_run = False
 
         self.update()  # paintEvent 트리거
+        
+        # 진행 중 플래그 해제
+        self._drawing_in_progress = False
 
 
     # ---------------------------
@@ -581,46 +624,64 @@ class MonthViewWidget(BaseViewWidget):
 
 
     # ---------------------------
-    # 히트 테스트
+    # 개선된 히트 테스트
     # ---------------------------
     def get_event_at(self, pos):
+        """위치에서 이벤트 찾기 - 성능과 정확도 개선"""
         # QPoint -> QPointF 변환
         if isinstance(pos, QPoint):
             pos = QPointF(pos)
         
-        # 더 정확한 히트 테스트를 위해 여러 방법 시도
-        found_events = []
-        
-        # 방법 1: 기존 방식
+        # _render_boxes가 없으면 None 반환
+        if not hasattr(self, '_render_boxes') or not self._render_boxes:
+            return None
+            
+        # 역순으로 검사 (위쪽 레이어부터)
         for item in reversed(self._render_boxes):
-            if item['rect'].contains(pos):
+            rect = item['rect']
+            
+            # 기본 히트 테스트
+            if rect.contains(pos):
+                return item['event']
+        
+        # 정확한 히트가 없으면 약간의 마진을 두고 재검사
+        margin = 3.0  # 3픽셀 마진 (터치 친화적)
+        for item in reversed(self._render_boxes):
+            rect = item['rect']
+            expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
+            if expanded_rect.contains(pos):
+                return item['event']
+        
+        return None
+    
+    def get_events_in_area(self, rect_area):
+        """특정 영역 내의 모든 이벤트 찾기 (다중 선택용)"""
+        if not hasattr(self, '_render_boxes') or not self._render_boxes:
+            return []
+            
+        found_events = []
+        for item in self._render_boxes:
+            if rect_area.intersects(item['rect']):
                 found_events.append(item['event'])
         
-        # 방법 2: 약간의 마진을 두고 검사 (터치 영역 확대)
-        if not found_events:
-            margin = 2.0  # 2픽셀 마진
-            expanded_pos = QPointF(pos.x(), pos.y())
-            for item in reversed(self._render_boxes):
-                rect = item['rect']
-                expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
-                if expanded_rect.contains(expanded_pos):
-                    found_events.append(item['event'])
-        
-        return found_events[0] if found_events else None
+        return found_events
 
     # ---------------------------
-    # 팝오버 처리(공통)
+    # 팝오버 처리 (BaseView 시스템 사용)
     # ---------------------------
     def _handle_hover_at(self, pos_qpoint):
+        """마우스 위치에서 이벤트를 찾아서 BaseView 팝오버 시스템에 전달"""
         ev = self.get_event_at(pos_qpoint)
+        
         if ev is not None:
-            if self._hover_event != ev:
-                self._hover_event = ev
-                self.handle_hover_enter(self, ev)  # BaseView 공용 팝오버
+            if self._current_hover_event != ev:
+                self._current_hover_event = ev
+                # BaseView의 팝오버 시스템 사용
+                self.handle_hover_enter(self, ev)
         else:
-            if self._hover_event is not None:
+            if self._current_hover_event is not None:
                 self.handle_hover_leave(self)
-                self._hover_event = None
+                self._current_hover_event = None
 
     # ---------------------------
     # eventFilter: 자식들이 먹는 마우스 이동을 여기서 처리
@@ -634,9 +695,9 @@ class MonthViewWidget(BaseViewWidget):
                 pos_in_self = obj.mapTo(self, QPoint(int(localf.x()), int(localf.y())))
                 self._handle_hover_at(pos_in_self)
         elif et in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
-            if self._hover_event is not None:
+            if self._current_hover_event is not None:
                 self.handle_hover_leave(self)
-                self._hover_event = None
+                self._current_hover_event = None
         return super().eventFilter(obj, ev)
 
     # ---------------------------
@@ -644,7 +705,10 @@ class MonthViewWidget(BaseViewWidget):
     # ---------------------------
     def mouseMoveEvent(self, event):
         # 부모 자신 위에서 움직일 때도 동작
-        self._handle_hover_at(event.position())
+        pos = event.position()
+        if isinstance(pos, QPointF):
+            pos = QPoint(int(pos.x()), int(pos.y()))
+        self._handle_hover_at(pos)
         super().mouseMoveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
