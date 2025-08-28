@@ -3,7 +3,9 @@ import datetime
 import json
 import time
 import sqlite3
+import uuid
 import logging
+import calendar
 from collections import deque, OrderedDict
 from contextlib import contextmanager
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -87,6 +89,7 @@ class CachingManager(QObject):
         self._resume_condition = QWaitCondition()
 
     def request_caching_around(self, year, month):
+        """슬라이딩 윈도우 기반 캐싱 요청: 중앙달 기준 우선순위로 캐싱"""
         with QMutexLocker(self._mutex):
             self._last_viewed_month = (year, month)
             current_month_task = ('month', (year, month))
@@ -95,20 +98,32 @@ class CachingManager(QObject):
             self._task_queue.interrupt_and_add_high_priority(current_month_task)
             logger.info(f"P1 작업 설정: {year}년 {month}월 즉시 동기화")
 
-            # 2. 주변 월을 P2, P3 우선순위로 추가
-            base_date = datetime.date(year, month, 15)
-            # P2: M-1, M+1
-            for days in [-31, 31]:
-                task_data = self._get_month_tuple(base_date, days)
-                if task_data[1] not in self.data_manager.event_cache:
-                    self._task_queue.add_task(2, task_data)
-            # P3: M-2, M+2
-            for days in [-62, 62]:
-                task_data = self._get_month_tuple(base_date, days)
-                if task_data[1] not in self.data_manager.event_cache:
-                    self._task_queue.add_task(3, task_data)
+            # 2. 13개월 슬라이딩 윈도우 계산
+            window_months = self._calculate_sliding_window(year, month, 6)
+            
+            # 3. 현재 캐시되지 않은 월들만 필터링
+            uncached_months = []
+            for window_month in window_months:
+                if window_month != (year, month) and window_month not in self.data_manager.event_cache:
+                    uncached_months.append(window_month)
+            
+            # 4. 중앙달과의 거리에 따라 우선순위 정렬
+            priority_months = self._get_cache_priority_order(year, month, uncached_months)
+            
+            # 5. 거리별 우선순위 할당 및 큐에 추가
+            for idx, month_tuple in enumerate(priority_months):
+                # P2: 가까운 6개월 (거리 1-6)
+                # P3: 먼 6개월 (거리 7+)
+                priority = 2 if idx < 6 else 3
+                task_data = ('month', month_tuple)
+                
+                added = self._task_queue.add_task(priority, task_data)
+                if added:
+                    distance = abs((month_tuple[0] - year) * 12 + (month_tuple[1] - month))
+                    logger.info(f"P{priority} 캐싱 대기열 추가: {month_tuple[0]}년 {month_tuple[1]}월 (거리: {distance})")
 
-            logger.info(f"새로운 캐싱 계획 수립: {year}년 {month}월 주변. 대기열: {len(self._task_queue)}개")
+            logger.info(f"슬라이딩 윈도우 캐싱 계획: 중심 {year}년 {month}월, "
+                       f"윈도우 {len(window_months)}개월, 대기열 {len(priority_months)}개")
 
     def request_current_month_sync(self):
         with QMutexLocker(self._mutex):
@@ -154,7 +169,7 @@ class CachingManager(QObject):
                         self.data_manager._save_month_to_cache_db(year, month, events)
                         self.data_manager.data_updated.emit(year, month)
                         if not is_p1_task:
-                            self._manage_cache_size()
+                            self._manage_sliding_window_cache()
                     
                     # DataManager를 통해 동기화 상태 알림
                     self.data_manager.set_sync_state(False, year, month)
@@ -165,33 +180,76 @@ class CachingManager(QObject):
         logger.info("지능형 캐싱 매니저 스레드가 종료되었습니다.")
         self.finished.emit()
 
-    def _manage_cache_size(self):
+    def _manage_sliding_window_cache(self):
+        """슬라이딩 윈도우 캐시 관리: 현재 뷰 중심 ±6개월 (총 13개월) 유지"""
         with QMutexLocker(self._mutex):
+            if self._last_viewed_month is None:
+                return
+                
+            # 오늘 날짜와 현재 뷰 월
             today = datetime.date.today()
-            current_month = (today.year, today.month)
-
-            protected_months = {current_month}
-            if self._last_viewed_month:
-                protected_months.add(self._last_viewed_month)
-
-            base_date = today.replace(day=15)
-            for i in range(1, 3): # 현재 기준 M+-2 보호
-                protected_months.add((base_date + datetime.timedelta(days=i*31)).timetuple()[:2])
-                protected_months.add((base_date - datetime.timedelta(days=i*31)).timetuple()[:2])
-
-            while len(self.data_manager.event_cache) > MAX_CACHE_SIZE:
-                if self._last_viewed_month is None: break
-
-                candidates = {
-                    month: abs((month[0] - self._last_viewed_month[0]) * 12 + (month[1] - self._last_viewed_month[1]))
-                    for month in self.data_manager.event_cache.keys() if month not in protected_months
-                }
-                if not candidates: break
-
-                farthest_month = max(candidates, key=candidates.get)
-                logger.info(f"월간 캐시 용량 초과. 가장 먼 항목 제거: {farthest_month}")
-                del self.data_manager.event_cache[farthest_month]
-                self.data_manager._remove_month_from_cache_db(farthest_month[0], farthest_month[1])
+            today_month = (today.year, today.month)
+            view_year, view_month = self._last_viewed_month
+            
+            # 13개월 슬라이딩 윈도우 계산 (현재 뷰 ±6개월)
+            window_months = self._calculate_sliding_window(view_year, view_month, 6)
+            
+            # 오늘 달은 절대 삭제 금지 (윈도우에 없어도 보호)
+            protected_months = {today_month}
+            
+            # 현재 캐시에서 윈도우 밖의 달들 찾기
+            cached_months = set(self.data_manager.event_cache.keys())
+            months_to_remove = cached_months - set(window_months) - protected_months
+            
+            # 윈도우 밖의 달들 삭제 (오늘 달 보호)
+            for month_to_remove in months_to_remove:
+                # 오늘 달이면 절대 삭제하지 않음 (double-check)
+                if month_to_remove == today_month:
+                    logger.info(f"오늘 달 삭제 방지: {month_to_remove} (윈도우 밖이지만 보호됨)")
+                    continue
+                    
+                logger.info(f"슬라이딩 윈도우 밖 월 삭제: {month_to_remove}")
+                del self.data_manager.event_cache[month_to_remove]
+                self.data_manager._remove_month_from_cache_db(month_to_remove[0], month_to_remove[1])
+            
+            logger.info(f"슬라이딩 윈도우 중심: {view_year}년 {view_month}월, 윈도우 크기: {len(window_months)}개월")
+    
+    def _calculate_sliding_window(self, center_year, center_month, radius):
+        """중심 월을 기준으로 ±radius 개월의 슬라이딩 윈도우 계산"""
+        window_months = []
+        
+        # 중심 월을 datetime으로 변환
+        center_date = datetime.date(center_year, center_month, 15)
+        
+        # 중심 기준 ±radius 개월 계산
+        for offset in range(-radius, radius + 1):
+            target_year = center_year
+            target_month = center_month + offset
+            
+            # 월 경계 처리
+            while target_month <= 0:
+                target_month += 12
+                target_year -= 1
+            while target_month > 12:
+                target_month -= 12
+                target_year += 1
+                
+            window_months.append((target_year, target_month))
+        
+        return sorted(set(window_months))  # 중복 제거 및 정렬
+    
+    def _get_cache_priority_order(self, center_year, center_month, months_list):
+        """중앙달과 가까운 순서로 정렬한 우선순위 리스트 반환"""
+        priority_list = []
+        
+        for year, month in months_list:
+            # 중앙달과의 거리 계산 (월 단위)
+            distance = abs((year - center_year) * 12 + (month - center_month))
+            priority_list.append((distance, (year, month)))
+        
+        # 거리순으로 정렬 (가까운 것부터)
+        priority_list.sort()
+        return [month_tuple for _, month_tuple in priority_list]
 
     def pause_sync(self):
         self._activity_lock.lock()
@@ -261,6 +319,10 @@ class DataManager(QObject):
         self.event_cache = {}
         self.completed_event_ids = set()
         self.notified_event_ids = set()
+        
+        # [추가] 로컬-퍼스트 삭제 추적: 백그라운드 삭제 중인 이벤트 ID 추적
+        self.pending_deletion_ids = set()  # 현재 삭제 중인 이벤트 ID들
+        self.batch_deletion_mode = False  # 배치 삭제 모드 플래그
         
         self.calendar_list_cache = None
         self._default_color_map_cache = None
@@ -509,12 +571,28 @@ class DataManager(QObject):
                 # data_manager 자신을 provider에 넘겨주어 오류 보고가 가능하도록 함
                 events = provider.get_events(start_date, end_date, self)
                 if events is not None:
+                    filtered_events = []
                     for event in events:
+                        event_id = event.get('id')
+                        
+                        # [추가] 삭제 대기 중인 이벤트는 provider에서 가져와도 무시
+                        if event_id in self.pending_deletion_ids:
+                            print(f"[DELETE DEBUG] Filtered out pending deletion event from provider: {event_id}")
+                            continue
+                        
+                        # 반복일정인 경우 마스터 ID도 확인
+                        recurring_event_id = event.get('recurringEventId')
+                        if recurring_event_id and recurring_event_id in self.pending_deletion_ids:
+                            print(f"[DELETE DEBUG] Filtered out recurring instance of pending deletion master from provider: {recurring_event_id}")
+                            continue
+                        
                         cal_id = event.get('calendarId')
                         if cal_id:
                             default_color = default_color_map.get(cal_id, DEFAULT_EVENT_COLOR)
                             event['color'] = custom_colors.get(cal_id, default_color)
-                    all_events.extend(events)
+                        filtered_events.append(event)
+                    
+                    all_events.extend(filtered_events)
             except Exception as e:
                 msg = f"'{type(provider).__name__}'에서 이벤트를 가져오는 중 오류가 발생했습니다."
                 logger.error(msg, exc_info=True)
@@ -561,7 +639,12 @@ class DataManager(QObject):
                     if 'date' in end_info:
                         event_end_date -= datetime.timedelta(days=1)
                     if not (event_end_date < start_date or event_start_date > end_date):
-                        all_events.append(event)
+                        # [추가] 삭제 대기 중인 이벤트는 제외
+                        event_id = event.get('id')
+                        if event_id not in self.pending_deletion_ids:
+                            all_events.append(event)
+                        else:
+                            logger.info(f"[DELETE DEBUG] Filtered out pending deletion event: {event_id}")
                 except (ValueError, TypeError) as e:
                     logger.warning(f"이벤트 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
                     continue
@@ -612,9 +695,9 @@ class DataManager(QObject):
         self.calendar_list_changed.emit()
 
     def add_event(self, event_data):
-        """Local-first event addition: UI 즉시 업데이트 → 백그라운드 동기화"""
+        """Enhanced Local-first event addition with recurring events support"""
         provider_name = event_data.get('provider')
-        logger.info(f"Local-first add_event 시작: provider={provider_name}")
+        logger.info(f"Enhanced Local-first add_event 시작: provider={provider_name}")
         
         # Provider 존재 확인
         found_provider = None
@@ -627,9 +710,22 @@ class DataManager(QObject):
             logger.warning(f"Provider '{provider_name}' not found. Available providers: {[p.name for p in self.providers]}")
             return False
         
+        # 반복 일정 확인 및 처리
+        event_body = event_data.get('body', {})
+        recurrence = event_body.get('recurrence', [])
+        
+        if recurrence and len(recurrence) > 0:
+            # 반복 일정의 Local-First 처리
+            return self._add_recurring_event_local_first(event_data, recurrence[0])
+        else:
+            # 단일 이벤트의 기존 Local-First 처리
+            return self._add_single_event_local_first(event_data)
+        
+    def _add_single_event_local_first(self, event_data):
+        """단일 이벤트의 Local-First 추가 (기존 로직)"""
         # 1. 즉시 optimistic event 생성
         optimistic_event = self._create_optimistic_event(event_data)
-        logger.info(f"Optimistic event 생성: id={optimistic_event.get('id')}")
+        logger.info(f"Single optimistic event 생성: id={optimistic_event.get('id')}")
         
         # 2. 즉시 로컬 캐시 업데이트
         event_date = self._get_event_date(optimistic_event)
@@ -644,6 +740,198 @@ class DataManager(QObject):
         self._queue_remote_add_event(event_data, optimistic_event)
         
         return True
+    
+    def _add_recurring_event_local_first(self, event_data, rrule_string):
+        """반복 일정의 Local-First 추가 - 모든 인스턴스 즉시 생성"""
+        try:
+            from rrule_parser import RRuleParser
+            from dateutil import parser as dateutil_parser
+            
+            event_body = event_data.get('body', {})
+            
+            # 시작 날짜 파싱
+            start_info = event_body.get('start', {})
+            if 'dateTime' in start_info:
+                start_datetime = dateutil_parser.parse(start_info['dateTime'])
+            elif 'date' in start_info:
+                date_str = start_info['date']
+                start_datetime = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+            else:
+                logger.error("Invalid start datetime in recurring event")
+                return False
+            
+            # RRULE 파싱하여 모든 반복 날짜 계산
+            rrule_parser = RRuleParser()
+            recurring_dates = rrule_parser.parse_google_rrule(
+                rrule_string, start_datetime, max_instances=50
+            )
+            
+            logger.info(f"Recurring event: generated {len(recurring_dates)} instances")
+            
+            # 모든 반복 인스턴스 생성 및 즉시 캐시에 추가
+            affected_months = set()
+            instances_added = 0
+            
+            # 모든 인스턴스에서 사용할 공통 base_id 생성
+            import uuid
+            base_id = event_body.get('id', 'unknown')
+            if base_id == 'unknown':
+                base_id = uuid.uuid4().hex[:8]
+            
+            logger.info(f"[RECURRING CREATE] Using common base_id: {base_id} for {len(recurring_dates)} instances")
+            
+            for i, recurring_date in enumerate(recurring_dates):
+                # 반복 인스턴스 생성 (공통 base_id 사용)
+                instance = self._create_recurring_instance(event_body, recurring_date, i, base_id)
+                
+                # Optimistic 이벤트로 변환
+                optimistic_instance = self._create_optimistic_event_from_instance(event_data, instance)
+                
+                # 캐시에 추가 (중복 방지)
+                instance_date = self._get_event_date(optimistic_instance)
+                if instance_date:
+                    cache_key = (instance_date.year, instance_date.month)
+                    affected_months.add(cache_key)
+                    
+                    if cache_key not in self.event_cache:
+                        self.event_cache[cache_key] = []
+                    
+                    # 중복 체크: 동일한 ID의 이벤트가 이미 존재하는지 확인
+                    instance_id = optimistic_instance.get('id')
+                    existing_event = next((e for e in self.event_cache[cache_key] if e.get('id') == instance_id), None)
+                    
+                    if not existing_event:
+                        self.event_cache[cache_key].append(optimistic_instance)
+                        instances_added += 1
+                    else:
+                        logger.warning(f"Duplicate recurring instance prevented: {instance_id}")
+            
+            # 영향받는 모든 월에 대해 중복 정리 및 UI 업데이트
+            for year, month in affected_months:
+                cache_key = (year, month)
+                self._cleanup_duplicate_events(cache_key)
+                self.data_updated.emit(year, month)
+                logger.info(f"UI 업데이트 시그널 발신: {year}-{month}")
+            
+            # 백그라운드에서 원격 동기화 (첫 번째 인스턴스 사용)
+            if instances_added > 0:
+                # 첫 번째 생성된 인스턴스를 가져와서 원격 동기화에 사용
+                first_instance = None
+                for cache_key, events in self.event_cache.items():
+                    for event in events:
+                        if (event.get('_is_recurring_instance') and 
+                            event.get('_instance_index') == 0 and
+                            event.get('_sync_state') == 'pending'):
+                            first_instance = event
+                            break
+                    if first_instance:
+                        break
+                
+                if first_instance:
+                    # 반복일정임을 표시하여 특별한 처리
+                    first_instance['_is_recurring_master'] = True
+                    self._queue_remote_add_recurring_event(event_data, first_instance)
+            
+            logger.info(f"Successfully added {instances_added} recurring instances to cache")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to add recurring event: {e}")
+            return False
+    
+    def _create_recurring_instance(self, base_event, recurring_date, index, base_id=None):
+        """기본 이벤트에서 반복 인스턴스 생성"""
+        import uuid
+        
+        instance = base_event.copy()
+        
+        # 고유 ID 생성 (안전하게) - base_id가 제공되지 않은 경우에만 생성
+        if base_id is None:
+            base_id = base_event.get('id', 'unknown')
+            if base_id == 'unknown':
+                base_id = uuid.uuid4().hex[:8]
+        instance['id'] = f"temp_recurring_{base_id}_{index}"
+        
+        # 원본 시작/종료 시간 파싱
+        original_start = self._parse_event_datetime(base_event.get('start', {}))
+        original_end = self._parse_event_datetime(base_event.get('end', {}))
+        
+        if original_start and original_end:
+            # 이벤트 지속 시간 계산
+            duration = original_end - original_start
+            
+            # 새로운 시작/종료 시간 계산
+            new_start = recurring_date.replace(
+                hour=original_start.hour,
+                minute=original_start.minute,
+                second=original_start.second,
+                microsecond=original_start.microsecond
+            )
+            new_end = new_start + duration
+            
+            # 시작/종료 시간 설정
+            instance['start'] = self._format_event_datetime(new_start, base_event.get('start', {}))
+            instance['end'] = self._format_event_datetime(new_end, base_event.get('end', {}))
+        
+        # 반복 정보 설정
+        instance['_is_recurring_instance'] = True
+        instance['_instance_index'] = index
+        instance['_master_event_id'] = base_id
+        
+        return instance
+    
+    def _parse_event_datetime(self, datetime_obj):
+        """이벤트의 날짜/시간 파싱"""
+        try:
+            from dateutil import parser as dateutil_parser
+            if 'dateTime' in datetime_obj:
+                return dateutil_parser.parse(datetime_obj['dateTime'])
+            elif 'date' in datetime_obj:
+                date_str = datetime_obj['date']
+                return datetime.datetime.strptime(date_str, '%Y-%m-%d')
+        except Exception as e:
+            logger.warning(f"Failed to parse event datetime: {e}")
+        return None
+    
+    def _format_event_datetime(self, dt, original_format):
+        """날짜/시간을 이벤트 형식으로 포맷팅"""
+        if 'dateTime' in original_format:
+            # 시간 포함 형식
+            return {
+                'dateTime': dt.strftime('%Y-%m-%dT%H:%M:%S'),
+                'timeZone': original_format.get('timeZone', 'Asia/Seoul')
+            }
+        else:
+            # 날짜만 형식 (종일 이벤트)
+            return {
+                'date': dt.strftime('%Y-%m-%d')
+            }
+    
+    def _create_optimistic_event_from_instance(self, event_data, instance):
+        """반복 인스턴스에서 Optimistic 이벤트 생성"""
+        import uuid
+        
+        optimistic_event = instance.copy()
+        
+        # ID가 없는 경우 안전하게 생성
+        if 'id' not in optimistic_event or not optimistic_event['id']:
+            base_id = event_data.get('body', {}).get('id', 'unknown')
+            index = optimistic_event.get('_instance_index', 0)
+            optimistic_event['id'] = f"temp_recurring_{base_id}_{index}"
+        
+        # 기본 설정들
+        optimistic_event['calendarId'] = event_data.get('calendarId')
+        optimistic_event['provider'] = event_data.get('provider')
+        optimistic_event['_sync_state'] = 'pending'
+        
+        # 색상 설정
+        cal_id = optimistic_event.get('calendarId')
+        if cal_id:
+            target_color = self._get_calendar_color(cal_id)
+            if target_color:
+                optimistic_event['color'] = target_color
+        
+        return optimistic_event
         
     def _create_optimistic_event(self, event_data):
         """즉시 UI 업데이트를 위한 임시 이벤트 생성"""
@@ -695,7 +983,12 @@ class DataManager(QObject):
                 
             def run(self):
                 provider_name = self.event_data.get('provider')
-                temp_id = self.optimistic_event['id']
+                temp_id = self.optimistic_event.get('id')
+                
+                # ID가 없으면 동기화를 건너뛰고 로그만 출력
+                if not temp_id:
+                    logger.warning(f"Optimistic event has no ID, skipping remote sync")
+                    return
                 
                 for provider in self.data_manager.providers:
                     if provider.name == provider_name:
@@ -718,6 +1011,49 @@ class DataManager(QObject):
         
         # 백그라운드 스레드에서 실행
         task = RemoteAddTask(self, event_data, optimistic_event)
+        QThreadPool.globalInstance().start(task)
+    
+    def _queue_remote_add_recurring_event(self, event_data, first_instance):
+        """반복일정 전용 백그라운드 원격 동기화"""
+        class RemoteRecurringAddTask(QRunnable):
+            def __init__(self, data_manager, event_data, first_instance):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.first_instance = first_instance
+                
+            def run(self):
+                provider_name = self.event_data.get('provider')
+                temp_id = self.first_instance.get('id')
+                
+                if not temp_id:
+                    logger.warning(f"Recurring event has no ID, skipping remote sync")
+                    return
+                
+                for provider in self.data_manager.providers:
+                    if provider.name == provider_name:
+                        try:
+                            logger.info(f"원격 반복일정 API 호출 시작: provider={provider_name}, temp_id={temp_id}")
+                            # 실제 원격 API 호출
+                            real_event = provider.add_event(self.event_data, self.data_manager)
+                            if real_event:
+                                print(f"[RECURRING SYNC DEBUG] API 호출 성공: real_id={real_event.get('id')}")
+                                logger.info(f"원격 반복일정 API 호출 성공: real_id={real_event.get('id')}")
+                                print(f"[RECURRING SYNC DEBUG] Calling _replace_optimistic_recurring_events")
+                                # 성공: 모든 반복 인스턴스를 실제 이벤트 기반으로 교체
+                                self.data_manager._replace_optimistic_recurring_events(temp_id, real_event, provider_name)
+                                print(f"[RECURRING SYNC DEBUG] _replace_optimistic_recurring_events completed")
+                            else:
+                                logger.warning(f"원격 반복일정 API 호출 실패: provider.add_event returned None")
+                                # 실패: 동기화 실패 상태로 마크
+                                self.data_manager._mark_recurring_events_sync_failed(temp_id, "원격 추가 실패")
+                        except Exception as e:
+                            logger.error(f"원격 반복일정 추가 예외 발생: {e}")
+                            self.data_manager._mark_recurring_events_sync_failed(temp_id, str(e))
+                        break
+        
+        # 백그라운드 스레드에서 실행
+        task = RemoteRecurringAddTask(self, event_data, first_instance)
         QThreadPool.globalInstance().start(task)
     
     def _replace_optimistic_event(self, temp_id, real_event, provider_name):
@@ -763,6 +1099,130 @@ class DataManager(QObject):
         # UI 업데이트
         self.data_updated.emit(event_date.year, event_date.month)
     
+    def _replace_optimistic_recurring_events(self, temp_id, real_master_event, provider_name):
+        """모든 반복 인스턴스를 실제 이벤트 기반으로 교체"""
+        logger.info(f"[REPLACE DEBUG] 반복일정 교체 시작: temp_id={temp_id}, real_id={real_master_event.get('id')}")
+        
+        # 마스터 이벤트 ID 추출 (temp_recurring_BASE_INDEX에서 BASE 부분)
+        master_event_id = self._extract_master_event_id(temp_id)
+        logger.info(f"[REPLACE DEBUG] Extracted master_event_id: {master_event_id}")
+        
+        # 실제 이벤트에서 반복 정보 추출하여 새로운 인스턴스 생성 필요
+        # 하지만 Google은 단일 마스터 이벤트만 반환하므로, 
+        # 임시 인스턴스들을 실제 이벤트 정보로 업데이트해야 함
+        
+        affected_months = set()
+        instances_replaced = 0
+        
+        for cache_key, events in self.event_cache.items():
+            updated_events = []
+            logger.info(f"[REPLACE DEBUG] Checking cache_key {cache_key} with {len(events)} events")
+            
+            for event in events:
+                event_id = event.get('id', 'NO_ID')
+                is_related = self._is_related_recurring_event(event, master_event_id)
+                logger.debug(f"[REPLACE DEBUG] Event {event_id}: is_related={is_related}")
+                
+                if is_related:
+                    # 임시 인스턴스를 실제 정보로 업데이트
+                    logger.info(f"[REPLACE DEBUG] Updating temp event: {event_id}")
+                    updated_event = self._update_recurring_instance_with_real_data(event, real_master_event, provider_name)
+                    updated_events.append(updated_event)
+                    instances_replaced += 1
+                    affected_months.add(cache_key)
+                else:
+                    updated_events.append(event)
+            
+            self.event_cache[cache_key] = updated_events
+        
+        # 영향받는 모든 월에 대해 한 번에 UI 업데이트 (배치 처리)
+        if affected_months:
+            # 모든 월을 동시에 업데이트 (깜빡임 방지)
+            from PyQt6.QtCore import QTimer
+            def update_all_affected_months():
+                for year, month in affected_months:
+                    self.data_updated.emit(year, month)
+                logger.info(f"[REPLACE DEBUG] UI updated for all affected months: {list(affected_months)}")
+            
+            QTimer.singleShot(10, update_all_affected_months)  # 더 짧은 지연으로 빠른 업데이트
+        
+        logger.info(f"[REPLACE DEBUG] 반복일정 교체 완료: {instances_replaced}개 인스턴스 업데이트")
+        logger.info(f"[REPLACE DEBUG] Affected months: {affected_months}")
+        
+        # 교체 후 캐시 상태 확인
+        for cache_key in affected_months:
+            events_in_cache = len(self.event_cache.get(cache_key, []))
+            logger.debug(f"[REPLACE DEBUG] After replacement, cache {cache_key} has {events_in_cache} events")
+    
+    def _update_recurring_instance_with_real_data(self, temp_instance, real_master_event, provider_name):
+        """임시 반복 인스턴스를 실제 이벤트 데이터로 업데이트"""
+        updated_instance = temp_instance.copy()
+        
+        # 임시 ID를 실제 Google 인스턴스 ID 형태로 변경
+        temp_id = temp_instance.get('id', '')
+        master_id = real_master_event.get('id')
+        
+        # Google Calendar 인스턴스 ID 형태로 변경
+        if temp_id.startswith('temp_recurring_') and master_id:
+            # 인스턴스의 시작 시간을 기반으로 Google 형태의 ID 생성
+            start_time = temp_instance.get('start', {})
+            if start_time.get('dateTime'):
+                # 날짜시간에서 Google 형식으로 변환 (예: 20250803T080000Z)
+                import datetime
+                try:
+                    dt = datetime.datetime.fromisoformat(start_time['dateTime'].replace('Z', '+00:00'))
+                    time_suffix = dt.strftime('%Y%m%dT%H%M%SZ')
+                    updated_instance['id'] = f"{master_id}_{time_suffix}"
+                    logger.debug(f"[UPDATE DEBUG] Changed temp ID {temp_id} to real ID {updated_instance['id']}")
+                except:
+                    # 시간 파싱 실패 시 마스터 ID만 사용
+                    updated_instance['id'] = master_id
+                    logger.debug(f"[UPDATE DEBUG] Time parse failed, using master ID: {master_id}")
+            else:
+                # 전일 이벤트인 경우
+                updated_instance['id'] = master_id
+        
+        # 실제 이벤트의 정보로 업데이트 (시간은 유지)
+        updated_instance.update({
+            'provider': provider_name,
+            '_sync_state': 'synced',
+            'summary': real_master_event.get('summary', updated_instance.get('summary')),
+            'description': real_master_event.get('description', updated_instance.get('description')),
+            'location': real_master_event.get('location', updated_instance.get('location')),
+        })
+        
+        # 색상 정보 추가
+        cal_id = real_master_event.get('calendarId')
+        if cal_id:
+            all_calendars = self.get_all_calendars(fetch_if_empty=False)
+            cal_info = next((c for c in all_calendars if c['id'] == cal_id), None)
+            default_color = cal_info.get('backgroundColor') if cal_info else DEFAULT_EVENT_COLOR
+            updated_instance['color'] = self.settings.get("calendar_colors", {}).get(cal_id, default_color)
+        
+        # 실제 Google 이벤트와의 연결 정보 추가
+        updated_instance['_google_master_id'] = real_master_event.get('id')
+        updated_instance['recurringEventId'] = real_master_event.get('id')  # Google 형식에 맞게 추가
+        
+        return updated_instance
+    
+    def _mark_recurring_events_sync_failed(self, temp_id, error_msg):
+        """모든 반복 인스턴스의 동기화 실패 마크"""
+        logger.warning(f"반복일정 동기화 실패: temp_id={temp_id}, error={error_msg}")
+        
+        master_event_id = self._extract_master_event_id(temp_id)
+        affected_months = set()
+        
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if self._is_related_recurring_event(event, master_event_id):
+                    event['_sync_state'] = 'failed'
+                    event['_sync_error'] = error_msg
+                    affected_months.add(cache_key)
+        
+        # 영향받는 모든 월에 대해 UI 업데이트
+        for year, month in affected_months:
+            self.data_updated.emit(year, month)
+    
     def _mark_event_sync_failed(self, temp_id, error_msg):
         """이벤트 동기화 실패 마크"""
         logger.warning(f"이벤트 동기화 실패: temp_id={temp_id}, error={error_msg}")
@@ -785,52 +1245,172 @@ class DataManager(QObject):
             logger.error(f"실패 마크할 임시 이벤트를 찾을 수 없음: temp_id={temp_id}")
     
     def _merge_events_preserving_temp(self, year, month, new_events):
-        """임시 이벤트를 보존하면서 새로운 이벤트로 캐시 업데이트"""
+        """임시 이벤트를 보존하면서 새로운 이벤트로 캐시 업데이트 (반복일정 중복 방지)"""
         cache_key = (year, month)
         existing_events = self.event_cache.get(cache_key, [])
         
         # 기존 캐시에서 임시 이벤트와 실패한 이벤트 찾기
         temp_events = []
+        synced_temp_events = []  # 이미 동기화된 임시 이벤트들
+        
         for event in existing_events:
             event_id = event.get('id', '')
             sync_state = event.get('_sync_state')
             
-            # 임시 이벤트이거나 동기화 실패한 이벤트는 보존
-            if 'temp_' in event_id or sync_state in ['pending', 'failed']:
-                temp_events.append(event)
+            # 임시 이벤트이거나 동기화 실패한 이벤트는 구분하여 처리
+            if 'temp_' in event_id:
+                if sync_state == 'synced':
+                    synced_temp_events.append(event)
+                elif sync_state in ['pending', 'failed']:
+                    temp_events.append(event)
         
-        # 새로운 이벤트와 보존할 임시 이벤트 합치기
-        merged_events = list(new_events)  # 새로운 이벤트들
+        # 새로운 이벤트 중에서 이미 존재하는 것과 중복되지 않는 것만 추가
+        unique_new_events = []
         
-        for temp_event in temp_events:
-            temp_id = temp_event.get('id')
+        for new_event in new_events:
+            is_duplicate = False
+            google_id = new_event.get('id')
             
-            # 새로운 이벤트 중에 같은 ID가 있는지 확인 (실제 이벤트로 이미 동기화된 경우)
-            already_synced = any(event.get('id') == temp_id for event in new_events)
+            # [추가] 삭제 대기 중인 이벤트는 캐시에 추가하지 않음
+            if google_id in self.pending_deletion_ids:
+                logger.info(f"[DELETE DEBUG] Blocked pending deletion event from cache: {google_id}")
+                continue
+                
+            # 반복 이벤트의 경우 마스터 ID도 확인
+            recurring_event_id = new_event.get('recurringEventId')
+            if recurring_event_id and recurring_event_id in self.pending_deletion_ids:
+                logger.info(f"[DELETE DEBUG] Blocked recurring instance of pending deletion master: {recurring_event_id}")
+                continue
             
-            if not already_synced:
-                merged_events.append(temp_event)
-                logger.info(f"임시 이벤트 보존됨: {temp_id} (상태: {temp_event.get('_sync_state')})")
+            # 1. 이미 동기화된 임시 이벤트와 중복 확인 (Google Master ID로)
+            for synced_event in synced_temp_events:
+                if synced_event.get('_google_master_id') == google_id:
+                    is_duplicate = True
+                    logger.debug(f"중복 방지: Google 이벤트 {google_id}는 이미 동기화된 임시 이벤트 존재")
+                    break
+            
+            # 2. 새로운 이벤트들 간의 중복 확인
+            if not is_duplicate:
+                for existing_new in unique_new_events:
+                    if self._is_duplicate_event(new_event, existing_new):
+                        is_duplicate = True
+                        logger.debug(f"중복 방지: 새로운 이벤트들 간 중복 발견")
+                        break
+            
+            # 3. 반복일정의 경우 제목, 시간 기반 중복 확인 (임시 이벤트와)
+            if not is_duplicate and new_event.get('recurringEventId'):
+                for temp_event in temp_events:
+                    if self._is_same_recurring_event(new_event, temp_event):
+                        is_duplicate = True
+                        logger.debug(f"중복 방지: 반복일정 매칭됨 (임시) - {new_event.get('summary')}")
+                        break
+            
+            # 4. 반복일정의 경우 이미 동기화된 이벤트와의 중복 확인
+            if not is_duplicate and new_event.get('recurringEventId'):
+                new_event_id = new_event.get('id')
+                new_recurring_id = new_event.get('recurringEventId')
+                
+                for synced_event in synced_temp_events:
+                    # 동일한 마스터 이벤트에서 나온 인스턴스인지 확인
+                    synced_master_id = synced_event.get('_google_master_id')
+                    synced_event_id = synced_event.get('id', '')
+                    
+                    if (synced_master_id == new_recurring_id or 
+                        synced_event_id == new_event_id or
+                        self._is_same_recurring_event(new_event, synced_event)):
+                        is_duplicate = True
+                        logger.debug(f"[MERGE DEBUG] 중복 방지: 이미 동기화된 반복일정과 매칭됨 - {new_event.get('summary')}")
+                        break
+            
+            if not is_duplicate:
+                unique_new_events.append(new_event)
+        
+        # 모든 이벤트 합치기: 고유한 새 이벤트 + 동기화된 임시 이벤트 + 보존할 임시 이벤트
+        merged_events = unique_new_events + synced_temp_events + temp_events
         
         # 캐시 업데이트
         self.event_cache[cache_key] = merged_events
-        logger.info(f"캐시 병합 완료: {year}-{month}, 전체={len(merged_events)}개 (임시={len(temp_events)}개 보존)")
+        logger.info(f"캐시 병합 완료: {year}-{month}, 전체={len(merged_events)}개 "
+                   f"(새이벤트={len(unique_new_events)}, 동기화완료={len(synced_temp_events)}, 임시보존={len(temp_events)})")
+    
+    def _is_duplicate_event(self, event1, event2):
+        """두 이벤트가 중복인지 확인"""
+        # ID가 동일한 경우
+        if event1.get('id') == event2.get('id'):
+            return True
+        
+        # 제목, 시작시간, 종료시간이 모두 동일한 경우
+        if (event1.get('summary') == event2.get('summary') and
+            event1.get('start') == event2.get('start') and
+            event1.get('end') == event2.get('end')):
+            return True
+            
+        return False
+    
+    def _is_same_recurring_event(self, google_event, temp_event):
+        """Google 이벤트와 임시 반복 이벤트가 같은 이벤트인지 확인"""
+        # 1. 제목이 같고
+        if google_event.get('summary') != temp_event.get('summary'):
+            return False
+        
+        # 2. 시간이 비슷하고 (반복일정의 각 인스턴스)
+        google_start = google_event.get('start', {})
+        temp_start = temp_event.get('start', {})
+        
+        # 시작 시간 비교 (날짜는 다를 수 있지만 시간은 같아야 함)
+        google_time = google_start.get('dateTime', google_start.get('date', ''))
+        temp_time = temp_start.get('dateTime', temp_start.get('date', ''))
+        
+        if google_time and temp_time:
+            try:
+                # 시간 부분만 비교 (HH:MM)
+                google_time_part = google_time.split('T')[1][:5] if 'T' in google_time else ''
+                temp_time_part = temp_time.split('T')[1][:5] if 'T' in temp_time else ''
+                
+                if google_time_part == temp_time_part:
+                    return True
+            except:
+                pass
+        
+        return False
 
     # Local-first delete_event method
     def delete_event(self, event_data, deletion_mode='all'):
-        """Local-first event deletion: UI 즉시 업데이트 → 백그라운드 동기화"""
+        """Enhanced Local-first event deletion with recurring events support"""
+        print(f"[DELETE DEBUG PRINT] delete_event called!")  # 강제 출력
         event_body = event_data.get('body', event_data)
         event_id = event_body.get('id')
         
-        print(f"DEBUG: delete_event called for event_id: {event_id}, summary: {event_body.get('summary', 'No summary')}")
-        print(f"DEBUG: deletion_mode: {deletion_mode}")
-        print(f"DEBUG: event_data: {event_data}")
+        print(f"[DELETE DEBUG PRINT] Event ID: {event_id}, mode: {deletion_mode}")  # 강제 출력
+        logger.info(f"[DELETE DEBUG] Enhanced Local-first delete_event: id={event_id}, mode={deletion_mode}")
+        logger.info(f"[DELETE DEBUG] Event data: {event_data}")
+        logger.info(f"[DELETE DEBUG] Event body keys: {list(event_body.keys())}")
+        
+        # 반복 일정인지 확인
+        is_recurring = self._is_recurring_event(event_id)
+        logger.info(f"[DELETE DEBUG] Is recurring: {is_recurring}")
+        
+        if is_recurring and deletion_mode == 'all':
+            # 반복 일정 전체 삭제
+            return self._delete_all_recurring_instances(event_data)
+        elif is_recurring and deletion_mode in ['instance', 'future']:
+            # 반복 일정 부분 삭제 - 추후 구현
+            logger.warning(f"Recurring partial deletion ({deletion_mode}) not fully implemented yet")
+            return self._delete_single_event_local_first(event_data, deletion_mode)
+        else:
+            # 단일 이벤트 삭제
+            return self._delete_single_event_local_first(event_data, deletion_mode)
+    
+    def _delete_single_event_local_first(self, event_data, deletion_mode):
+        """단일 이벤트의 Local-First 삭제 (기존 로직)"""
+        event_body = event_data.get('body', event_data)
+        event_id = event_body.get('id')
         
         # 1. 즉시 로컬 캐시에서 이벤트 찾기 및 백업
         deleted_event, cache_key = self._find_and_backup_event(event_id)
         if not deleted_event:
-            print(f"DEBUG: Event {event_id} not found in cache")
-            return False  # 이벤트를 찾을 수 없음
+            logger.warning(f"Event {event_id} not found in cache")
+            return False
         
         # 2. 즉시 로컬 캐시에서 이벤트 제거
         self._remove_event_from_cache(event_id)
@@ -838,14 +1418,216 @@ class DataManager(QObject):
         # 3. 즉시 완료 상태 정리
         self.unmark_event_as_completed(event_id)
         
-        # 4. 즉시 UI 업데이트
+        # 4. [추가] 삭제 대기 목록에 추가
+        self.pending_deletion_ids.add(event_id)
+        logger.info(f"[DELETE DEBUG] Added single event to pending deletion: {event_id}")
+        
+        # 5. 즉시 UI 업데이트
         year, month = cache_key
         self.data_updated.emit(year, month)
         
-        # 5. 백그라운드에서 원격 동기화
+        # 6. 백그라운드에서 원격 동기화
         self._queue_remote_delete_event(event_data, deleted_event, deletion_mode)
         
         return True
+    
+    def _delete_all_recurring_instances(self, event_data):
+        """반복 일정의 모든 인스턴스 즉시 삭제"""
+        try:
+            # [추가] 배치 삭제 모드 시작 - UI refresh 차단
+            self.batch_deletion_mode = True
+            print(f"[DELETE DEBUG] Batch deletion mode started")
+            logger.info(f"[DELETE DEBUG] Batch deletion mode started")
+            
+            event_body = event_data.get('body', event_data)
+            event_id = event_body.get('id')
+            
+            logger.info(f"[DELETE DEBUG] _delete_all_recurring_instances called")
+            logger.info(f"[DELETE DEBUG] Original event_id: {event_id}")
+            logger.info(f"[DELETE DEBUG] Event body: {event_body}")
+            
+            # 마스터 이벤트 ID 추출
+            master_event_id = self._extract_master_event_id(event_id)
+            logger.info(f"[DELETE DEBUG] Extracted master_event_id: {master_event_id}")
+            
+            logger.info(f"Deleting all recurring instances for master_id: {master_event_id}")
+            
+            # 모든 캐시에서 관련 반복 인스턴스 찾기 및 삭제
+            affected_months = set()
+            instances_deleted = 0
+            deleted_event_ids = []  # 삭제된 이벤트 ID 추적
+            
+            for cache_key, events in self.event_cache.items():
+                # 삭제할 이벤트들 찾기
+                events_to_remove = []
+                print(f"[DELETE DEBUG] Checking cache_key {cache_key} with {len(events)} events")
+                logger.info(f"[DELETE DEBUG] Checking cache_key {cache_key} with {len(events)} events")
+                
+                for i, event in enumerate(events):
+                    event_id = event.get('id', 'NO_ID')
+                    sync_state = event.get('_sync_state', 'NO_STATE')
+                    google_master_id = event.get('_google_master_id', 'NO_GOOGLE_ID')
+                    
+                    logger.info(f"[DELETE DEBUG] Event {i}: id={event_id}, sync_state={sync_state}, google_master_id={google_master_id}")
+                    
+                    is_related = self._is_related_recurring_event(event, master_event_id)
+                    if is_related:
+                        events_to_remove.append(event)
+                        deleted_event_ids.append(event_id)  # 삭제된 ID 기록
+                        # 완료 상태도 정리
+                        self.unmark_event_as_completed(event.get('id'))
+                        print(f"[DELETE DEBUG] Found recurring instance to delete: {event.get('id')}")
+                        print(f"[DELETE DEBUG] Event summary: {event.get('summary', 'NO_SUMMARY')}")
+                        logger.info(f"[DELETE DEBUG] Found recurring instance to delete: {event.get('id')}")
+                        logger.info(f"[DELETE DEBUG] Event summary: {event.get('summary', 'NO_SUMMARY')}")
+                    else:
+                        print(f"[DELETE DEBUG] Event {event_id} not related to master {master_event_id}")
+                        logger.debug(f"[DELETE DEBUG] Event {event_id} not related to master {master_event_id}")
+                
+                # 이벤트 삭제 (안전한 방식으로)
+                if events_to_remove:
+                    original_count = len(events)
+                    # 새로운 리스트로 교체 (안전한 삭제)
+                    remaining_events = []
+                    for event in events:
+                        if event not in events_to_remove:
+                            remaining_events.append(event)
+                    
+                    self.event_cache[cache_key] = remaining_events
+                    deleted_count = original_count - len(remaining_events)
+                    instances_deleted += deleted_count
+                    affected_months.add(cache_key)
+                    
+                    print(f"[DELETE DEBUG] Deleted {deleted_count} events from cache_key {cache_key}")
+                    logger.info(f"Deleted {deleted_count} events from cache_key {cache_key}")
+            
+            # [추가] 삭제된 이벤트 ID들을 pending deletion으로 추가
+            # 마스터 ID와 모든 인스턴스 ID 포함
+            self.pending_deletion_ids.add(master_event_id)
+            for deleted_id in deleted_event_ids:
+                self.pending_deletion_ids.add(deleted_id)
+            logger.info(f"[DELETE DEBUG] Added to pending deletion: master={master_event_id}, instances={deleted_event_ids}")
+            
+            # 영향받는 모든 월에 대해 동시에 UI 업데이트 (지연 없이 한번에)
+            if affected_months:
+                # QTimer를 사용해 다음 이벤트 루프에서 모든 UI 업데이트를 한번에 처리
+                from PyQt6.QtCore import QTimer
+                for year, month in affected_months:
+                    QTimer.singleShot(0, lambda y=year, m=month: self.data_updated.emit(y, m))
+                logger.info(f"UI 업데이트 시그널 발신 (동시): {list(affected_months)}")
+            
+            # 백그라운드에서 실제 삭제 처리
+            logger.info(f"[DELETE DEBUG] Queuing remote delete for event_data: {event_data}")
+            logger.info(f"[DELETE DEBUG] Queuing remote delete for event_body: {event_body}")
+            self._queue_remote_delete_event(event_data, event_body, 'all')
+            
+            logger.info(f"Successfully deleted {instances_deleted} recurring instances from cache")
+            return instances_deleted > 0
+            
+        except Exception as e:
+            logger.error(f"Failed to delete recurring event: {e}")
+            # [추가] 오류 시에도 배치 삭제 모드 해제
+            self.batch_deletion_mode = False
+            return False
+    
+    def _is_recurring_event(self, event_id):
+        """이벤트가 반복 일정인지 확인"""
+        if not event_id:
+            return False
+        
+        # 임시 ID 패턴 확인
+        if event_id.startswith('temp_recurring_'):
+            return True
+        
+        # 캐시에서 이벤트 찾아서 반복 정보 확인
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if event.get('id') == event_id:
+                    return (event.get('_is_recurring_instance', False) or 
+                           'recurrence' in event or
+                           event.get('recurringEventId') is not None)
+        
+        return False
+    
+    def _extract_master_event_id(self, event_id):
+        """이벤트 ID에서 마스터 이벤트 ID 추출"""
+        if event_id and event_id.startswith('temp_recurring_'):
+            # temp_recurring_base_id_index에서 base_id 추출
+            parts = event_id.split('_')
+            if len(parts) >= 3:
+                return '_'.join(parts[2:-1])  # 마지막 인덱스 제외
+        
+        # Google 반복일정 패턴 처리 (masterid_timestamp 형태)
+        if event_id and '_' in event_id and event_id.split('_')[-1].endswith('Z'):
+            # 타임스탬프 부분을 제거하여 마스터 ID 추출
+            master_id = event_id.rsplit('_', 1)[0]
+            print(f"[DELETE DEBUG] _extract_master_event_id: {event_id} -> {master_id}")
+            return master_id
+        
+        return event_id
+    
+    def _is_related_recurring_event(self, event, master_event_id):
+        """이벤트가 특정 마스터 이벤트의 인스턴스인지 확인 (강화된 버전)"""
+        event_id = event.get('id', '')
+        
+        # 1. 직접적인 마스터 이벤트 ID 매치
+        if event.get('_master_event_id') == master_event_id:
+            return True
+        
+        # 2. 동일한 ID (마스터 이벤트 자체)
+        if event.get('id') == master_event_id:
+            return True
+        
+        # 3. 임시 반복 ID 패턴 매치
+        if event_id.startswith('temp_recurring_'):
+            # temp_recurring_BASE_INDEX 형태에서 BASE 부분 추출
+            parts = event_id.split('_')
+            if len(parts) >= 3:
+                # 마지막 부분(인덱스) 제외하고 base 부분 추출
+                event_base_id = '_'.join(parts[2:-1])
+                if event_base_id == master_event_id:
+                    return True
+                # 부분 매치도 확인 (안전장치)
+                if master_event_id in event_base_id:
+                    return True
+        
+        # 4. Google 반복일정 패턴 확인 (masterid_timestamp 형태)
+        if '_' in event_id and event_id.split('_')[-1].endswith('Z'):
+            # Google 인스턴스 ID에서 마스터 ID 추출
+            event_master_id = event_id.rsplit('_', 1)[0]
+            if event_master_id == master_event_id:
+                return True
+                
+        # 5. recurringEventId 확인
+        if event.get('recurringEventId') == master_event_id:
+            return True
+        
+        # 6. 반복 이벤트 특성 확인
+        if event.get('_is_recurring_instance') and master_event_id in str(event_id):
+            return True
+            
+        return False
+    
+    def _cleanup_duplicate_events(self, cache_key):
+        """특정 캐시 키에서 중복 이벤트 정리"""
+        if cache_key not in self.event_cache:
+            return
+            
+        events = self.event_cache[cache_key]
+        seen_ids = set()
+        unique_events = []
+        
+        for event in events:
+            event_id = event.get('id')
+            if event_id and event_id not in seen_ids:
+                seen_ids.add(event_id)
+                unique_events.append(event)
+            elif event_id:
+                logger.warning(f"Removed duplicate event: {event_id}")
+        
+        if len(unique_events) != len(events):
+            self.event_cache[cache_key] = unique_events
+            logger.info(f"Cleaned up {len(events) - len(unique_events)} duplicate events in {cache_key}")
     
     def _remove_event_from_cache(self, event_id):
         """캐시에서 이벤트 제거"""
@@ -864,16 +1646,59 @@ class DataManager(QObject):
                 
             def run(self):
                 provider_name = self.event_data.get('provider')
-                event_id = self.deleted_event['id']
+                event_id = self.deleted_event.get('id', 'NO_ID')
+                
+                logger.info(f"[DELETE DEBUG] RemoteDeleteTask.run() called")
+                logger.info(f"[DELETE DEBUG] Provider: {provider_name}")
+                logger.info(f"[DELETE DEBUG] Event ID for deletion: {event_id}")
+                logger.info(f"[DELETE DEBUG] Deleted event data: {self.deleted_event}")
+                logger.info(f"[DELETE DEBUG] Event data for provider: {self.event_data}")
+                logger.info(f"[DELETE DEBUG] Deletion mode: {self.deletion_mode}")
+                
+                # 임시 ID 체크
+                if event_id.startswith('temp_'):
+                    logger.warning(f"[DELETE DEBUG] PROBLEM: Trying to delete with temporary ID: {event_id}")
+                    # 실제 Google ID 찾기 시도
+                    google_id = self.deleted_event.get('_google_master_id')
+                    if google_id:
+                        logger.info(f"[DELETE DEBUG] Found linked Google ID: {google_id}")
+                        # 실제 Google ID로 이벤트 데이터 업데이트
+                        updated_event_data = self.event_data.copy()
+                        updated_event_data['body'] = self.deleted_event.copy()
+                        updated_event_data['body']['id'] = google_id
+                        logger.info(f"[DELETE DEBUG] Updated event data for deletion: {updated_event_data}")
+                    else:
+                        logger.error(f"[DELETE DEBUG] No Google ID found for temp event: {event_id}")
+                        return
                 
                 for provider in self.data_manager.providers:
                     if provider.name == provider_name:
                         try:
                             # 실제 원격 API 호출
-                            success = provider.delete_event(self.event_data, data_manager=self.data_manager, deletion_mode=self.deletion_mode)
+                            success = provider.delete_event(updated_event_data if 'updated_event_data' in locals() else self.event_data, 
+                                                           data_manager=self.data_manager, deletion_mode=self.deletion_mode)
                             if success:
-                                # 성공: 삭제 확인 (추가 작업 없음)
+                                # 성공: 삭제 확인 및 pending deletion에서 제거
                                 logger.info(f"이벤트 {event_id} 원격 삭제 성공")
+                                
+                                # 반복일정 전체 삭제인 경우 모든 관련 인스턴스를 한번에 제거
+                                # Google 반복일정 패턴: masterid_timestamp 형태
+                                has_timestamp_suffix = '_' in event_id and event_id.split('_')[-1].endswith('Z')
+                                is_recurring = (event_id.startswith('temp_recurring_') or 
+                                              self.deleted_event.get('recurringEventId') or
+                                              has_timestamp_suffix)  # Google recurring event pattern
+                                
+                                print(f"[DELETE DEBUG] Checking recurring status: deletion_mode={self.deletion_mode}, is_recurring={is_recurring}")
+                                print(f"[DELETE DEBUG] Event ID pattern: {event_id}")
+                                print(f"[DELETE DEBUG] Deleted event recurringEventId: {self.deleted_event.get('recurringEventId')}")
+                                print(f"[DELETE DEBUG] has_timestamp_suffix: {has_timestamp_suffix}")
+                                
+                                if self.deletion_mode == 'all' and is_recurring:
+                                    print(f"[DELETE DEBUG] Calling _remove_all_recurring_from_pending_deletion")
+                                    self.data_manager._remove_all_recurring_from_pending_deletion(event_id, self.deleted_event)
+                                else:
+                                    print(f"[DELETE DEBUG] Calling _remove_from_pending_deletion (single)")
+                                    self.data_manager._remove_from_pending_deletion(event_id)
                             else:
                                 # 실패: 이벤트를 캐시에 복원
                                 self.data_manager._restore_deleted_event(self.deleted_event, "원격 삭제 실패")
@@ -896,6 +1721,9 @@ class DataManager(QObject):
         deleted_event['_sync_state'] = 'failed'
         deleted_event['_sync_error'] = error_msg
         
+        # [추가] 삭제 실패 시 pending deletion에서 제거
+        self._remove_from_pending_deletion(event_id)
+        
         # 이벤트 날짜로 적절한 캐시에 복원
         event_date = self._get_event_date(deleted_event)
         cache_key = (event_date.year, event_date.month)
@@ -907,6 +1735,97 @@ class DataManager(QObject):
         
         # UI 업데이트하여 복원된 이벤트 표시
         self.data_updated.emit(event_date.year, event_date.month)
+    
+    def _remove_from_pending_deletion(self, event_id):
+        """삭제 대기 목록에서 이벤트 ID 제거"""
+        if event_id in self.pending_deletion_ids:
+            self.pending_deletion_ids.remove(event_id)
+            logger.info(f"[DELETE DEBUG] Removed {event_id} from pending deletion")
+        
+        # 마스터 ID 관련 모든 ID들도 제거 (반복 이벤트 대응)
+        if event_id.startswith('temp_recurring_'):
+            master_id = self._extract_master_event_id(event_id)
+            self.pending_deletion_ids.discard(master_id)
+            
+            # 관련된 모든 인스턴스 ID들도 제거
+            to_remove = []
+            for pending_id in self.pending_deletion_ids:
+                if (pending_id.startswith('temp_recurring_') and 
+                    self._extract_master_event_id(pending_id) == master_id):
+                    to_remove.append(pending_id)
+            
+            for remove_id in to_remove:
+                self.pending_deletion_ids.discard(remove_id)
+            
+            logger.info(f"[DELETE DEBUG] Removed master {master_id} and {len(to_remove)} related instances from pending deletion")
+    
+    def _remove_all_recurring_from_pending_deletion(self, event_id, deleted_event):
+        """반복일정의 모든 인스턴스를 한번에 pending deletion에서 제거하고 UI 업데이트"""
+        logger.info(f"[DELETE DEBUG] _remove_all_recurring_from_pending_deletion called with batch_mode: {self.batch_deletion_mode}")
+        
+        try:
+            # 마스터 이벤트 ID 추출
+            if event_id.startswith('temp_recurring_'):
+                master_id = self._extract_master_event_id(event_id)
+            else:
+                # Google ID인 경우 - recurringEventId 또는 timestamp 제거하여 master ID 추출
+                master_id = deleted_event.get('recurringEventId')
+                if not master_id:
+                    # Google 반복일정 인스턴스 ID에서 마스터 ID 추출 (timestamp 부분 제거)
+                    if '_' in event_id and event_id.split('_')[-1].endswith('Z'):
+                        master_id = event_id.rsplit('_', 1)[0]  # 마지막 _timestamp 부분 제거
+                    else:
+                        master_id = event_id
+            
+            logger.info(f"[DELETE DEBUG] _remove_all_recurring_from_pending_deletion: master_id={master_id}")
+            
+            # 제거될 모든 ID들 수집
+            removed_ids = []
+            affected_months = set()
+            
+            # 마스터 ID 제거
+            if master_id in self.pending_deletion_ids:
+                self.pending_deletion_ids.remove(master_id)
+                removed_ids.append(master_id)
+            
+            # 관련된 모든 인스턴스 ID들 제거
+            to_remove = []
+            for pending_id in list(self.pending_deletion_ids):  # 복사본으로 안전한 순회
+                if (pending_id.startswith('temp_recurring_') and 
+                    self._extract_master_event_id(pending_id) == master_id):
+                    to_remove.append(pending_id)
+                    
+                    # 해당 이벤트가 어느 월에 속하는지 확인
+                    for cache_key, events in self.event_cache.items():
+                        for event in events:
+                            if event.get('id') == pending_id:
+                                affected_months.add(cache_key)
+                                break
+            
+            # 실제 제거
+            for remove_id in to_remove:
+                self.pending_deletion_ids.discard(remove_id)
+                removed_ids.append(remove_id)
+            
+            logger.info(f"[DELETE DEBUG] Removed all recurring instances: master={master_id}, instances={len(to_remove)}")
+            logger.info(f"[DELETE DEBUG] Total removed IDs: {removed_ids}")
+            logger.info(f"[DELETE DEBUG] Affected months: {affected_months}")
+            
+        finally:
+            # 배치 삭제 모드 비활성화
+            logger.info(f"[DELETE DEBUG] Disabling batch deletion mode")
+            self.batch_deletion_mode = False
+            
+            # 영향받는 모든 월에 대해 동시에 UI 업데이트 (100ms 지연으로 Google API 삭제와 동기화)
+            from PyQt6.QtCore import QTimer
+            if affected_months:
+                def update_all_months():
+                    logger.info(f"[DELETE DEBUG] Final UI update after Google deletion completed")
+                    for year, month in affected_months:
+                        self.data_updated.emit(year, month)
+                    logger.info(f"[DELETE DEBUG] UI 업데이트 완료 (모든 인스턴스 동시): {list(affected_months)}")
+                
+                QTimer.singleShot(100, update_all_months)
 
     def load_initial_month(self):
         logger.info("초기 데이터 로딩을 요청합니다...")
@@ -1159,7 +2078,12 @@ class DataManager(QObject):
                     if 'date' in end_info:
                         event_end_date -= datetime.timedelta(days=1)
                     if not (event_end_date < start_date or event_start_date > end_date):
-                        all_events.append(event)
+                        # [추가] 삭제 대기 중인 이벤트는 제외
+                        event_id = event.get('id')
+                        if event_id not in self.pending_deletion_ids:
+                            all_events.append(event)
+                        else:
+                            logger.info(f"[DELETE DEBUG] Filtered out pending deletion event: {event_id}")
                 except (ValueError, TypeError) as e:
                     print(f"이벤트 날짜 파싱 오류: {e}, 이벤트: {event.get('summary')}")
                     continue
@@ -1211,7 +2135,7 @@ class DataManager(QObject):
 
     
     def update_event(self, event_data):
-        """Local-first event update: UI 즉시 업데이트 → 백그라운드 동기화"""
+        """Local-first event update: UI 즉시 업데이트 → 백그라운드 동기화 (반복 일정 포함)"""
         # Check if calendar has changed (move operation needed)
         original_calendar_id = event_data.get('originalCalendarId')
         original_provider = event_data.get('originalProvider')
@@ -1224,7 +2148,20 @@ class DataManager(QObject):
             
             return self._move_event_between_calendars_atomically(event_data)
         
-        # Otherwise, local-first normal update
+        # Local-first update with recurring event support
+        event_body = event_data.get('body', {})
+        event_id = event_body.get('id')
+        
+        # Check if this is a recurring event
+        is_recurring = self._is_recurring_event(event_id)
+        
+        if is_recurring:
+            return self._update_recurring_event_local_first(event_data)
+        else:
+            return self._update_single_event_local_first(event_data)
+        
+    def _update_single_event_local_first(self, event_data):
+        """단일 이벤트의 Local-first 업데이트"""
         event_body = event_data.get('body', {})
         event_id = event_body.get('id')
         
@@ -1245,6 +2182,67 @@ class DataManager(QObject):
         self._queue_remote_update_event(event_data, updated_event, original_event)
         
         return True
+    
+    def _update_recurring_event_local_first(self, event_data):
+        """반복 일정의 Local-first 업데이트 - 모든 인스턴스 즉시 업데이트"""
+        try:
+            event_body = event_data.get('body', {})
+            event_id = event_body.get('id')
+            
+            # 마스터 이벤트 ID 추출
+            master_event_id = event_id
+            if event_id and event_id.startswith('temp_recurring_'):
+                # 임시 ID에서 마스터 ID 추출
+                parts = event_id.split('_')
+                if len(parts) >= 3:
+                    master_event_id = '_'.join(parts[2:-1])  # 마지막 인덱스 제외
+            
+            # 모든 캐시에서 관련 반복 인스턴스 찾기 및 업데이트
+            affected_months = set()
+            instances_updated = 0
+            original_instances = []  # 롤백용
+            
+            for cache_key, events in self.event_cache.items():
+                # 업데이트할 이벤트들 찾기
+                events_to_update = []
+                for i, event in enumerate(events):
+                    if (event.get('_master_event_id') == master_event_id or
+                        event.get('id') == master_event_id or
+                        (event.get('id', '').startswith('temp_recurring_') and 
+                         master_event_id in event.get('id', ''))):
+                        events_to_update.append((i, event))
+                
+                # 이벤트 업데이트
+                if events_to_update:
+                    for i, original_event in events_to_update:
+                        # 백업본 저장 (롤백용)
+                        original_instances.append((cache_key, i, original_event.copy()))
+                        
+                        # Optimistic 업데이트 적용
+                        updated_event = self._create_optimistic_updated_event(original_event, event_data)
+                        # 반복 이벤트 특성 유지
+                        updated_event['_is_recurring_instance'] = original_event.get('_is_recurring_instance', True)
+                        updated_event['_instance_index'] = original_event.get('_instance_index', 0)
+                        updated_event['_master_event_id'] = original_event.get('_master_event_id', master_event_id)
+                        
+                        events[i] = updated_event
+                        instances_updated += 1
+                    
+                    affected_months.add(cache_key)
+            
+            # 영향받는 모든 월에 대해 UI 업데이트
+            for year, month in affected_months:
+                self.data_updated.emit(year, month)
+            
+            # 백그라운드에서 실제 Google Calendar 업데이트
+            self._queue_remote_recurring_update(event_data, original_instances)
+            
+            print(f"[RECURRING UPDATE] Updated {instances_updated} recurring instances in cache")
+            return instances_updated > 0
+            
+        except Exception as e:
+            print(f"[RECURRING UPDATE ERROR] Failed to update recurring event: {e}")
+            return False
     
     def _find_and_backup_event(self, event_id):
         """이벤트 ID로 캐시에서 이벤트 찾기 및 백업"""
@@ -1322,6 +2320,85 @@ class DataManager(QObject):
         task = RemoteUpdateTask(self, event_data, updated_event, original_event)
         QThreadPool.globalInstance().start(task)
     
+    def _queue_remote_recurring_update(self, event_data, original_instances):
+        """백그라운드에서 반복 일정 원격 업데이트"""
+        class RemoteRecurringUpdateTask(QRunnable):
+            def __init__(self, data_manager, event_data, original_instances):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.original_instances = original_instances
+            
+            def run(self):
+                try:
+                    # 실제 Google Calendar 업데이트 처리
+                    provider_name = self.event_data.get('provider')
+                    for provider in self.data_manager.providers:
+                        if provider.name == provider_name:
+                            # 마스터 이벤트 업데이트 (Google이 반복 확장 처리)
+                            real_updated_event = provider.update_event(self.event_data, self.data_manager)
+                            if real_updated_event:
+                                # 성공: 모든 인스턴스의 동기화 상태 업데이트
+                                self.data_manager._mark_recurring_sync_success(self.event_data, real_updated_event)
+                            else:
+                                # 실패: 모든 인스턴스를 원본으로 롤백
+                                self.data_manager._rollback_failed_recurring_update(self.original_instances, "원격 업데이트 실패")
+                            break
+                except Exception as e:
+                    print(f"[REMOTE RECURRING UPDATE ERROR] {e}")
+                    self.data_manager._rollback_failed_recurring_update(self.original_instances, str(e))
+        
+        task = RemoteRecurringUpdateTask(self, event_data, original_instances)
+        QThreadPool.globalInstance().start(task)
+    
+    def _mark_recurring_sync_success(self, event_data, real_event):
+        """반복 일정 동기화 성공 처리"""
+        event_body = event_data.get('body', {})
+        master_event_id = event_body.get('id')
+        
+        # 마스터 이벤트 ID 추출
+        if master_event_id and master_event_id.startswith('temp_recurring_'):
+            parts = master_event_id.split('_')
+            if len(parts) >= 3:
+                master_event_id = '_'.join(parts[2:-1])
+        
+        # 모든 관련 인스턴스의 동기화 상태 업데이트
+        affected_months = set()
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if (event.get('_master_event_id') == master_event_id or
+                    event.get('id') == master_event_id or
+                    (event.get('id', '').startswith('temp_recurring_') and 
+                     master_event_id in event.get('id', ''))):
+                    event['_sync_state'] = 'synced'
+                    affected_months.add(cache_key)
+        
+        # 영향받는 모든 월에 대해 UI 업데이트
+        for year, month in affected_months:
+            self.data_updated.emit(year, month)
+        
+        print(f"[RECURRING SYNC SUCCESS] Updated sync status for recurring event {master_event_id}")
+    
+    def _rollback_failed_recurring_update(self, original_instances, error_msg):
+        """반복 일정 업데이트 실패 시 롤백"""
+        affected_months = set()
+        
+        for cache_key, index, original_event in original_instances:
+            if cache_key in self.event_cache:
+                # 실패 상태 표시
+                original_event['_sync_state'] = 'failed'
+                original_event['_sync_error'] = error_msg
+                
+                # 원본 이벤트로 복원
+                self.event_cache[cache_key][index] = original_event
+                affected_months.add(cache_key)
+        
+        # 영향받는 모든 월에 대해 UI 업데이트 (롤백 상태 표시)
+        for year, month in affected_months:
+            self.data_updated.emit(year, month)
+        
+        print(f"[RECURRING UPDATE ROLLBACK] Rolled back {len(original_instances)} instances due to: {error_msg}")
+    
     def _mark_event_sync_success(self, event_id, real_event, provider_name):
         """이벤트 동기화 성공 처리"""
         if 'provider' not in real_event:
@@ -1361,12 +2438,7 @@ class DataManager(QObject):
                     year, month = cache_key
                     self.data_updated.emit(year, month)
                     return
-
-# data_manager.py 파일의 DataManager 클래스 내부
-
-# ▼▼▼ [핵심 수정] 이 함수를 찾아서 아래 코드로 교체합니다. ▼▼▼
     
-    # ▲▲▲ 여기까지 교체 ▲▲▲
 
     def load_initial_month(self):
         print("초기 데이터 로딩을 요청합니다...")
