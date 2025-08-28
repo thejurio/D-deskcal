@@ -115,12 +115,12 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 else: print(error_message)
                 return None
 
-            if 'id' in event_body:
-                del event_body['id']
+            # Google Calendar용 이벤트 정리 (409 중복 오류 방지)
+            cleaned_event_body = self._clean_event_for_google_insert(event_body)
             
             created_event = service.events().insert(
                 calendarId=calendar_id, 
-                body=event_body
+                body=cleaned_event_body
             ).execute()
             
             created_event['calendarId'] = calendar_id
@@ -171,8 +171,14 @@ class GoogleCalendarProvider(BaseCalendarProvider):
     def delete_event(self, event_data, data_manager=None, deletion_mode='all'):
         """기존 이벤트를 삭제합니다."""
         try:
+            event_body = event_data.get('body', event_data)
+            event_summary = event_body.get('summary', 'No summary')
+            print(f"DEBUG: GoogleProvider.delete_event called for: {event_summary}")
+            print(f"DEBUG: deletion_mode: {deletion_mode}")
+            
             service = self._get_service_for_current_thread()
             if not service:
+                print(f"DEBUG: No Google service available for deletion")
                 if data_manager: data_manager.report_error("이벤트를 삭제하려면 Google 로그인이 필요합니다.")
                 return False
 
@@ -180,6 +186,8 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             calendar_id = event_data.get('calendarId') or event_body.get('calendarId')
             instance_id = event_body.get('id')
             master_id = event_body.get('recurringEventId', instance_id)
+            
+            print(f"DEBUG: calendar_id: {calendar_id}, instance_id: {instance_id}, master_id: {master_id}")
 
             if not all([calendar_id, instance_id]):
                 # ... (error handling) ...
@@ -232,7 +240,24 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             return True
 
         except HttpError as e:
-            # ... (existing error handling) ...
+            print(f"DEBUG: HttpError in delete_event: {e}")
+            print(f"DEBUG: Error reason: {e.reason if hasattr(e, 'reason') else 'No reason'}")
+            print(f"DEBUG: Error status: {e.status_code if hasattr(e, 'status_code') else 'No status'}")
+            error_message = f"Google Calendar 이벤트 삭제 중 오류 발생: {e}"
+            if data_manager: 
+                data_manager.report_error(error_message)
+            else: 
+                print(error_message)
+            return False
+        except Exception as e:
+            print(f"DEBUG: General Exception in delete_event: {e}")
+            import traceback
+            traceback.print_exc()
+            error_message = f"이벤트 삭제 중 예상치 못한 오류: {e}"
+            if data_manager: 
+                data_manager.report_error(error_message)
+            else: 
+                print(error_message)
             return False
 
     def get_calendars(self):
@@ -284,3 +309,38 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 continue
         
         return all_found_events
+    
+    def _clean_event_for_google_insert(self, event_body):
+        """
+        Google Calendar insert API용으로 이벤트 데이터 정리
+        409 중복 오류를 방지하기 위해 Google-specific 메타데이터 제거
+        """
+        # 복사본 생성
+        cleaned_event = event_body.copy()
+        
+        # Google Calendar specific 메타데이터 제거
+        google_specific_fields = [
+            'id',              # Google이 자동 생성
+            'iCalUID',         # Google이 자동 생성
+            'etag',            # Google이 자동 생성  
+            'htmlLink',        # Google이 자동 생성
+            'created',         # Google이 자동 생성
+            'updated',         # Google이 자동 생성
+            'kind',            # Google이 자동 설정
+            'status',          # 충돌 가능성 있음
+            'sequence',        # Google이 자동 관리
+            'calendarId',      # provider specific
+            'provider',        # provider specific
+            '_sync_state',     # 내부 상태
+            '_move_state',     # 내부 상태
+            '_original_location',  # 내부 상태
+            'recurringEventId', # 반복 이벤트 관련
+            'originalStartTime', # 반복 이벤트 관련
+        ]
+        
+        for field in google_specific_fields:
+            cleaned_event.pop(field, None)
+        
+        print(f"[CLEAN] Google Calendar용 이벤트 정리 완료: {cleaned_event.get('summary', 'No Title')}")
+        
+        return cleaned_event

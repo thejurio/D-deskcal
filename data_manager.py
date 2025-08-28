@@ -1218,23 +1218,11 @@ class DataManager(QObject):
         new_calendar_id = event_data.get('calendarId')
         new_provider = event_data.get('provider')
         
-        # If calendar changed, perform move operation (already local-first via add_event and delete_event)
+        # If calendar changed, perform enhanced move operation for better UX
         if (original_calendar_id and original_provider and 
             (original_calendar_id != new_calendar_id or original_provider != new_provider)):
             
-            # Delete from original location
-            original_event_data = {
-                'calendarId': original_calendar_id,
-                'provider': original_provider,
-                'body': event_data.get('body', {})
-            }
-            self.delete_event(original_event_data)
-            
-            # Add to new location (remove original tracking info)
-            new_event_data = event_data.copy()
-            new_event_data.pop('originalCalendarId', None)
-            new_event_data.pop('originalProvider', None)
-            return self.add_event(new_event_data)
+            return self._move_event_between_calendars_atomically(event_data)
         
         # Otherwise, local-first normal update
         event_body = event_data.get('body', {})
@@ -1491,3 +1479,306 @@ class DataManager(QObject):
 
             except ValueError:
                 continue
+    
+    # Enhanced Calendar Move Methods
+    def _move_event_between_calendars_atomically(self, event_data):
+        """
+        Enhanced Local-First 캘린더 간 이벤트 이동
+        UI 즉시 반영 (원자적) → 백그라운드 처리 → 실패시 롤백
+        """
+        original_calendar_id = event_data.get('originalCalendarId')
+        original_provider = event_data.get('originalProvider')
+        new_calendar_id = event_data.get('calendarId')
+        new_provider = event_data.get('provider')
+        event_id = event_data.get('body', {}).get('id')
+        
+        print(f"DEBUG: Atomically moving event {event_id} from {original_provider}:{original_calendar_id} to {new_provider}:{new_calendar_id}")
+        
+        # 1. 즉시 캐시에서 이벤트를 원자적으로 이동 (중간 상태 없음)
+        success = self._move_event_in_cache_atomically(
+            event_id, 
+            original_calendar_id, 
+            original_provider,
+            new_calendar_id, 
+            new_provider,
+            event_data.get('body', {})
+        )
+        
+        if not success:
+            print(f"DEBUG: Failed to find event {event_id} in cache for atomic move")
+            return False
+        
+        # 2. 즉시 UI 업데이트
+        self._emit_data_updated_for_affected_months(event_data)
+        
+        # 3. 백그라운드에서 실제 캘린더 간 이동 처리
+        self._queue_remote_calendar_move(event_data, original_calendar_id, original_provider)
+        
+        return True
+
+    def _move_event_in_cache_atomically(self, event_id, from_cal_id, from_provider, to_cal_id, to_provider, event_body):
+        """
+        캐시에서 이벤트를 원자적으로 이동 (사용자가 중간 과정을 보지 않음)
+        """
+        # 원본 이벤트 찾기
+        original_event = None
+        source_cache_key = None
+        
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if (event.get('id') == event_id and 
+                    event.get('calendarId') == from_cal_id and
+                    event.get('provider') == from_provider):
+                    original_event = event.copy()
+                    source_cache_key = cache_key
+                    break
+            if original_event:
+                break
+        
+        if not original_event:
+            print(f"DEBUG: Could not find event {event_id} in cache for atomic move")
+            return False
+        
+        # 새로운 이벤트 데이터 생성
+        moved_event = original_event.copy()
+        moved_event.update(event_body)
+        moved_event['calendarId'] = to_cal_id
+        moved_event['provider'] = to_provider
+        moved_event['_move_state'] = 'moving'  # 이동 중 상태 표시
+        moved_event['_original_location'] = {
+            'calendarId': from_cal_id,
+            'provider': from_provider
+        }
+        
+        # [NEW] 즉시 타겟 캘린더 색상으로 변경 (시각적 즉시 변화)
+        target_color = self._get_calendar_color(to_cal_id)
+        if target_color:
+            moved_event['color'] = target_color
+            print(f"DEBUG: Event color changed immediately to {target_color} for calendar {to_cal_id}")
+        
+        # 원자적 이동: 기존 제거 + 새 위치 추가 (한 번에 처리)
+        try:
+            # 1. 원본 제거
+            if source_cache_key in self.event_cache:
+                self.event_cache[source_cache_key] = [
+                    e for e in self.event_cache[source_cache_key] 
+                    if not (e.get('id') == event_id and 
+                           e.get('calendarId') == from_cal_id and
+                           e.get('provider') == from_provider)
+                ]
+            
+            # 2. 새 위치에 추가
+            target_cache_key = self._determine_cache_key_for_event(moved_event)
+            if target_cache_key not in self.event_cache:
+                self.event_cache[target_cache_key] = []
+            self.event_cache[target_cache_key].append(moved_event)
+            
+            print(f"DEBUG: Event {event_id} moved atomically in cache from {from_cal_id} to {to_cal_id}")
+            return True
+            
+        except Exception as e:
+            print(f"DEBUG: Failed to move event atomically: {e}")
+            return False
+    
+    def _determine_cache_key_for_event(self, event):
+        """이벤트에 적합한 캐시 키 결정"""
+        start_info = event.get('start', {})
+        start_date_str = start_info.get('dateTime') or start_info.get('date', '')
+        
+        if start_date_str:
+            try:
+                if 'T' in start_date_str:
+                    date_part = start_date_str.split('T')[0]
+                else:
+                    date_part = start_date_str[:10]
+                    
+                event_date = datetime.datetime.fromisoformat(date_part).date()
+                return (event_date.year, event_date.month)
+            except:
+                pass
+        
+        # 기본값: 현재 월
+        today = datetime.date.today()
+        return (today.year, today.month)
+    
+    def _get_calendar_color(self, calendar_id):
+        """캘린더 ID에 해당하는 색상 반환"""
+        try:
+            # 1. 사용자 설정 색상 확인
+            custom_colors = self.settings.get("calendar_colors", {})
+            if calendar_id in custom_colors:
+                return custom_colors[calendar_id]
+            
+            # 2. 캘린더 기본 색상 확인
+            all_calendars = self.get_all_calendars(fetch_if_empty=False)
+            cal_info = next((c for c in all_calendars if c['id'] == calendar_id), None)
+            if cal_info and cal_info.get('backgroundColor'):
+                return cal_info['backgroundColor']
+            
+            # 3. 기본 색상 반환
+            return DEFAULT_EVENT_COLOR
+            
+        except Exception as e:
+            print(f"DEBUG: Error getting calendar color for {calendar_id}: {e}")
+            return DEFAULT_EVENT_COLOR
+    
+    def _emit_data_updated_for_affected_months(self, event_data):
+        """영향받는 모든 월에 대해 UI 업데이트 신호 발송"""
+        # 원본 위치 업데이트
+        try:
+            original_event = {'start': event_data.get('body', {}).get('start', {})}
+            original_cache_key = self._determine_cache_key_for_event(original_event)
+            year, month = original_cache_key
+            self.data_updated.emit(year, month)
+        except:
+            pass
+        
+        # 새 위치 업데이트  
+        try:
+            new_cache_key = self._determine_cache_key_for_event(event_data.get('body', {}))
+            year, month = new_cache_key
+            self.data_updated.emit(year, month)
+        except:
+            pass
+    
+    def _queue_remote_calendar_move(self, event_data, original_calendar_id, original_provider):
+        """
+        백그라운드에서 실제 캘린더 간 이동 처리
+        """
+        class RemoteMoveTask(QRunnable):
+            def __init__(self, data_manager, event_data, original_calendar_id, original_provider):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.original_calendar_id = original_calendar_id
+                self.original_provider = original_provider
+                
+            def run(self):
+                event_id = self.event_data.get('body', {}).get('id')
+                
+                try:
+                    print(f"DEBUG: Starting remote calendar move for event {event_id}")
+                    
+                    # [FIX] 1. 먼저 원본 캘린더에서 삭제 (중복 방지)
+                    original_event_data = {
+                        'calendarId': self.original_calendar_id,
+                        'provider': self.original_provider,
+                        'body': self.event_data.get('body', {})
+                    }
+                    
+                    delete_success = self.data_manager._delete_event_remote_only(original_event_data)
+                    
+                    if not delete_success:
+                        print(f"WARNING: Failed to delete original event {event_id}")
+                        # 삭제 실패 시에도 계속 진행 (이미 캐시에서는 이동됨)
+                    
+                    # 2. 새 캘린더에 추가
+                    new_event_data = self.event_data.copy()
+                    new_event_data.pop('originalCalendarId', None)
+                    new_event_data.pop('originalProvider', None)
+                    
+                    # 백그라운드에서 실제 추가 (캐시 업데이트 없이)
+                    add_success = self.data_manager._add_event_remote_only(new_event_data)
+                    
+                    if not add_success:
+                        print(f"ERROR: Failed to add event to new calendar after deletion")
+                        # 이 경우는 롤백이 필요함
+                        raise Exception("Failed to add event to new calendar")
+                    
+                    # 3. 성공: 이동 상태 클리어
+                    self.data_manager._clear_move_state(event_id)
+                    print(f"DEBUG: Successfully moved event {event_id} between calendars")
+                    
+                except Exception as e:
+                    print(f"DEBUG: Remote calendar move failed for event {event_id}: {e}")
+                    # 4. 실패: 롤백
+                    self.data_manager._rollback_calendar_move(
+                        event_id, 
+                        self.original_calendar_id, 
+                        self.original_provider,
+                        self.event_data.get('calendarId'),
+                        self.event_data.get('provider')
+                    )
+                    # 에러 메시지 표시
+                    self.data_manager.error_occurred.emit(f"캘린더 이동 실패: {str(e)}")
+        
+        # 백그라운드에서 실행
+        task = RemoteMoveTask(self, event_data, original_calendar_id, original_provider)
+        QThreadPool.globalInstance().start(task)
+    
+    def _add_event_remote_only(self, event_data):
+        """원격에만 이벤트 추가 (캐시 업데이트 없이)"""
+        try:
+            provider_name = event_data.get('provider')
+            for provider in self.providers:
+                if provider.name == provider_name:
+                    # [FIX] data_manager를 None으로 전달하여 캐시 업데이트 방지
+                    result = provider.add_event(event_data, None)
+                    return result is not None
+            return False
+        except Exception as e:
+            print(f"DEBUG: _add_event_remote_only failed: {e}")
+            return False
+    
+    def _delete_event_remote_only(self, event_data):
+        """원격에만 이벤트 삭제 (캐시 업데이트 없이)"""
+        try:
+            provider_name = event_data.get('provider')
+            for provider in self.providers:
+                if provider.name == provider_name:
+                    # [FIX] data_manager를 None으로 전달하여 캐시 업데이트 방지
+                    result = provider.delete_event(event_data, None)
+                    return result
+            return False
+        except Exception as e:
+            print(f"DEBUG: _delete_event_remote_only failed: {e}")
+            return False
+    
+    def _clear_move_state(self, event_id):
+        """이벤트의 이동 상태 클리어"""
+        for cache_key, events in self.event_cache.items():
+            for event in events:
+                if event.get('id') == event_id:
+                    event.pop('_move_state', None)
+                    event.pop('_original_location', None)
+                    # UI 업데이트
+                    year, month = cache_key
+                    self.data_updated.emit(year, month)
+                    break
+    
+    def _rollback_calendar_move(self, event_id, original_cal_id, original_provider, failed_cal_id, failed_provider):
+        """캘린더 이동 실패 시 롤백"""
+        print(f"DEBUG: Rolling back calendar move for event {event_id}")
+        
+        # 실패한 위치에서 이벤트 찾기
+        for cache_key, events in self.event_cache.items():
+            for i, event in enumerate(events):
+                if (event.get('id') == event_id and 
+                    event.get('calendarId') == failed_cal_id):
+                    
+                    # 원본 위치 정보 복원
+                    original_location = event.get('_original_location', {})
+                    rolled_back_event = event.copy()
+                    rolled_back_event['calendarId'] = original_location.get('calendarId', original_cal_id)
+                    rolled_back_event['provider'] = original_location.get('provider', original_provider)
+                    rolled_back_event['_move_state'] = 'failed'
+                    rolled_back_event.pop('_original_location', None)
+                    
+                    # 실패한 위치에서 제거
+                    events.pop(i)
+                    
+                    # 원본 위치로 복원
+                    original_cache_key = self._determine_cache_key_for_event(rolled_back_event)
+                    if original_cache_key not in self.event_cache:
+                        self.event_cache[original_cache_key] = []
+                    self.event_cache[original_cache_key].append(rolled_back_event)
+                    
+                    # UI 업데이트
+                    self.data_updated.emit(original_cache_key[0], original_cache_key[1])
+                    if cache_key != original_cache_key:
+                        self.data_updated.emit(cache_key[0], cache_key[1])
+                    
+                    print(f"DEBUG: Event {event_id} rolled back to original calendar {original_cal_id}")
+                    return
+        
+        print(f"DEBUG: Could not find event {event_id} for rollback")
