@@ -160,14 +160,27 @@ class LocalCalendarProvider(BaseCalendarProvider):
     def delete_event(self, event_data, data_manager=None, deletion_mode='all'):
         try:
             event_body = event_data.get('body', event_data)
+            event_summary = event_body.get('summary', 'No summary')
+            print(f"DEBUG: LocalProvider.delete_event called for: {event_summary}")
+            print(f"DEBUG: deletion_mode: {deletion_mode}")
+            
             instance_id = event_body.get('id')
-            if not instance_id: return False
+            print(f"DEBUG: instance_id: {instance_id}")
+            if not instance_id: 
+                print("DEBUG: No instance_id found")
+                return False
             original_id = instance_id.split('_')[0]
+            print(f"DEBUG: original_id: {original_id}")
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 if deletion_mode == 'all':
+                    print(f"DEBUG: Deleting all instances of event {original_id}")
                     cursor.execute("DELETE FROM events WHERE id = ?", (original_id,))
+                    deleted_count = cursor.rowcount
+                    print(f"DEBUG: Deleted {deleted_count} events from events table")
                     cursor.execute("DELETE FROM event_exceptions WHERE original_event_id = ?", (original_id,))
+                    exceptions_deleted = cursor.rowcount
+                    print(f"DEBUG: Deleted {exceptions_deleted} exceptions")
                 elif deletion_mode == 'instance':
                     start_str = event_body['start'].get('dateTime') or event_body['start'].get('date')
                     aware_start = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00'))
@@ -188,11 +201,18 @@ class LocalCalendarProvider(BaseCalendarProvider):
                     new_rrule = ';'.join(parts)
                     cursor.execute("UPDATE events SET rrule = ? WHERE id = ?", (new_rrule, original_id))
                 conn.commit()
+                print(f"DEBUG: Successfully committed local event deletion")
             return True
         except sqlite3.Error as e:
+            print(f"DEBUG: SQLite error in delete_event: {e}")
             error_message = f"로컬 이벤트 삭제 중 DB 오류가 발생했습니다: {e}"
             if data_manager: data_manager.report_error(error_message)
             else: print(error_message)
+            return False
+        except Exception as e:
+            print(f"DEBUG: General exception in LocalProvider.delete_event: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def get_calendars(self):

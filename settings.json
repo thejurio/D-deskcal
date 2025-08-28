@@ -2,9 +2,9 @@
     "user_timezone": "Asia/Seoul",
     "selected_calendars": [
         "family01556510902891015712@group.calendar.google.com",
-        "thejurio@gmail.com",
         "ko.south_korea#holiday@group.v.calendar.google.com",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
+        "thejurio@gmail.com",
         "local_calendar"
     ],
     "calendar_colors": {
@@ -17,7 +17,7 @@
     "sync_interval_minutes": 5,
     "start_day_of_week": 6,
     "hide_weekends": false,
-    "window_opacity": 0.95,
+    "window_opacity": 1.0,
     "theme": "dark",
     "lock_mode_enabled": false,
     "start_on_boot": false,
@@ -27,10 +27,10 @@
     "all_day_notification_enabled": true,
     "all_day_notification_time": "09:00",
     "geometry": [
-        1232,
-        0,
-        687,
-        660
+        1173,
+        118,
+        639,
+        772
     ],
     "gemini_api_key": "AIzaSyBNGWOIvVTTYP4GLroRNN9gFMduWiZhsFs",
     "last_selected_calendar_id": "local_calendar",

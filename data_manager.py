@@ -822,9 +822,14 @@ class DataManager(QObject):
         event_body = event_data.get('body', event_data)
         event_id = event_body.get('id')
         
+        print(f"DEBUG: delete_event called for event_id: {event_id}, summary: {event_body.get('summary', 'No summary')}")
+        print(f"DEBUG: deletion_mode: {deletion_mode}")
+        print(f"DEBUG: event_data: {event_data}")
+        
         # 1. 즉시 로컬 캐시에서 이벤트 찾기 및 백업
         deleted_event, cache_key = self._find_and_backup_event(event_id)
         if not deleted_event:
+            print(f"DEBUG: Event {event_id} not found in cache")
             return False  # 이벤트를 찾을 수 없음
         
         # 2. 즉시 로컬 캐시에서 이벤트 제거
@@ -883,6 +888,11 @@ class DataManager(QObject):
     
     def _restore_deleted_event(self, deleted_event, error_msg):
         """삭제 실패 시 이벤트 복원"""
+        event_id = deleted_event.get('id')
+        event_summary = deleted_event.get('summary', 'No summary')
+        print(f"DEBUG: _restore_deleted_event called for event: {event_summary} (ID: {event_id})")
+        print(f"DEBUG: Error: {error_msg}")
+        
         deleted_event['_sync_state'] = 'failed'
         deleted_event['_sync_error'] = error_msg
         
