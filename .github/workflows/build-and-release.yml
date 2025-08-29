@@ -1,0 +1,159 @@
+name: Build and Release D-deskcal
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags (e.g., v1.0.0, v1.2.3)
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Verify icon file exists
+      run: |
+        if (Test-Path "icons/tray_icon.ico") {
+          Write-Host "✅ Icon file found: icons/tray_icon.ico"
+        } else {
+          Write-Host "❌ Icon file missing: icons/tray_icon.ico"
+          exit 1
+        }
+    
+    - name: Build application
+      run: |
+        python build_script.py
+    
+    - name: Verify build output
+      run: |
+        if (Test-Path "dist/D-deskcal") {
+          Write-Host "✅ Build successful: dist/D-deskcal"
+          Get-ChildItem -Path "dist/D-deskcal" -Recurse | Select-Object Name, Length
+        } else {
+          Write-Host "❌ Build failed: dist/D-deskcal not found"
+          exit 1
+        }
+    
+    - name: Create installer package
+      run: |
+        $version = Get-Content -Path "VERSION" -Raw
+        $version = $version.Trim()
+        
+        # Create installer zip
+        $installerName = "D-deskcal-v$version-installer.zip"
+        
+        # Compress the built application
+        Compress-Archive -Path "dist/D-deskcal/*" -DestinationPath "dist/$installerName" -Force
+        
+        Write-Host "✅ Created installer: $installerName"
+        
+        # Verify installer
+        if (Test-Path "dist/$installerName") {
+          $size = (Get-Item "dist/$installerName").Length / 1MB
+          Write-Host "📦 Installer size: $([math]::Round($size, 2)) MB"
+        }
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: D-deskcal-build
+        path: |
+          dist/D-deskcal-v*-installer.zip
+          dist/D-deskcal/
+    
+    - name: Get version
+      id: version
+      run: |
+        $version = Get-Content -Path "VERSION" -Raw
+        $version = $version.Trim()
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "TAG_NAME=v$version" >> $env:GITHUB_OUTPUT
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.TAG_NAME }}
+        release_name: D-deskcal v${{ steps.version.outputs.VERSION }}
+        body: |
+          ## D-deskcal v${{ steps.version.outputs.VERSION }}
+          
+          ### 📦 Downloads
+          - **Installer**: D-deskcal-v${{ steps.version.outputs.VERSION }}-installer.zip
+          - **Portable**: Direct executable in the zip file
+          
+          ### 🚀 Features
+          - Desktop calendar widget with Google Calendar integration
+          - System tray integration
+          - Local-first data storage
+          - Auto-update functionality
+          
+          ### 📋 Installation
+          1. Download the installer zip file
+          2. Extract to your desired location
+          3. Run `D-deskcal.exe`
+          4. Configure your Google Calendar (optional)
+          
+          ### ⚙️ System Requirements
+          - Windows 10/11
+          - Internet connection (for Google Calendar sync)
+          
+          ### 🔄 Auto-Update
+          This version includes automatic update checking. The application will notify you when new updates are available.
+          
+          ---
+          
+          **Full Changelog**: https://github.com/thejurio/D-deskcal/commits/${{ steps.version.outputs.TAG_NAME }}
+        draft: false
+        prerelease: false
+    
+    - name: Upload Installer to Release
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist/D-deskcal-v${{ steps.version.outputs.VERSION }}-installer.zip
+        asset_name: D-deskcal-v${{ steps.version.outputs.VERSION }}-installer.zip
+        asset_content_type: application/zip
+    
+    - name: Upload Executable to Release
+      run: |
+        # Create a separate zip with just the executable for easy access
+        $version = "${{ steps.version.outputs.VERSION }}"
+        $exeName = "D-deskcal-v$version-portable.zip"
+        
+        Compress-Archive -Path "dist/D-deskcal/D-deskcal.exe" -DestinationPath "dist/$exeName" -Force
+        
+        # Upload using GitHub CLI (alternative method)
+        gh release upload "v$version" "dist/$exeName" --clobber
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-completion:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: Build Success Notification
+      run: |
+        echo "🎉 D-deskcal build and release completed successfully!"
+        echo "📦 Release available at: https://github.com/thejurio/D-deskcal/releases/latest"

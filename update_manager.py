@@ -1,9 +1,17 @@
 # update_manager.py
 import requests
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+import os
+import sys
+import subprocess
+import tempfile
+import zipfile
+import shutil
+from pathlib import Path
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, QTimer
+from PyQt6.QtWidgets import QProgressDialog, QMessageBox
 
-# GitHub 저장소 정보 (실제 주소로 변경 필요)
-GITHUB_REPO = "DC-Widget/DC-Widget" 
+# GitHub 저장소 정보
+GITHUB_REPO = "thejurio/D-deskcal" 
 
 class UpdateManager(QObject):
     """
@@ -45,15 +53,208 @@ class UpdateManager(QObject):
 
     def _is_newer(self, new_version, current_version):
         """버전 문자열을 비교하여 새로운 버전인지 확인합니다. (예: '1.2.0' > '1.1.10')"""
-        new_parts = list(map(int, new_version.split('.')))
-        current_parts = list(map(int, current_version.split('.')))
-        
-        # 버전 자릿수를 맞추기 위해 0으로 채움
-        max_len = max(len(new_parts), len(current_parts))
-        new_parts.extend([0] * (max_len - len(new_parts)))
-        current_parts.extend([0] * (max_len - len(current_parts)))
+        try:
+            new_parts = list(map(int, new_version.split('.')))
+            current_parts = list(map(int, current_version.split('.')))
+            
+            # 버전 자릿수를 맞추기 위해 0으로 채움
+            max_len = max(len(new_parts), len(current_parts))
+            new_parts.extend([0] * (max_len - len(new_parts)))
+            current_parts.extend([0] * (max_len - len(current_parts)))
 
-        return new_parts > current_parts
+            return new_parts > current_parts
+        except (ValueError, AttributeError):
+            return False
+
+
+class UpdateDownloader(QObject):
+    """
+    업데이트 파일을 다운로드하고 설치를 관리합니다.
+    """
+    download_progress = pyqtSignal(int)  # progress percentage
+    download_complete = pyqtSignal(str)  # downloaded_file_path
+    download_error = pyqtSignal(str)
+    installation_complete = pyqtSignal()
+    installation_error = pyqtSignal(str)
+    
+    def __init__(self):
+        super().__init__()
+        self.download_url = None
+        self.temp_dir = None
+        
+    def download_update(self, release_data):
+        """GitHub 릴리스에서 업데이트 파일을 다운로드합니다."""
+        try:
+            # 설치 파일 찾기 (.zip 파일)
+            assets = release_data.get('assets', [])
+            installer_asset = None
+            
+            for asset in assets:
+                if asset['name'].endswith('-installer.zip'):
+                    installer_asset = asset
+                    break
+            
+            if not installer_asset:
+                self.download_error.emit("설치 파일을 찾을 수 없습니다.")
+                return
+            
+            self.download_url = installer_asset['browser_download_url']
+            
+            # 임시 디렉토리 생성
+            self.temp_dir = tempfile.mkdtemp(prefix='D-deskcal-update-')
+            
+            # 파일 다운로드
+            self._download_file()
+            
+        except Exception as e:
+            self.download_error.emit(f"다운로드 준비 중 오류 발생: {e}")
+    
+    def _download_file(self):
+        """실제 파일 다운로드를 수행합니다."""
+        try:
+            response = requests.get(self.download_url, stream=True)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            
+            file_path = Path(self.temp_dir) / "update.zip"
+            
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        if total_size > 0:
+                            progress = int((downloaded_size / total_size) * 100)
+                            self.download_progress.emit(progress)
+            
+            self.download_complete.emit(str(file_path))
+            
+        except Exception as e:
+            self.download_error.emit(f"다운로드 중 오류 발생: {e}")
+    
+    def install_update(self, downloaded_file):
+        """다운로드된 업데이트를 설치합니다."""
+        try:
+            # ZIP 파일 압축 해제
+            extract_dir = Path(self.temp_dir) / "extracted"
+            extract_dir.mkdir(exist_ok=True)
+            
+            with zipfile.ZipFile(downloaded_file, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # 현재 실행 파일의 경로
+            if getattr(sys, 'frozen', False):
+                current_exe_dir = Path(sys.executable).parent
+            else:
+                current_exe_dir = Path.cwd()
+            
+            # 업데이트 스크립트 생성
+            self._create_update_script(extract_dir, current_exe_dir)
+            
+            self.installation_complete.emit()
+            
+        except Exception as e:
+            self.installation_error.emit(f"설치 중 오류 발생: {e}")
+    
+    def _create_update_script(self, source_dir, target_dir):
+        """업데이트 설치를 위한 배치 스크립트를 생성합니다."""
+        script_path = Path(self.temp_dir) / "update.bat"
+        
+        script_content = f'''@echo off
+echo D-deskcal 업데이트 설치 중...
+
+timeout /t 3 /nobreak >nul
+
+echo 기존 파일 백업 중...
+if exist "{target_dir}\\backup" rmdir /s /q "{target_dir}\\backup"
+mkdir "{target_dir}\\backup"
+xcopy "{target_dir}\\*.*" "{target_dir}\\backup\\" /e /y /q
+
+echo 새 파일 설치 중...
+xcopy "{source_dir}\\D-deskcal\\*.*" "{target_dir}\\" /e /y /q
+
+echo 업데이트 완료!
+echo D-deskcal을 다시 시작합니다...
+
+start "" "{target_dir}\\D-deskcal.exe"
+
+echo 임시 파일 정리 중...
+timeout /t 2 /nobreak >nul
+rmdir /s /q "{self.temp_dir}"
+
+exit
+'''
+        
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write(script_content)
+        
+        # 스크립트 실행
+        subprocess.Popen([str(script_path)], shell=True)
+    
+    def cleanup(self):
+        """임시 파일들을 정리합니다."""
+        if self.temp_dir and Path(self.temp_dir).exists():
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+
+class AutoUpdateManager(QObject):
+    """
+    통합된 자동 업데이트 관리자
+    """
+    update_available = pyqtSignal(dict)  # release_data
+    update_checking = pyqtSignal()
+    no_update_available = pyqtSignal()
+    update_error = pyqtSignal(str)
+    
+    def __init__(self, current_version, parent=None):
+        super().__init__(parent)
+        self.current_version = current_version
+        self.checker = UpdateManager(current_version)
+        self.downloader = UpdateDownloader()
+        
+        # 시그널 연결
+        self.checker.update_available.connect(self._on_update_available)
+        self.checker.up_to_date.connect(self.no_update_available.emit)
+        self.checker.error_occurred.connect(self.update_error.emit)
+    
+    def check_for_updates(self, silent=False):
+        """업데이트 확인을 시작합니다."""
+        if not silent:
+            self.update_checking.emit()
+        
+        # GitHub API에서 릴리스 정보 가져오기
+        try:
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            response = requests.get(api_url, timeout=10)
+            response.raise_for_status()
+            
+            release_data = response.json()
+            latest_version = release_data.get("tag_name", "").lstrip('v')
+            
+            if self.checker._is_newer(latest_version, self.current_version):
+                self.update_available.emit(release_data)
+            else:
+                self.no_update_available.emit()
+                
+        except Exception as e:
+            self.update_error.emit(f"업데이트 확인 실패: {e}")
+    
+    def _on_update_available(self, version, download_url):
+        """업데이트가 있을 때 호출됩니다."""
+        # 이 메서드는 새로운 구조에서 사용되지 않습니다.
+        pass
+    
+    def download_and_install_update(self, release_data):
+        """업데이트를 다운로드하고 설치합니다."""
+        self.downloader.download_update(release_data)
+        
+        # 다운로드 완료 시 자동 설치
+        self.downloader.download_complete.connect(
+            self.downloader.install_update
+        )
 
 def run_update_check(current_version, update_callback, error_callback, no_update_callback):
     """
