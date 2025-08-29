@@ -4,6 +4,42 @@ venv/
 # Python cache
 __pycache__/
 *.pyc
+
+# Sensitive files - DO NOT COMMIT
 credentials.json
+token.json
+calendar.db
+settings.json
+error.log
+debug_cache.log
+test_cache_debug.log
 .env
 .gemini/
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary and cache files
+cache/
+*.tmp
+*.bak
+*.orig
+
+# Test files and logs
+test_*.log
+debug_*.log
+nul
