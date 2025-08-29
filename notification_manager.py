@@ -2,6 +2,7 @@
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
+from resource_path import get_icon_path
 
 class NotificationPopup(QWidget):
     def __init__(self, title, message, duration_seconds=0, parent=None):
@@ -35,7 +36,7 @@ class NotificationPopup(QWidget):
         
         icon_label = QLabel()
         # app_icon을 QIcon으로 설정하고 QPixmap으로 변환하여 QLabel에 표시
-        app_icon = QIcon('icons/tray_icon.ico')
+        app_icon = QIcon(get_icon_path('tray_icon.ico'))
         pixmap = app_icon.pixmap(16, 16)
         icon_label.setPixmap(pixmap)
         

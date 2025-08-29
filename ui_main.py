@@ -1,4 +1,5 @@
 import sys
+import os
 import datetime
 import copy
 import logging
@@ -37,10 +38,22 @@ from timezone_helper import get_timezone_from_ip
 from custom_dialogs import AIEventInputDialog, CustomMessageBox
 from ai_confirmation_dialog import AIConfirmationDialog
 import gemini_parser
+from resource_path import resource_path, get_theme_path, get_icon_path
 
 def load_stylesheet(file_path):
-    with open(file_path, "r", encoding="utf-8") as f:
-        return f.read()
+    """Load stylesheet with proper resource path handling"""
+    try:
+        # If file_path is just a filename, treat it as a theme file
+        if not os.path.dirname(file_path):
+            resolved_path = get_theme_path(file_path)
+        else:
+            resolved_path = resource_path(file_path)
+        
+        with open(resolved_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"Warning: Stylesheet not found: {file_path}")
+        return ""
 
 class CustomSizeGrip(QSizeGrip):
     grip_pressed = pyqtSignal()
@@ -238,10 +251,10 @@ class MainWidget(QWidget):
     def update_lock_icon(self):
         is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
         if is_enabled:
-            self.lock_button.setIcon(QIcon("icons/lock_locked.svg"))
+            self.lock_button.setIcon(QIcon(get_icon_path("lock_locked.svg")))
             self.lock_button.setToolTip("잠금 모드 활성화됨 (클릭하여 비활성화)")
         else:
-            self.lock_button.setIcon(QIcon("icons/lock_unlocked.svg"))
+            self.lock_button.setIcon(QIcon(get_icon_path("lock_unlocked.svg")))
             self.lock_button.setToolTip("잠금 모드 비활성화됨 (클릭하여 활성화)")
 
     def initUI(self):
@@ -301,7 +314,7 @@ class MainWidget(QWidget):
         today_button.clicked.connect(self.go_to_today)
 
         search_button = QPushButton()
-        search_button.setIcon(QIcon("icons/search.svg"))
+        search_button.setIcon(QIcon(get_icon_path("search.svg")))
         search_button.setIconSize(QSize(20, 20))
         search_button.setObjectName("search_button")
         search_button.setFixedSize(30, 30)
@@ -316,7 +329,7 @@ class MainWidget(QWidget):
         self.lock_button.clicked.connect(self.toggle_lock_mode)
 
         ai_add_button = QPushButton()
-        ai_add_button.setIcon(QIcon("icons/gemini.svg"))
+        ai_add_button.setIcon(QIcon(get_icon_path("gemini.svg")))
         ai_add_button.setIconSize(QSize(20, 20))
         ai_add_button.setObjectName("ai_add_button")
         ai_add_button.setFixedSize(30, 30)
@@ -390,7 +403,7 @@ class MainWidget(QWidget):
         self.setup_tray_icon()
 
     def setup_tray_icon(self):
-        self.tray_icon = QSystemTrayIcon(QIcon("icons/tray_icon.svg"), self)
+        self.tray_icon = QSystemTrayIcon(QIcon(get_icon_path("tray_icon.svg")), self)
         self.tray_icon.setToolTip("Glassy Calendar")
 
         tray_menu = QMenu()
@@ -705,7 +718,7 @@ class MainWidget(QWidget):
 
     def apply_theme(self, theme_name):
         try:
-            stylesheet = load_stylesheet(f'themes/{theme_name}_theme.qss')
+            stylesheet = load_stylesheet(f'{theme_name}_theme.qss')
             app = QApplication.instance()
             app.setStyleSheet(stylesheet)
 
@@ -928,10 +941,10 @@ if __name__ == '__main__':
 
     selected_theme = settings.get("theme", "dark")
     try:
-        stylesheet = load_stylesheet(f'themes/{selected_theme}_theme.qss')
+        stylesheet = load_stylesheet(f'{selected_theme}_theme.qss')
         app.setStyleSheet(stylesheet)
     except FileNotFoundError:
-        print(f"경고: 'themes/{selected_theme}_theme.qss' 파일을 찾을 수 없습니다.")
+        print(f"경고: '{selected_theme}_theme.qss' 파일을 찾을 수 없습니다.")
 
     widget = MainWidget(settings)
     widget.show()

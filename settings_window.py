@@ -2,11 +2,12 @@
 import copy
 from PyQt6.QtWidgets import (QVBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QScrollArea, QWidget, QHBoxLayout,
-                             QColorDialog, QComboBox, QSlider, QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit, QLineEdit)
+                             QColorDialog, QComboBox, QSlider, QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit, QLineEdit, QGroupBox)
 from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime
 
 from custom_dialogs import BaseDialog, HotkeyInputDialog, CustomMessageBox, APIKeyInputDialog, SingleKeyInputDialog
+from resource_path import get_version
 from config import (
                     DEFAULT_SYNC_INTERVAL, DEFAULT_LOCK_MODE_ENABLED, 
                     DEFAULT_NOTIFICATIONS_ENABLED, DEFAULT_NOTIFICATION_MINUTES,
@@ -78,9 +79,11 @@ class SettingsWindow(BaseDialog):
         self.checkboxes = {}
         self.color_combos = {}
         
-        self.create_connectivity_page()
+        self.create_general_page()
         self.create_appearance_page()
-        self.create_behavior_page()
+        self.create_notifications_page()
+        self.create_calendar_page()
+        self.create_system_page()
         
         self.nav_list.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav_list.setCurrentRow(0)
@@ -146,20 +149,60 @@ class SettingsWindow(BaseDialog):
         label.setObjectName("section_title")
         return label
 
-    def create_connectivity_page(self):
+    def create_general_page(self):
+        """일반 설정 페이지"""
         scroll_area, layout = self._create_scrollable_page()
-        self.nav_list.addItem(QListWidgetItem("🔗 연동 및 데이터"))
+        self.nav_list.addItem(QListWidgetItem("⚙️ 일반"))
         
-        layout.addWidget(self._create_section_label("Google 계정 연동"))
-        account_layout = QHBoxLayout(); self.account_status_label = QLabel("상태 확인 중..."); self.account_button = QPushButton("로그인")
-        account_layout.addWidget(self.account_status_label, 1); account_layout.addWidget(self.account_button)
+        # 프로그램 정보
+        info_group = QGroupBox("프로그램 정보")
+        info_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        info_layout = QFormLayout(info_group)
+        info_layout.setVerticalSpacing(18)
+        
+        self.version_label = QLabel(f"v{get_version()}")
+        info_layout.addRow("현재 버전:", self.version_label)
+        
+        # 업데이트 확인 버튼
+        self.check_update_button = QPushButton("최신 버전 확인")
+        self.check_update_button.clicked.connect(self.check_for_updates)
+        info_layout.addRow("", self.check_update_button)
+        
+        # 자동 업데이트
+        self.auto_update_checkbox = QCheckBox("자동 업데이트 확인")
+        self.auto_update_checkbox.setChecked(self.temp_settings.get("auto_update_enabled", True))
+        self.auto_update_checkbox.toggled.connect(lambda checked: (
+            self.temp_settings.update({"auto_update_enabled": checked}),
+            self._mark_as_changed("auto_update_enabled")
+        ))
+        info_layout.addRow("", self.auto_update_checkbox)
+        
+        layout.addWidget(info_group)
+        layout.addSpacing(6)
+        
+        # Google 계정 연동
+        google_group = QGroupBox("Google 계정 연동")
+        google_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        google_layout = QVBoxLayout(google_group)
+        google_layout.setSpacing(18)
+        
+        account_layout = QHBoxLayout()
+        self.account_status_label = QLabel("상태 확인 중...")
+        self.account_button = QPushButton("로그인")
+        account_layout.addWidget(self.account_status_label, 1)
+        account_layout.addWidget(self.account_button)
         self.account_button.clicked.connect(self.handle_account_button_click)
-        layout.addLayout(account_layout)
-        layout.addSpacing(15)
-
-        layout.addWidget(self._create_section_label("Gemini AI 연동"))
+        google_layout.addLayout(account_layout)
         
-        api_key_form = QFormLayout()
+        layout.addWidget(google_group)
+        layout.addSpacing(6)
+
+        # Gemini AI 연동
+        ai_group = QGroupBox("Gemini AI 연동")
+        ai_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        ai_layout = QFormLayout(ai_group)
+        ai_layout.setVerticalSpacing(18)
+        
         api_key_widget = QWidget()
         api_key_layout = QHBoxLayout(api_key_widget)
         api_key_layout.setContentsMargins(0,0,0,0)
@@ -178,139 +221,253 @@ class SettingsWindow(BaseDialog):
         self.change_api_key_button.clicked.connect(self.open_api_key_dialog)
         self.reset_api_key_button.clicked.connect(self.reset_api_key)
 
-        api_key_form.addRow("API 키:", api_key_widget)
-        layout.addLayout(api_key_form)
+        ai_layout.addRow("API 키:", api_key_widget)
+        layout.addWidget(ai_group)
         self.update_api_key_ui()
-        layout.addSpacing(15)
-
-        layout.addWidget(self._create_section_label("동기화"))
-        form_layout_sync = QFormLayout()
-        self.sync_interval_combo = QComboBox()
-        self.sync_options = { 0: "사용 안 함", 1: "1분", 5: "5분", 15: "15분", 30: "30분", 60: "1시간" }
-        for minutes, text in self.sync_options.items(): self.sync_interval_combo.addItem(text, minutes)
-        self.sync_interval_combo.setCurrentIndex(self.sync_interval_combo.findData(self.temp_settings.get("sync_interval_minutes", DEFAULT_SYNC_INTERVAL)))
-        self.sync_interval_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("sync_interval_minutes"))
-        form_layout_sync.addRow("자동 동기화 주기:", self.sync_interval_combo)
-        layout.addLayout(form_layout_sync)
 
         self.stack.addWidget(scroll_area)
 
-    def create_appearance_page(self):
-        scroll_area, layout = self._create_scrollable_page()
-        self.nav_list.addItem(QListWidgetItem("🎨 화면 표시"))
+    def check_for_updates(self):
+        """최신 버전 확인"""
+        try:
+            # auto_update_integration 모듈에서 업데이트 체커를 임시로 생성
+            from auto_update_integration import AutoUpdateDialog
+            update_dialog = AutoUpdateDialog(self)
+            
+            # 버튼을 비활성화하고 텍스트 변경
+            self.check_update_button.setText("확인 중...")
+            self.check_update_button.setEnabled(False)
+            
+            # 업데이트 확인 (수동)
+            update_dialog.check_for_updates(silent=False)
+            
+            # 버튼 복원
+            self.check_update_button.setText("최신 버전 확인")
+            self.check_update_button.setEnabled(True)
+            
+        except Exception as e:
+            self.check_update_button.setText("최신 버전 확인")
+            self.check_update_button.setEnabled(True)
+            CustomMessageBox.warning(self, "업데이트 확인 실패", f"업데이트 확인 중 오류가 발생했습니다:\n{e}")
 
-        layout.addWidget(self._create_section_label("테마 및 투명도"))
-        form_layout_theme = QFormLayout()
+    def create_appearance_page(self):
+        """외관 설정 페이지"""
+        scroll_area, layout = self._create_scrollable_page()
+        self.nav_list.addItem(QListWidgetItem("🎨 외관"))
+
+        # 테마 설정
+        theme_group = QGroupBox("테마 및 투명도")
+        theme_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        theme_layout = QFormLayout(theme_group)
+        theme_layout.setVerticalSpacing(18)
+        
         self.theme_combo = QComboBox()
         self.theme_options = { "dark": "어두운 테마", "light": "밝은 테마" }
-        for value, text in self.theme_options.items(): self.theme_combo.addItem(text, value)
+        for value, text in self.theme_options.items(): 
+            self.theme_combo.addItem(text, value)
         self.theme_combo.setCurrentIndex(self.theme_combo.findData(self.temp_settings.get("theme", "dark")))
         self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
-        form_layout_theme.addRow("테마 선택:", self.theme_combo)
+        theme_layout.addRow("테마:", self.theme_combo)
         
-        opacity_widget = QWidget(); opacity_layout = QHBoxLayout(opacity_widget); opacity_layout.setContentsMargins(0,0,0,0)
-        self.opacity_slider = QSlider(Qt.Orientation.Horizontal); self.opacity_slider.setRange(20, 100)
+        opacity_widget = QWidget()
+        opacity_layout = QHBoxLayout(opacity_widget)
+        opacity_layout.setContentsMargins(0,0,0,0)
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(20, 100)
         self.opacity_slider.setValue(int(self.temp_settings.get("window_opacity", 0.95) * 100))
-        self.opacity_label = QLabel(f"{self.opacity_slider.value()}% "); self.opacity_label.setMinimumWidth(40)
+        self.opacity_label = QLabel(f"{self.opacity_slider.value()}%")
+        self.opacity_label.setMinimumWidth(40)
         self.opacity_slider.valueChanged.connect(self.on_opacity_changed)
-        opacity_layout.addWidget(self.opacity_slider); opacity_layout.addWidget(self.opacity_label)
-        form_layout_theme.addRow("전체 투명도:", opacity_widget)
-        layout.addLayout(form_layout_theme)
-        layout.addSpacing(15)
+        opacity_layout.addWidget(self.opacity_slider)
+        opacity_layout.addWidget(self.opacity_label)
+        theme_layout.addRow("투명도:", opacity_widget)
+        
+        layout.addWidget(theme_group)
+        layout.addSpacing(6)
 
-        layout.addWidget(self._create_section_label("달력 표시"))
-        form_layout_display = QFormLayout()
-        self.start_day_combo = QComboBox(); self.start_day_combo.addItem("일요일", 6); self.start_day_combo.addItem("월요일", 0)
+        # 달력 표시 설정
+        display_group = QGroupBox("달력 표시")
+        display_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        display_layout = QFormLayout(display_group)
+        display_layout.setVerticalSpacing(18)
+        
+        self.start_day_combo = QComboBox()
+        self.start_day_combo.addItem("일요일", 6)
+        self.start_day_combo.addItem("월요일", 0)
         self.start_day_combo.setCurrentIndex(self.start_day_combo.findData(self.temp_settings.get("start_day_of_week", 6)))
         self.start_day_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("start_day_of_week"))
-        form_layout_display.addRow("한 주의 시작:", self.start_day_combo)
+        display_layout.addRow("한 주의 시작:", self.start_day_combo)
+        
         self.hide_weekends_checkbox = QCheckBox("주말(토, 일) 숨기기")
         self.hide_weekends_checkbox.setChecked(self.temp_settings.get("hide_weekends", False))
         self.hide_weekends_checkbox.stateChanged.connect(lambda: self._mark_as_changed("hide_weekends"))
-        form_layout_display.addRow("", self.hide_weekends_checkbox)
-        layout.addLayout(form_layout_display)
-        layout.addSpacing(15)
-
-        layout.addWidget(self._create_section_label("캘린더 표시 및 색상 설정"))
-        self.calendar_list_widget = QWidget(); self.calendar_list_widget.setObjectName("transparent_container")
-        self.calendar_list_layout = QVBoxLayout(self.calendar_list_widget)
-        self.calendar_list_layout.setContentsMargins(0,0,0,0); self.calendar_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.calendar_list_widget)
+        display_layout.addRow("", self.hide_weekends_checkbox)
+        
+        layout.addWidget(display_group)
         
         self.stack.addWidget(scroll_area)
 
-    def create_behavior_page(self):
+    def create_notifications_page(self):
+        """알림 설정 페이지"""
         scroll_area, layout = self._create_scrollable_page()
-        self.nav_list.addItem(QListWidgetItem("🔔 동작 및 알림"))
+        self.nav_list.addItem(QListWidgetItem("🔔 알림"))
 
-        layout.addWidget(self._create_section_label("창 동작"))
-        form_layout_behavior = QFormLayout()
-        self.lock_mode_checkbox = QCheckBox("잠금 모드 사용 (지정한 키를 누를 때만 상호작용)")
-        is_lock_mode_enabled = self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
-        self.lock_mode_checkbox.setChecked(is_lock_mode_enabled)
-        self.lock_mode_checkbox.stateChanged.connect(lambda s: self._mark_as_changed("lock_mode_enabled"))
-        form_layout_behavior.addRow("", self.lock_mode_checkbox)
+        # 기본 알림 설정
+        basic_group = QGroupBox("기본 알림")
+        basic_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        basic_layout = QFormLayout(basic_group)
+        basic_layout.setVerticalSpacing(12)
         
-        self.unlock_key_widget = self.create_single_key_input_widget("unlock_key")
-        form_layout_behavior.addRow("잠금 해제 키:", self.unlock_key_widget)
-        layout.addLayout(form_layout_behavior)
-        layout.addSpacing(15)
-
-        layout.addWidget(self._create_section_label("글로벌 단축키"))
-        form_layout_hotkey = QFormLayout()
+        self.notification_minutes_combo = QComboBox()
+        minutes_options = {0: "정시", 1: "1분 전", 5: "5분 전", 10: "10분 전", 15: "15분 전", 30: "30분 전"}
+        for minutes, text in minutes_options.items():
+            self.notification_minutes_combo.addItem(text, minutes)
+        self.notification_minutes_combo.setCurrentIndex(
+            self.notification_minutes_combo.findData(self.temp_settings.get("notification_minutes", DEFAULT_NOTIFICATION_MINUTES))
+        )
+        self.notification_minutes_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("notification_minutes"))
+        basic_layout.addRow("알림 시점:", self.notification_minutes_combo)
         
-        ai_hotkey_layout = self.create_hotkey_input_widget("ai_add_event_hotkey")
-        form_layout_hotkey.addRow("AI 일정 추가:", ai_hotkey_layout)
-        layout.addLayout(form_layout_hotkey)
-        layout.addSpacing(15)
-
-        layout.addWidget(self._create_section_label("데스크톱 알림"))
-        form_layout_notif = QFormLayout()
-        self.notifications_enabled_checkbox = QCheckBox("시간 지정 일정 알림 표시")
-        is_enabled = self.temp_settings.get("notifications_enabled", DEFAULT_NOTIFICATIONS_ENABLED)
-        self.notifications_enabled_checkbox.setChecked(is_enabled)
-        self.notifications_enabled_checkbox.stateChanged.connect(self.on_notifications_toggled)
-        form_layout_notif.addRow("", self.notifications_enabled_checkbox)
-        self.notification_minutes_spinbox = QComboBox()
-        self.notification_time_options = { 1: "1분 전", 5: "5분 전", 10: "10분 전", 15: "15분 전", 30: "30분 전" }
-        for minutes, text in self.notification_time_options.items(): self.notification_minutes_spinbox.addItem(text, minutes)
-        current_minutes = self.temp_settings.get("notification_minutes", DEFAULT_NOTIFICATION_MINUTES)
-        self.notification_minutes_spinbox.setCurrentIndex(self.notification_minutes_spinbox.findData(current_minutes))
-        self.notification_minutes_spinbox.setEnabled(is_enabled)
-        self.notification_minutes_spinbox.currentIndexChanged.connect(lambda: self._mark_as_changed("notification_minutes"))
-        form_layout_notif.addRow("알림 시간:", self.notification_minutes_spinbox)
         self.notification_duration_combo = QComboBox()
-        self.duration_options = { 5: "5초", 10: "10초", 20: "20초", 60: "1분", 0: "닫지 않음" }
-        for seconds, text in self.duration_options.items(): self.notification_duration_combo.addItem(text, seconds)
-        current_duration = self.temp_settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
-        self.notification_duration_combo.setCurrentIndex(self.notification_duration_combo.findData(current_duration))
-        self.notification_duration_combo.setEnabled(is_enabled)
+        duration_options = {3: "3초", 5: "5초", 10: "10초", 0: "수동으로 닫기"}
+        for seconds, text in duration_options.items():
+            self.notification_duration_combo.addItem(text, seconds)
+        self.notification_duration_combo.setCurrentIndex(
+            self.notification_duration_combo.findData(self.temp_settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION))
+        )
         self.notification_duration_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("notification_duration"))
-        form_layout_notif.addRow("팝업 표시 시간:", self.notification_duration_combo)
-        self.all_day_notification_checkbox = QCheckBox("하루 종일 일정 알림 표시")
-        is_all_day_enabled = self.temp_settings.get("all_day_notification_enabled", DEFAULT_ALL_DAY_NOTIFICATION_ENABLED)
-        self.all_day_notification_checkbox.setChecked(is_all_day_enabled)
-        self.all_day_notification_checkbox.stateChanged.connect(self.on_all_day_notifications_toggled)
-        form_layout_notif.addRow("", self.all_day_notification_checkbox)
-        self.all_day_notification_time_edit = QTimeEdit()
-        self.all_day_notification_time_edit.setDisplayFormat("HH:mm")
-        default_time_str = self.temp_settings.get("all_day_notification_time", DEFAULT_ALL_DAY_NOTIFICATION_TIME)
-        self.all_day_notification_time_edit.setTime(QTime.fromString(default_time_str, "HH:mm"))
-        self.all_day_notification_time_edit.setEnabled(is_all_day_enabled)
-        self.all_day_notification_time_edit.timeChanged.connect(lambda: self._mark_as_changed("all_day_notification_time"))
-        form_layout_notif.addRow("알림 시간:", self.all_day_notification_time_edit)
-        layout.addLayout(form_layout_notif)
-        layout.addSpacing(15)
+        basic_layout.addRow("표시 시간:", self.notification_duration_combo)
+        
+        self.notifications_checkbox = QCheckBox("알림 활성화")
+        self.notifications_checkbox.setChecked(self.temp_settings.get("notifications_enabled", DEFAULT_NOTIFICATIONS_ENABLED))
+        self.notifications_checkbox.toggled.connect(lambda checked: (
+            self.temp_settings.update({"notifications_enabled": checked}),
+            self._mark_as_changed("notifications_enabled")
+        ))
+        basic_layout.addRow("", self.notifications_checkbox)
+        
+        layout.addWidget(basic_group)
+        layout.addSpacing(6)
+        
+        # 종일 일정 알림
+        allday_group = QGroupBox("종일 일정 알림")
+        allday_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        allday_layout = QFormLayout(allday_group)
+        allday_layout.setVerticalSpacing(18)
+        
+        self.all_day_notification_time = QTimeEdit()
+        default_time = QTime.fromString(self.temp_settings.get("all_day_notification_time", DEFAULT_ALL_DAY_NOTIFICATION_TIME), "hh:mm")
+        self.all_day_notification_time.setTime(default_time)
+        self.all_day_notification_time.timeChanged.connect(lambda: self._mark_as_changed("all_day_notification_time"))
+        allday_layout.addRow("알림 시간:", self.all_day_notification_time)
+        
+        self.all_day_notification_checkbox = QCheckBox("종일 일정 알림 활성화")
+        self.all_day_notification_checkbox.setChecked(self.temp_settings.get("all_day_notification_enabled", DEFAULT_ALL_DAY_NOTIFICATION_ENABLED))
+        self.all_day_notification_checkbox.toggled.connect(lambda checked: (
+            self.temp_settings.update({"all_day_notification_enabled": checked}),
+            self._mark_as_changed("all_day_notification_enabled")
+        ))
+        allday_layout.addRow("", self.all_day_notification_checkbox)
+        
+        layout.addWidget(allday_group)
+        
+        self.stack.addWidget(scroll_area)
 
-        layout.addWidget(self._create_section_label("시스템"))
-        form_layout_system = QFormLayout()
+    def create_calendar_page(self):
+        """캘린더 설정 페이지"""
+        scroll_area, layout = self._create_scrollable_page()
+        self.nav_list.addItem(QListWidgetItem("📅 캘린더"))
+        
+        # 캘린더 색상 설정
+        color_group = QGroupBox("캘린더 색상 설정")
+        color_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        color_layout = QVBoxLayout(color_group)
+        color_layout.setSpacing(18)
+        
+        self.calendar_list_widget = QWidget()
+        self.calendar_list_widget.setObjectName("transparent_container")
+        self.calendar_list_layout = QVBoxLayout(self.calendar_list_widget)
+        self.calendar_list_layout.setContentsMargins(0,0,0,0)
+        self.calendar_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        color_layout.addWidget(self.calendar_list_widget)
+        
+        layout.addWidget(color_group)
+        
+        self.stack.addWidget(scroll_area)
+
+    def create_system_page(self):
+        """시스템 설정 페이지"""
+        scroll_area, layout = self._create_scrollable_page()
+        self.nav_list.addItem(QListWidgetItem("💻 시스템"))
+
+        # 창 동작
+        window_group = QGroupBox("창 동작")
+        window_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        window_layout = QVBoxLayout(window_group)
+        window_layout.setSpacing(18)
+        
+        self.lock_mode_checkbox = QCheckBox("잠금 모드 (드래그 및 크기 조절 비활성화)")
+        self.lock_mode_checkbox.setChecked(self.temp_settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED))
+        self.lock_mode_checkbox.toggled.connect(lambda checked: (
+            self.temp_settings.update({"lock_mode_enabled": checked}),
+            self._mark_as_changed("lock_mode_enabled")
+        ))
+        window_layout.addWidget(self.lock_mode_checkbox)
+        
+        # 잠금 해제 키 설정 (잠금 모드 아래에 배치)
+        unlock_key_layout = QHBoxLayout()
+        unlock_key_layout.addSpacing(20)  # 들여쓰기
+        unlock_key_label = QLabel("잠금 해제 키:")
+        self.unlock_key_display = QLabel("설정되지 않음")
+        self.unlock_key_button = QPushButton("설정")
+        self.unlock_key_clear_button = QPushButton("해제")
+        
+        self.unlock_key_button.clicked.connect(self.set_unlock_key)
+        self.unlock_key_clear_button.clicked.connect(self.clear_unlock_key)
+        
+        unlock_key_layout.addWidget(unlock_key_label)
+        unlock_key_layout.addWidget(self.unlock_key_display, 1)
+        unlock_key_layout.addWidget(self.unlock_key_button)
+        unlock_key_layout.addWidget(self.unlock_key_clear_button)
+        window_layout.addLayout(unlock_key_layout)
+        self.update_unlock_key_display()
+        
+        layout.addWidget(window_group)
+        layout.addSpacing(6)
+        
+        # 단축키
+        hotkey_group = QGroupBox("글로벌 단축키")
+        hotkey_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        hotkey_layout = QFormLayout(hotkey_group)
+        hotkey_layout.setVerticalSpacing(18)
+        
+        # 표시/숨기기 기능이 없으므로 해당 단축키 제거
+        
+        # AI 단축키 추가
+        ai_hotkey_widget = self.create_hotkey_input_widget("ai_add_event_hotkey")
+        hotkey_layout.addRow("AI 일정 추가:", ai_hotkey_widget)
+        
+        layout.addWidget(hotkey_group)
+        layout.addSpacing(6)
+        
+        # 시스템 시작
+        startup_group = QGroupBox("시스템 시작")
+        startup_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 18px; padding-top: 30px; padding-bottom: 36px; }")
+        startup_layout = QFormLayout(startup_group)
+        startup_layout.setVerticalSpacing(18)
+        
         self.startup_checkbox = QCheckBox("Windows 시작 시 자동 실행")
         self.startup_checkbox.setChecked(self.temp_settings.get("start_on_boot", False))
-        self.startup_checkbox.stateChanged.connect(lambda: self._mark_as_changed("start_on_boot"))
-        form_layout_system.addRow("", self.startup_checkbox)
-        layout.addLayout(form_layout_system)
-
+        self.startup_checkbox.toggled.connect(lambda checked: (
+            self.temp_settings.update({"start_on_boot": checked}),
+            self._mark_as_changed("start_on_boot")
+        ))
+        startup_layout.addRow("", self.startup_checkbox)
+        
+        layout.addWidget(startup_group)
+        
         self.stack.addWidget(scroll_area)
+
 
     def create_hotkey_input_widget(self, setting_key):
         container = QWidget()
@@ -498,21 +655,49 @@ class SettingsWindow(BaseDialog):
         self.temp_settings["selected_calendars"] = [cal_id for cal_id, cb in self.checkboxes.items() if cb.isChecked()]
         self.temp_settings.setdefault("calendar_colors", {}).update({cal_id: combo.currentData() for cal_id, combo in self.color_combos.items() if combo.currentData()})
         if "calendar_emojis" in self.temp_settings: del self.temp_settings["calendar_emojis"]
-        self.temp_settings["sync_interval_minutes"] = self.sync_interval_combo.currentData()
         self.temp_settings["start_day_of_week"] = self.start_day_combo.currentData()
         self.temp_settings["hide_weekends"] = self.hide_weekends_checkbox.isChecked()
         self.temp_settings["window_opacity"] = self.opacity_slider.value() / 100.0
         self.temp_settings["theme"] = self.theme_combo.currentData()
         self.temp_settings["lock_mode_enabled"] = self.lock_mode_checkbox.isChecked()
         self.temp_settings["start_on_boot"] = self.startup_checkbox.isChecked()
-        self.temp_settings["notifications_enabled"] = self.notifications_enabled_checkbox.isChecked()
-        self.temp_settings["notification_minutes"] = self.notification_minutes_spinbox.currentData()
-        self.temp_settings["notification_duration"] = self.notification_duration_combo.currentData()
-        self.temp_settings["all_day_notification_enabled"] = self.all_day_notification_checkbox.isChecked()
-        self.temp_settings["all_day_notification_time"] = self.all_day_notification_time_edit.time().toString("HH:mm")
+        # 알림 설정은 이미 각 위젯에서 temp_settings에 직접 저장되므로 별도 처리 불필요
+        # (notifications_checkbox, notification_minutes_combo, notification_duration_combo 등)
+        
+        # 종일 일정 알림 시간만 별도 저장 (QTimeEdit)
+        if hasattr(self, 'all_day_notification_time'):
+            self.temp_settings["all_day_notification_time"] = self.all_day_notification_time.time().toString("HH:mm")
         
         self.original_settings.clear(); self.original_settings.update(self.temp_settings)
         self.done(1)
         
     def get_changed_fields(self):
         return list(self.changed_fields)
+
+        # toggle visibility 관련 메서드들 제거됨 (기능이 존재하지 않음)
+
+    def set_unlock_key(self):
+        """잠금 해제 키 설정"""
+        try:
+            from custom_dialogs import SingleKeyInputDialog
+            dialog = SingleKeyInputDialog(self)
+            if dialog.exec() == 1:
+                key = dialog.get_key()
+                if key:
+                    self.temp_settings["unlock_key"] = key
+                    self._mark_as_changed("unlock_key")
+                    self.update_unlock_key_display()
+        except Exception as e:
+            msg_dialog = CustomMessageBox(self, "잠금 해제 키 설정 실패", f"잠금 해제 키 설정 중 오류가 발생했습니다:\n{e}")
+            msg_dialog.exec()
+
+    def clear_unlock_key(self):
+        """잠금 해제 키 해제"""
+        self.temp_settings["unlock_key"] = ""
+        self._mark_as_changed("unlock_key")
+        self.update_unlock_key_display()
+
+    def update_unlock_key_display(self):
+        """잠금 해제 키 표시 업데이트"""
+        key = self.temp_settings.get("unlock_key", "")
+        self.unlock_key_display.setText(key.upper() if key else "설정되지 않음")

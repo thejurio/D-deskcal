@@ -37,17 +37,8 @@ class AutoUpdateDialog(QObject):
     def _get_current_version(self):
         """현재 버전을 VERSION 파일에서 읽어옵니다."""
         try:
-            version_file = Path('VERSION')
-            if not version_file.exists():
-                # Try relative to executable if frozen
-                if getattr(sys, 'frozen', False):
-                    exe_dir = Path(sys.executable).parent
-                    version_file = exe_dir / 'VERSION'
-            
-            if version_file.exists():
-                return version_file.read_text().strip()
-            else:
-                return "1.0.0"  # Default version
+            from resource_path import get_version
+            return get_version()
         except Exception:
             return "1.0.0"
     
