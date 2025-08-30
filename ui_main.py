@@ -3,6 +3,8 @@ import os
 import datetime
 import copy
 import logging
+import time
+import psutil
 
 if sys.platform == "win32":
     import win32gui
@@ -38,19 +40,19 @@ from timezone_helper import get_timezone_from_ip
 from custom_dialogs import AIEventInputDialog, CustomMessageBox
 from ai_confirmation_dialog import AIConfirmationDialog
 import gemini_parser
-from resource_path import resource_path, get_theme_path, get_icon_path
+from resource_path import resource_path, get_theme_path, get_icon_path, load_theme_with_icons
 
 def load_stylesheet(file_path):
-    """Load stylesheet with proper resource path handling"""
+    """Load stylesheet with proper resource path handling and icon path preprocessing"""
     try:
-        # If file_path is just a filename, treat it as a theme file
+        # If file_path is just a filename, treat it as a theme file and process icons
         if not os.path.dirname(file_path):
-            resolved_path = get_theme_path(file_path)
+            return load_theme_with_icons(file_path)
         else:
+            # For other paths, load normally
             resolved_path = resource_path(file_path)
-        
-        with open(resolved_path, "r", encoding="utf-8") as f:
-            return f.read()
+            with open(resolved_path, "r", encoding="utf-8") as f:
+                return f.read()
     except FileNotFoundError:
         print(f"Warning: Stylesheet not found: {file_path}")
         return ""
@@ -139,20 +141,48 @@ class MainWidget(QWidget):
         if not hasattr(self, 'notification_popups'):
             self.notification_popups = []
 
-        offset = len(self.notification_popups) * 10
-
         duration = self.settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
         popup = NotificationPopup(title, message, duration_seconds=duration)
 
+        # 팝업이 표시된 후 크기 계산을 위해 show() 먼저 호출
+        popup.show()
+        
+        # 기존 팝업들의 총 높이 계산하여 세로로 쌓기
+        total_height_offset = 0
+        for existing_popup in self.notification_popups:
+            if existing_popup.isVisible():
+                total_height_offset += existing_popup.height() + 10  # 10px 간격
+
         screen_geometry = QApplication.primaryScreen().availableGeometry()
         popup_x = screen_geometry.width() - popup.width() - 15
-        popup_y = screen_geometry.height() - popup.height() - 15 - offset
+        popup_y = screen_geometry.height() - popup.height() - 15 - total_height_offset
         popup.move(popup_x, popup_y)
 
-        popup.show()
-
-        popup.destroyed.connect(lambda: self.notification_popups.remove(popup))
+        # 팝업이 닫힐 때 목록에서 제거
+        def on_popup_destroyed():
+            if popup in self.notification_popups:
+                self.notification_popups.remove(popup)
+                # 남은 팝업들의 위치 재조정
+                self.reposition_notification_popups()
+        
+        popup.destroyed.connect(on_popup_destroyed)
         self.notification_popups.append(popup)
+
+    def reposition_notification_popups(self):
+        """남은 알림 팝업들의 위치를 재조정"""
+        if not hasattr(self, 'notification_popups'):
+            return
+            
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        current_offset = 0
+        
+        # 아래에서 위로 순서대로 위치 재조정
+        for popup in reversed(self.notification_popups):
+            if popup.isVisible():
+                popup_x = screen_geometry.width() - popup.width() - 15
+                popup_y = screen_geometry.height() - popup.height() - 15 - current_offset
+                popup.move(popup_x, popup_y)
+                current_offset += popup.height() + 10  # 10px 간격
 
     def sync_startup_setting(self):
         if sys.platform != "win32":
@@ -683,7 +713,9 @@ class MainWidget(QWidget):
                         'provider': provider_name,
                         'body': event_body
                     }
+                    QApplication.processEvents()  # UI 반응성 유지
                     self.data_manager.add_event(event_to_add)
+                    QApplication.processEvents()  # UI 반응성 유지
 
                 self.settings['last_selected_calendar_id'] = calendar_id
                 save_settings(self.settings) # AI 추가 후에도 캘린더 ID 저장
@@ -740,6 +772,13 @@ class MainWidget(QWidget):
             self.active_dialog.activateWindow()
             return
             
+        # 현재 활성화된 뷰의 팝오버 닫기
+        current_view = self.stacked_widget.currentWidget()
+        if hasattr(current_view, 'current_popover') and current_view.current_popover:
+            if current_view.current_popover.isVisible():
+                current_view.current_popover.close()
+                current_view.current_popover = None
+            
         # user_action_priority 컨텍스트에서 데드락 발생하므로 제거
         editor = None
         cursor_pos = self._get_dialog_pos()
@@ -761,9 +800,13 @@ class MainWidget(QWidget):
 
                 is_recurring = 'recurrence' in event_data.get('body', {})
                 if editor.mode == 'new':
+                    QApplication.processEvents()  # UI 반응성 유지
                     self.data_manager.add_event(event_data)
+                    QApplication.processEvents()  # UI 반응성 유지
                 else:
+                    QApplication.processEvents()  # UI 반응성 유지
                     self.data_manager.update_event(event_data)
+                    QApplication.processEvents()  # UI 반응성 유지
 
                 self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
                 save_settings(self.settings)
@@ -782,7 +825,9 @@ class MainWidget(QWidget):
             elif result == EventEditorWindow.DeleteRole:
                 event_to_delete = editor.get_event_data()
                 deletion_mode = editor.get_deletion_mode() # Get the user's choice
+                QApplication.processEvents()  # UI 반응성 유지
                 self.data_manager.delete_event(event_to_delete, deletion_mode=deletion_mode)
+                QApplication.processEvents()  # UI 반응성 유지
 
     def show_error_message(self, message, ok_only=False, title="오류"):
         if not self.is_interaction_unlocked():
@@ -792,6 +837,7 @@ class MainWidget(QWidget):
                 QSystemTrayIcon.MessageIcon.Warning if title == "오류" else QSystemTrayIcon.MessageIcon.Information,
                 5000
             )
+            return True  # 트레이 알림의 경우 항상 True 반환
         else:
             dialog = CustomMessageBox(
                 parent=None,
@@ -801,7 +847,8 @@ class MainWidget(QWidget):
                 pos=self._get_dialog_pos(),
                 ok_only=ok_only
             )
-            dialog.exec()
+            result = dialog.exec()
+            return result == QDialog.DialogCode.Accepted
 
     def add_common_context_menu_actions(self, menu):
         if menu.actions(): menu.addSeparator()
@@ -921,6 +968,8 @@ class MainWidget(QWidget):
 
         if moved:
             self.move(new_pos)
+    
+    
 
 if __name__ == '__main__':
     logging.basicConfig(
