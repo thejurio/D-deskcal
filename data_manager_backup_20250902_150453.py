@@ -10,7 +10,6 @@ from collections import deque, OrderedDict
 from contextlib import contextmanager
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil import parser as dateutil_parser
-from dateutil.relativedelta import relativedelta
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QMutex, QMutexLocker, QTimer, QWaitCondition, QThreadPool, QRunnable
 
 from providers.google_provider import GoogleCalendarProvider
@@ -35,348 +34,241 @@ def get_month_view_dates(year, month, start_day_of_week):
     end_date = start_date + datetime.timedelta(days=41)
     return start_date, end_date
 
-class DistanceBasedTaskQueue:
-    """거리별 작업 분배 시스템"""
-    
+class PriorityTaskQueue:
     def __init__(self):
-        # 거리별 큐: 0(현재월), 1~6(거리별)
-        self._queues = {i: deque() for i in range(7)}
+        # 1: P1 (즉시 실행), 2: P2 (백그라운드 예측), 3: P3 (저우선순위 캐싱)
+        self._queues = {1: deque(), 2: deque(), 3: deque()}
         self._pending_tasks = set()
         self._mutex = QMutex()
-        # 각 거리별 워커의 활성 작업 추적
-        self._active_tasks = {i: None for i in range(7)}
 
-    def add_task(self, distance, task_data):
-        """거리 기반으로 작업 추가"""
+    def add_task(self, priority, task_data):
         with QMutexLocker(self._mutex):
-            # 거리 범위 제한 (0-6)
-            distance = min(max(distance, 0), 6)
-            
-            # 이미 pending이지만 더 가까운 거리일 때 갱신
-            for d in sorted(self._queues.keys()):
-                if task_data in self._queues[d] and distance < d:
-                    self._queues[d].remove(task_data)
-                    self._queues[distance].append(task_data)
-                    logger.info(f"[캐시 DEBUG] 작업 거리 갱신: {task_data} 거리{d}→{distance}")
-                    return True
-                    
-            # 새 작업 추가
             if task_data not in self._pending_tasks:
-                self._queues[distance].append(task_data)
+                self._queues[priority].append(task_data)
                 self._pending_tasks.add(task_data)
-                logger.info(f"[캐시 DEBUG] 거리{distance} 작업 추가: {task_data}")
                 return True
             return False
 
-    def get_next_task_for_distance(self, distance):
-        """특정 거리의 워커가 다음 작업 가져오기"""
+    def get_next_task(self):
         with QMutexLocker(self._mutex):
-            if distance in self._queues and self._queues[distance]:
-                task_data = self._queues[distance].popleft()
-                self._pending_tasks.discard(task_data)
-                self._active_tasks[distance] = task_data
-                return task_data
+            for p in sorted(self._queues.keys()):
+                if self._queues[p]:
+                    task_data = self._queues[p].popleft()
+                    self._pending_tasks.remove(task_data)
+                    return task_data
             return None
 
-    def mark_task_completed(self, distance, task_data):
-        """작업 완료 처리"""
+    def interrupt_and_add_high_priority(self, task_data):
         with QMutexLocker(self._mutex):
-            if self._active_tasks.get(distance) == task_data:
-                self._active_tasks[distance] = None
-                logger.info(f"[캐시 DEBUG] 거리{distance} 작업 완료: {task_data}")
+            # P1 큐의 다른 항목들은 제거 (현재 뷰에 집중)
+            if self._queues[1]:
+                self._pending_tasks -= set(self._queues[1])
+                self._queues[1].clear()
 
-    def interrupt_and_add_current_month(self, task_data):
-        """현재 월은 모든 작업을 중단하고 최우선 처리"""
-        with QMutexLocker(self._mutex):
-            # 현재 처리 중인 작업 중단
-            if self._active_tasks[0] is not None:
-                old_task = self._active_tasks[0]
-                self._pending_tasks.discard(old_task)
-                logger.info(f"[캐시 DEBUG] 현재월 작업 중단: {old_task}")
-            
-            # 새 작업을 최우선으로 추가
-            self._queues[0].clear()
-            self._queues[0].append(task_data)
-            self._pending_tasks.add(task_data)
-            self._active_tasks[0] = None
-            logger.info(f"[캐시 DEBUG] 현재월 최우선 작업 설정: {task_data}")
-
-    def clear_orphaned_pending(self):
-        """큐에는 없지만 pending 상태인 고아 작업들 정리"""
-        with QMutexLocker(self._mutex):
-            all_queued_tasks = set()
-            for queue in self._queues.values():
-                all_queued_tasks.update(queue)
-            
-            orphaned_tasks = self._pending_tasks - all_queued_tasks
-            orphaned_count = len(orphaned_tasks)
-            self._pending_tasks -= orphaned_tasks
-            
-            if orphaned_count > 0:
-                logger.info(f"[캐시 DEBUG] 고아 작업 {orphaned_count}개 정리됨")
-            return orphaned_count
-
-    def get_queue_status(self):
-        """각 거리별 큐 상태 반환 (디버그용)"""
-        with QMutexLocker(self._mutex):
-            status = {}
-            for distance, queue in self._queues.items():
-                status[distance] = {
-                    'queued': len(queue),
-                    'active': self._active_tasks[distance] is not None,
-                    'active_task': self._active_tasks[distance]
-                }
-            return status
+            if task_data not in self._pending_tasks:
+                self._queues[1].appendleft(task_data) # 최우선으로 추가
+                self._pending_tasks.add(task_data)
 
     def __len__(self):
         with QMutexLocker(self._mutex):
             return len(self._pending_tasks)
 
-class DistanceWorker(QObject):
-    """개별 워커 스레드 - 특정 거리의 작업 담당"""
+class CachingManager(QObject):
     finished = pyqtSignal()
-    
-    def __init__(self, distance, task_queue, data_manager):
-        super().__init__()
-        self.distance = distance
-        self.task_queue = task_queue
-        self.data_manager = data_manager
-        self._is_running = True
-        
-        # 거리별 워커 이름 설정
-        if distance == 0:
-            self.name = "현재월"
-        else:
-            self.name = f"거리{distance}"
-            
-        logger.info(f"[캐시 DEBUG] {self.name} 워커 초기화됨")
-
-    def stop(self):
-        """워커 중지"""
-        self._is_running = False
-        logger.info(f"[캐시 DEBUG] {self.name} 워커 중지 요청됨")
-
-    def run(self):
-        """워커의 메인 실행 루프"""
-        logger.info(f"[캐시 DEBUG] {self.name} 워커 시작")
-        
-        while self._is_running:
-            # 1. 할당된 거리의 작업 가져오기
-            task_data = self.task_queue.get_next_task_for_distance(self.distance)
-            
-            if task_data:
-                try:
-                    task_type, (year, month) = task_data
-                    logger.info(f"[캐시 DEBUG] {self.name} 워커 작업 시작: {year}년 {month}월")
-                    
-                    # 2. 동기화 상태 알림 (UI 스피너 표시)
-                    self.data_manager.set_sync_state(True, year, month)
-                    
-                    # 3. 실제 API 호출
-                    events = self.data_manager._fetch_events_from_providers(year, month)
-                    
-                    if events is not None and self._is_running:
-                        # 4. 캐시에 저장
-                        self.data_manager._merge_events_preserving_temp(year, month, events)
-                        self.data_manager._save_month_to_cache_db(year, month, events)
-                        
-                        # 5. UI 업데이트 신호 발송
-                        self.data_manager.data_updated.emit(year, month)
-                        
-                        logger.info(f"[캐시 DEBUG] {self.name} 워커 작업 완료: {year}년 {month}월 ({len(events)}개 이벤트)")
-                    
-                    # 6. 작업 완료 처리
-                    self.data_manager.set_sync_state(False, year, month)
-                    self.task_queue.mark_task_completed(self.distance, task_data)
-                    
-                except Exception as e:
-                    logger.error(f"[캐시 DEBUG] {self.name} 워커 작업 오류: {e}", exc_info=True)
-                    # 오류 시에도 동기화 상태 해제
-                    try:
-                        task_type, (year, month) = task_data
-                        self.data_manager.set_sync_state(False, year, month)
-                    except:
-                        pass
-            else:
-                # 작업이 없으면 잠시 대기
-                time.sleep(0.1)
-        
-        logger.info(f"[캐시 DEBUG] {self.name} 워커 종료됨")
-        self.finished.emit()
-
-
-class DistanceBasedCachingManager(QObject):
-    """7개 워커 기반 거리별 병렬 캐싱 시스템 총괄 관리자"""
-    finished = pyqtSignal()
+    # [수정] CachingManager는 이제 동기화 상태를 직접 알리지 않음. DataManager가 관리.
 
     def __init__(self, data_manager):
         super().__init__()
         self.data_manager = data_manager
         self._is_running = True
         self._mutex = QMutex()
-        
-        # 거리별 작업 큐
-        self._task_queue = DistanceBasedTaskQueue()
+        self._task_queue = PriorityTaskQueue()
         self._last_viewed_month = None
-        
-        # 7개 워커와 스레드 관리
-        self._workers = {}
-        self._worker_threads = {}
-        
-        # 일시정지 관리
         self._activity_lock = QMutex()
         self._pause_requested = False
         self._resume_condition = QWaitCondition()
-        
-        # 7개 워커 초기화 (거리 0~6)
-        self._init_workers()
-        
-        logger.info("[캐시 DEBUG] DistanceBasedCachingManager 초기화 완료 (7개 워커)")
 
-    def _init_workers(self):
-        """7개 거리별 워커 초기화"""
-        for distance in range(7):
-            # 워커 생성
-            worker = DistanceWorker(distance, self._task_queue, self.data_manager)
-            self._workers[distance] = worker
-            
-            # 스레드 생성 및 연결
-            thread = QThread()
-            self._worker_threads[distance] = thread
-            
-            worker.moveToThread(thread)
-            thread.started.connect(worker.run)
-            worker.finished.connect(thread.quit)
-            worker.finished.connect(worker.deleteLater)
-            thread.finished.connect(thread.deleteLater)
-            
-            # 스레드 시작
-            thread.start()
-            
-            logger.info(f"[캐시 DEBUG] 거리{distance} 워커 스레드 시작됨")
-
-    def request_caching_around(self, year, month, skip_current=False):
-        """거리별 병렬 캐싱 요청"""
+    def request_caching_around(self, year, month):
+        """슬라이딩 윈도우 기반 캐싱 요청: 중앙달 기준 우선순위로 캐싱"""
         with QMutexLocker(self._mutex):
             self._last_viewed_month = (year, month)
-            
-            logger.info(f"[캐시 DEBUG] 병렬 캐싱 요청: {year}년 {month}월 중심")
-            
-            # 현재 월 처리 (skip_current가 False인 경우에만)
-            if not skip_current:
-                current_month_task = ('month', (year, month))
-                self._task_queue.interrupt_and_add_current_month(current_month_task)
-                logger.info(f"[캐시 DEBUG] 현재월 최우선 처리: {year}년 {month}월")
+            current_month_task = ('month', (year, month))
 
-            # 1. 슬라이딩 윈도우 계산 (13개월: ±6개월)
+            # 1. 현재 월을 P1(최우선)으로 설정하고, 다른 P1 작업은 모두 취소
+            self._task_queue.interrupt_and_add_high_priority(current_month_task)
+            logger.info(f"P1 작업 설정: {year}년 {month}월 즉시 동기화")
+
+            # 2. 13개월 슬라이딩 윈도우 계산
             window_months = self._calculate_sliding_window(year, month, 6)
             
-            # 2. 이미 캐시되지 않은 월들만 필터링
-            cached_months = set(self.data_manager.event_cache.keys())
-            target_months = [m for m in window_months if m not in cached_months]
+            # 3. 현재 캐시되지 않은 월들만 필터링
+            uncached_months = []
+            for window_month in window_months:
+                if window_month != (year, month) and window_month not in self.data_manager.event_cache:
+                    uncached_months.append(window_month)
             
-            logger.info(f"[캐시 DEBUG] 윈도우 {len(window_months)}개월, 미캐시 {len(target_months)}개월")
+            # 4. 중앙달과의 거리에 따라 우선순위 정렬
+            priority_months = self._get_cache_priority_order(year, month, uncached_months)
             
-            # 3. 거리별 작업 분산
-            distance_assignments = {}
-            for target_month in target_months:
-                # 거리 계산 (절대값)
-                distance = abs((target_month[0] - year) * 12 + (target_month[1] - month))
-                worker_distance = min(distance, 6)  # 최대 거리 6
+            # 5. 거리별 우선순위 할당 및 큐에 추가
+            for idx, month_tuple in enumerate(priority_months):
+                # P2: 가까운 6개월 (거리 1-6)
+                # P3: 먼 6개월 (거리 7+)
+                priority = 2 if idx < 6 else 3
+                task_data = ('month', month_tuple)
                 
-                if worker_distance not in distance_assignments:
-                    distance_assignments[worker_distance] = []
-                distance_assignments[worker_distance].append(target_month)
+                added = self._task_queue.add_task(priority, task_data)
+                if added:
+                    distance = abs((month_tuple[0] - year) * 12 + (month_tuple[1] - month))
+                    logger.info(f"P{priority} 캐싱 대기열 추가: {month_tuple[0]}년 {month_tuple[1]}월 (거리: {distance})")
 
-            # 4. 각 거리별 워커에 작업 할당
-            total_assigned = 0
-            for distance, months in distance_assignments.items():
-                for target_month in months:
-                    task_data = ('month', target_month)
-                    added = self._task_queue.add_task(distance, task_data)
-                    
-                    if added:
-                        total_assigned += 1
-                        logger.info(f"[캐시 DEBUG] 거리{distance} 워커 할당: {target_month}")
-
-            logger.info(f"[캐시 DEBUG] 총 {total_assigned}개 작업이 7개 워커에 분산 할당됨")
-            
-            # 5. 고아 작업 정리
-            orphaned_count = self._task_queue.clear_orphaned_pending()
-            if orphaned_count > 0:
-                logger.info(f"[캐시 DEBUG] {orphaned_count}개 고아 작업 정리됨")
+            logger.info(f"슬라이딩 윈도우 캐싱 계획: 중심 {year}년 {month}월, "
+                       f"윈도우 {len(window_months)}개월, 대기열 {len(priority_months)}개")
 
     def request_current_month_sync(self):
-        """현재 월 동기화 요청"""
         with QMutexLocker(self._mutex):
             if self._last_viewed_month:
+                # 자동 동기화는 P2 우선순위로 처리하여 사용자 요청에 방해되지 않도록 함
                 task_data = ("month", self._last_viewed_month)
-                # 현재 월은 항상 거리 0으로 처리
-                self._task_queue.add_task(0, task_data)
-                logger.info(f"[캐시 DEBUG] 현재월 동기화 요청: {self._last_viewed_month}")
+                self._task_queue.add_task(2, task_data)
+                logger.info(f"자동 동기화 요청됨 (P2): {self._last_viewed_month}")
+
+    def _get_month_tuple(self, base_date, days_delta):
+        target_date = base_date + datetime.timedelta(days=days_delta)
+        return ('month', (target_date.year, target_date.month))
 
     def stop(self):
-        """모든 워커 중지"""
-        logger.info("[캐시 DEBUG] 모든 워커 중지 요청")
         self._is_running = False
-        
-        # 모든 워커 중지
-        for worker in self._workers.values():
-            worker.stop()
-        
-        self.resume_sync()  # 일시정지 상태 해제
-        
-        # 모든 워커 종료 대기
-        for thread in self._worker_threads.values():
-            if thread.isRunning():
-                thread.quit()
-                thread.wait(3000)  # 3초 대기
-        
-        logger.info("[캐시 DEBUG] 모든 워커 중지 완료")
+        self.resume_sync()
+
+    def run(self):
+        logger.info("지능형 캐싱 매니저 스레드가 시작되었습니다.")
+        while self._is_running:
+            task_data = self._task_queue.get_next_task()
+
+            if task_data:
+                self._wait_if_paused()
+                if not self._is_running: break
+
+                task_type, (year, month) = task_data
+                
+                is_p1_task = (year, month) == self._last_viewed_month
+                action_text = "P1 동기화" if is_p1_task else "백그라운드 캐싱"
+                logger.info(f"{action_text} 수행: {year}년 {month}월")
+
+                # DataManager를 통해 동기화 상태 알림
+                self.data_manager.set_sync_state(True, year, month)
+
+                events = self.data_manager._fetch_events_from_providers(year, month)
+                
+                # 작업이 중단되지 않았을 경우에만 캐시 업데이트
+                if self._is_running:
+                    if events is not None:
+                        # Local-first: 임시 이벤트 보존하면서 캐시 업데이트
+                        self.data_manager._merge_events_preserving_temp(year, month, events)
+                        self.data_manager._save_month_to_cache_db(year, month, events)
+                        self.data_manager.data_updated.emit(year, month)
+                        if not is_p1_task:
+                            self._manage_sliding_window_cache()
+                    
+                    # DataManager를 통해 동기화 상태 알림
+                    self.data_manager.set_sync_state(False, year, month)
+
+                time.sleep(0.2 if is_p1_task else 0.5)
+            else:
+                time.sleep(1)
+        logger.info("지능형 캐싱 매니저 스레드가 종료되었습니다.")
         self.finished.emit()
 
-    def _calculate_sliding_window(self, center_year, center_month, radius):
-        """중심 월 기준으로 ±radius 개월의 슬라이딩 윈도우 계산"""
-        months = []
-        center_date = datetime.date(center_year, center_month, 1)
-        
-        for i in range(-radius, radius + 1):
-            if i == 0:
-                continue  # 중심월은 제외
+    def _manage_sliding_window_cache(self):
+        """슬라이딩 윈도우 캐시 관리: 현재 뷰 중심 ±6개월 (총 13개월) 유지"""
+        with QMutexLocker(self._mutex):
+            if self._last_viewed_month is None:
+                return
+                
+            # 오늘 날짜와 현재 뷰 월
+            today = datetime.date.today()
+            today_month = (today.year, today.month)
+            view_year, view_month = self._last_viewed_month
             
-            # relativedelta 사용하여 월 계산
-            target_date = center_date + relativedelta(months=i)
-            months.append((target_date.year, target_date.month))
+            # 13개월 슬라이딩 윈도우 계산 (현재 뷰 ±6개월)
+            window_months = self._calculate_sliding_window(view_year, view_month, 6)
+            
+            # 오늘 달은 절대 삭제 금지 (윈도우에 없어도 보호)
+            protected_months = {today_month}
+            
+            # 현재 캐시에서 윈도우 밖의 달들 찾기
+            cached_months = set(self.data_manager.event_cache.keys())
+            months_to_remove = cached_months - set(window_months) - protected_months
+            
+            # 윈도우 밖의 달들 삭제 (오늘 달 보호)
+            for month_to_remove in months_to_remove:
+                # 오늘 달이면 절대 삭제하지 않음 (double-check)
+                if month_to_remove == today_month:
+                    logger.info(f"오늘 달 삭제 방지: {month_to_remove} (윈도우 밖이지만 보호됨)")
+                    continue
+                    
+                logger.info(f"슬라이딩 윈도우 밖 월 삭제: {month_to_remove}")
+                del self.data_manager.event_cache[month_to_remove]
+                self.data_manager._remove_month_from_cache_db(month_to_remove[0], month_to_remove[1])
+            
+            logger.info(f"슬라이딩 윈도우 중심: {view_year}년 {view_month}월, 윈도우 크기: {len(window_months)}개월")
+    
+    def _calculate_sliding_window(self, center_year, center_month, radius):
+        """중심 월을 기준으로 ±radius 개월의 슬라이딩 윈도우 계산"""
+        window_months = []
         
-        return months
+        # 중심 월을 datetime으로 변환
+        center_date = datetime.date(center_year, center_month, 15)
+        
+        # 중심 기준 ±radius 개월 계산
+        for offset in range(-radius, radius + 1):
+            target_year = center_year
+            target_month = center_month + offset
+            
+            # 월 경계 처리
+            while target_month <= 0:
+                target_month += 12
+                target_year -= 1
+            while target_month > 12:
+                target_month -= 12
+                target_year += 1
+                
+            window_months.append((target_year, target_month))
+        
+        return sorted(set(window_months))  # 중복 제거 및 정렬
+    
+    def _get_cache_priority_order(self, center_year, center_month, months_list):
+        """중앙달과 가까운 순서로 정렬한 우선순위 리스트 반환"""
+        priority_list = []
+        
+        for year, month in months_list:
+            # 중앙달과의 거리 계산 (월 단위)
+            distance = abs((year - center_year) * 12 + (month - center_month))
+            priority_list.append((distance, (year, month)))
+        
+        # 거리순으로 정렬 (가까운 것부터)
+        priority_list.sort()
+        return [month_tuple for _, month_tuple in priority_list]
 
     def pause_sync(self):
-        """모든 워커 일시정지"""
         self._activity_lock.lock()
         self._pause_requested = True
-        logger.info("[캐시 DEBUG] 모든 워커 일시정지 요청")
+        logger.info("백그라운드 작업 일시정지 요청됨.")
 
     def resume_sync(self):
-        """모든 워커 재개"""
         if self._pause_requested:
             self._pause_requested = False
             self._activity_lock.unlock()
             self._resume_condition.wakeAll()
-            logger.info("[캐시 DEBUG] 모든 워커 재개됨")
+            logger.info("백그라운드 작업 재개됨.")
 
-    def get_queue_status(self):
-        """큐 상태 조회 (디버그용)"""
-        return self._task_queue.get_queue_status()
-
-    def get_worker_status(self):
-        """워커 상태 조회 (디버그용)"""
-        status = {}
-        for distance, thread in self._worker_threads.items():
-            status[distance] = {
-                'thread_running': thread.isRunning(),
-                'worker_name': self._workers[distance].name
-            }
-        return status
+    def _wait_if_paused(self):
+        locker = QMutexLocker(self._activity_lock)
+        while self._pause_requested:
+            logger.info("사용자 활동으로 인해 백그라운드 작업 대기 중...")
+            self._resume_condition.wait(self._activity_lock)
+        locker.unlock()
 
 class CalendarListFetcher(QObject):
     calendars_fetched = pyqtSignal(list)
@@ -448,8 +340,14 @@ class DataManager(QObject):
         
         self.last_requested_month = None
         self.providers = []
-        # DistanceBasedCachingManager는 자체적으로 7개 워커 스레드를 관리
-        self.caching_manager = DistanceBasedCachingManager(self)
+        self.caching_thread = QThread()
+        self.caching_manager = CachingManager(self)
+        self.caching_manager.moveToThread(self.caching_thread)
+        self.caching_thread.started.connect(self.caching_manager.run)
+        self.caching_thread.finished.connect(self.caching_thread.quit)
+        self.caching_manager.finished.connect(self.caching_manager.deleteLater)
+        self.caching_thread.finished.connect(self.caching_thread.deleteLater)
+        self.caching_thread.start()
         
         if start_timer:
             self.sync_timer = QTimer(self)
@@ -611,9 +509,11 @@ class DataManager(QObject):
     def stop_caching_thread(self):
         if hasattr(self, 'notification_timer'):
             self.notification_timer.stop()
-        # DistanceBasedCachingManager 중지 (7개 워커 스레드 모두 중지)
-        if hasattr(self, 'caching_manager') and self.caching_manager:
+        # [삭제] ImmediateSyncWorker 스레드 중지 로직 삭제
+        if self.caching_thread is not None and self.caching_thread.isRunning():
             self.caching_manager.stop()
+            self.caching_thread.quit()
+            self.caching_thread.wait()
         if self.calendar_fetch_thread is not None and self.calendar_fetch_thread.isRunning():
             self.calendar_fetcher.stop()
             self.calendar_fetch_thread.quit()

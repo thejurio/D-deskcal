@@ -157,6 +157,50 @@ def get_search_icon_path():
     return get_icon_path('search.svg')
 
 
+def load_theme_with_icons(theme_filename):
+    """
+    Load theme file and process icon paths
+    
+    Args:
+        theme_filename (str): Theme filename (e.g., 'dark_theme.qss')
+        
+    Returns:
+        str: Processed theme content with resolved icon paths
+    """
+    theme_path = get_theme_path(theme_filename)
+    
+    try:
+        with open(theme_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Process icon paths in the theme file
+        # Replace relative icon paths with absolute paths
+        import re
+        
+        # Pattern to find icon references in QSS files
+        # Matches patterns like: url(icons/icon_name.svg)
+        icon_pattern = r'url\(([^)]*icons/[^)]*)\)'
+        
+        def replace_icon_path(match):
+            relative_path = match.group(1)
+            # Extract just the filename from the path
+            icon_filename = os.path.basename(relative_path)
+            # Get the absolute path for the icon
+            absolute_path = get_icon_path(icon_filename)
+            # Convert to forward slashes for QSS
+            absolute_path = absolute_path.replace('\\', '/')
+            return f'url({absolute_path})'
+        
+        # Replace all icon paths
+        processed_content = re.sub(icon_pattern, replace_icon_path, content)
+        
+        return processed_content
+        
+    except (FileNotFoundError, IOError) as e:
+        print(f"Warning: Could not load theme file {theme_path}: {e}")
+        return ""
+
+
 if __name__ == "__main__":
     # Test the resource paths
     print("Testing resource paths...")
