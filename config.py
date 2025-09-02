@@ -1,10 +1,30 @@
 # config.py
+import os
+import sys
+
+def get_data_dir():
+    """Get the appropriate data directory for user files."""
+    if hasattr(sys, '_MEIPASS'):
+        # Running as PyInstaller EXE - use user's AppData directory
+        if sys.platform == "win32":
+            data_dir = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'DCWidget')
+        else:
+            data_dir = os.path.join(os.path.expanduser('~'), '.dcwidget')
+    else:
+        # Running in development mode - use current directory
+        data_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Create directory if it doesn't exist
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
 
 # --- File Paths ---
-DB_FILE = "calendar.db"
-SETTINGS_FILE = "settings.json"
-TOKEN_FILE = "token.json"
-CREDENTIALS_FILE = "credentials.json"
+_DATA_DIR = get_data_dir()
+DB_FILE = os.path.join(_DATA_DIR, "calendar.db")
+SETTINGS_FILE = os.path.join(_DATA_DIR, "settings.json")
+TOKEN_FILE = os.path.join(_DATA_DIR, "token.json")
+CREDENTIALS_FILE = os.path.join(_DATA_DIR, "credentials.json")
+ERROR_LOG_FILE = os.path.join(_DATA_DIR, "error.log")
 
 # --- Identifiers ---
 LOCAL_CALENDAR_ID = "local_calendar"

@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QObject, QThread, QEvent, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QCursor
 import gemini_parser
+from settings_manager import load_settings, save_settings
 
 class BaseDialog(QDialog):
     def __init__(self, parent=None, settings=None, pos: QPoint = None):
@@ -21,19 +22,129 @@ class BaseDialog(QDialog):
             main_opacity = self.settings.get("window_opacity", 0.95)
             dialog_opacity = main_opacity + (1 - main_opacity) * 0.85
             self.setWindowOpacity(dialog_opacity)
+    
+    def ensure_on_top(self):
+        """이 다이얼로그가 다른 다이얼로그들 위에 나타나도록 보장합니다."""
+        dialog_key = self.get_dialog_key()
+        print(f"[DEBUG] {dialog_key} ensure_on_top 호출 - 최상위로 올림")
+        
+        # 창을 최상위로 올리고 활성화
+        self.raise_()
+        self.activateWindow()
+        
+        # 추가적으로 포커스도 설정
+        self.setFocus()
+        
+        # WindowStaysOnTopHint를 다시 설정하여 확실히 위에 오도록 함
+        current_flags = self.windowFlags()
+        self.setWindowFlags(current_flags | Qt.WindowType.WindowStaysOnTopHint)
+        
+        print(f"[DEBUG] {dialog_key} 최상위 설정 완료")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.oldPos = event.globalPosition().toPoint()
+            self.oldPos = event.globalPosition().toPoint() if hasattr(event.globalPosition(), 'toPoint') else event.globalPosition()
 
     def mouseMoveEvent(self, event):
         if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
-            delta = event.globalPosition().toPoint() - self.oldPos
+            current_pos = event.globalPosition().toPoint() if hasattr(event.globalPosition(), 'toPoint') else event.globalPosition()
+            delta = current_pos - self.oldPos
             self.move(self.x() + delta.x(), self.y() + delta.y())
-            self.oldPos = event.globalPosition().toPoint()
+            self.oldPos = current_pos
 
     def mouseReleaseEvent(self, event):
         self.oldPos = None
+    
+    def get_dialog_key(self):
+        """각 다이얼로그 타입별로 고유 키를 반환합니다."""
+        return self.__class__.__name__
+    
+    def save_position(self):
+        """현재 창의 위치를 설정에 저장합니다."""
+        dialog_key = self.get_dialog_key()
+        print(f"[DEBUG] {dialog_key} save_position 호출 - settings 존재: {bool(self.settings)}")
+        
+        if not self.settings:
+            print(f"[DEBUG] {dialog_key} settings가 None이어서 위치 저장 건너뜀")
+            return
+        
+        try:
+            current_settings = load_settings()
+            print(f"[DEBUG] {dialog_key} 현재 설정 로드 완료")
+            
+            if 'dialog_positions' not in current_settings:
+                current_settings['dialog_positions'] = {}
+                print(f"[DEBUG] {dialog_key} dialog_positions 키 생성")
+            
+            position = {'x': self.x(), 'y': self.y()}
+            current_settings['dialog_positions'][dialog_key] = position
+            
+            print(f"[DEBUG] {dialog_key} 위치 저장 시도: {position}")
+            save_settings(current_settings)
+            print(f"[DEBUG] {dialog_key} 위치 저장 완료!")
+            
+            # 저장 확인
+            verify_settings = load_settings()
+            if dialog_key in verify_settings.get('dialog_positions', {}):
+                print(f"[DEBUG] {dialog_key} 위치 저장 검증 OK: {verify_settings['dialog_positions'][dialog_key]}")
+            else:
+                print(f"[DEBUG] {dialog_key} 위치 저장 검증 FAIL - 저장되지 않음")
+                
+        except Exception as e:
+            print(f"[ERROR] {dialog_key} 위치 저장 실패: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def restore_position(self):
+        """저장된 위치에서 창을 엽니다."""
+        dialog_key = self.get_dialog_key()
+        print(f"[DEBUG] {dialog_key} restore_position 호출 - settings 존재: {bool(self.settings)}")
+        
+        if not self.settings:
+            print(f"[DEBUG] {dialog_key} settings가 None이어서 위치 복원 건너뜀")
+            return
+        
+        current_settings = load_settings()
+        
+        if 'dialog_positions' in current_settings and dialog_key in current_settings['dialog_positions']:
+            pos_data = current_settings['dialog_positions'][dialog_key]
+            print(f"[DEBUG] {dialog_key} 저장된 위치로 즉시 이동: {pos_data}")
+            self.move(pos_data['x'], pos_data['y'])
+            
+            # 추가 보정: 창이 완전히 초기화된 후 한 번 더 확인 (순간이동 방지)
+            QTimer.singleShot(1, lambda: self._ensure_position(pos_data))
+        else:
+            print(f"[DEBUG] {dialog_key} 저장된 위치 없음")
+    
+    def _ensure_position(self, pos_data):
+        """위치가 제대로 설정되었는지 확인하고 필요시 재설정"""
+        if self.x() != pos_data['x'] or self.y() != pos_data['y']:
+            print(f"[DEBUG] {self.get_dialog_key()} 위치 재보정: {pos_data}")
+            self.move(pos_data['x'], pos_data['y'])
+    
+    def showEvent(self, event):
+        """창이 나타날 때 최상위에 오도록 보장합니다."""
+        super().showEvent(event)
+        # 창이 보일 때 확실히 최상위에 올리기
+        QTimer.singleShot(1, self.ensure_on_top)
+    
+    def closeEvent(self, event):
+        """창을 닫을 때 위치를 저장합니다."""
+        print(f"[DEBUG] {self.get_dialog_key()} closeEvent 호출됨")
+        self.save_position()
+        super().closeEvent(event)
+    
+    def accept(self):
+        """OK/승인으로 창을 닫을 때 위치를 저장합니다."""
+        print(f"[DEBUG] {self.get_dialog_key()} accept() 호출됨")
+        self.save_position()
+        super().accept()
+    
+    def reject(self):
+        """취소로 창을 닫을 때 위치를 저장합니다."""
+        print(f"[DEBUG] {self.get_dialog_key()} reject() 호출됨")
+        self.save_position()
+        super().reject()
 
 class CustomMessageBox(BaseDialog):
     def __init__(self, parent=None, title="알림", text="메시지 내용", settings=None, pos=None, ok_only=False):
@@ -118,6 +229,9 @@ class NewDateSelectionDialog(BaseDialog):
         self.back_to_year_button.clicked.connect(self.show_year_view)
         close_button.clicked.connect(self.reject)
         self.show_year_view()
+        
+        # 저장된 위치로 창을 이동 (UI 초기화 후에)
+        self.restore_position()
     def create_grid_view(self, click_handler):
         view = QWidget()
         grid = QGridLayout(view)
@@ -243,6 +357,9 @@ class WeekSelectionDialog(BaseDialog):
         close_button.clicked.connect(self.reject)
 
         self.show_year_view()
+        
+        # 저장된 위치로 창을 이동 (UI 초기화 후에)
+        self.restore_position()
 
     def create_grid_view(self, click_handler, cols=4):
         view = QWidget()
@@ -394,6 +511,7 @@ class WeekSelectionDialog(BaseDialog):
 class MoreEventsDialog(BaseDialog):
     edit_requested = pyqtSignal(dict)
     delete_requested = pyqtSignal(dict)
+    detail_requested = pyqtSignal(dict)  # 상세보기 요청 시그널
     def __init__(self, date_obj, events, parent=None, settings=None, pos=None, data_manager=None):
         super().__init__(parent, settings, pos)
         self.date_obj = date_obj
@@ -402,6 +520,9 @@ class MoreEventsDialog(BaseDialog):
         
         self.setWindowTitle(f"{date_obj.strftime('%Y-%m-%d')} 일정")
         self.setMinimumWidth(300)
+        
+        # 저장된 위치로 창을 이동 (UI 초기화 전에)  
+        self.restore_position()
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -437,11 +558,41 @@ class MoreEventsDialog(BaseDialog):
         self._hover_event_data = None
         self._current_popover = None
 
-        self.edit_requested.connect(self.accept)
+        # 편집 시에는 더보기창을 닫지 않음 - 상세보기와 동일한 동작
+        # self.edit_requested.connect(self.accept)  # 제거됨
         self.delete_requested.connect(self.accept)
         
         if self.data_manager:
             self.data_manager.event_completion_changed.connect(self.rebuild_event_list)
+    
+    def show_event_detail_directly(self, event_data):
+        """상세보기를 더보기창에서 직접 띄워서 z-order 보장"""
+        try:
+            print(f"[DEBUG] MoreEventsDialog: 상세보기 직접 띄우기 - {event_data.get('summary', '')}")
+            
+            from simple_event_detail_dialog import SimpleEventDetailDialog
+            
+            # main_widget을 parent를 통해 찾기
+            main_widget = self.parent()
+            while main_widget and not hasattr(main_widget, 'data_manager'):
+                main_widget = main_widget.parent()
+            
+            # 더보기창을 parent로 설정하여 z-order 보장
+            detail_dialog = SimpleEventDetailDialog(
+                event_data=event_data,
+                data_manager=self.data_manager,
+                main_widget=main_widget,
+                parent=self  # 더보기창이 parent
+            )
+            
+            print(f"[DEBUG] MoreEventsDialog: 상세보기 다이얼로그 실행")
+            detail_dialog.exec()
+            print(f"[DEBUG] MoreEventsDialog: 상세보기 다이얼로그 닫힘")
+            
+        except Exception as e:
+            print(f"[ERROR] MoreEventsDialog 상세보기 직접 띄우기 실패: {e}")
+            # 실패시 기존 방식으로 폴백
+            self.detail_requested.emit(event_data)
 
     def rebuild_event_list(self):
         event_list_widget = QWidget()
@@ -469,7 +620,49 @@ class MoreEventsDialog(BaseDialog):
                     event_button.setGraphicsEffect(None)
                 event_button.setStyleSheet(style_sheet)
 
-            event_button.clicked.connect(lambda _, e=event: self.edit_requested.emit(e))
+            # 타이머 기반 클릭 처리를 위한 커스텀 속성 추가
+            event_button.event_data = event
+            event_button.click_timer = None
+            
+            # 타이머 기반 클릭 처리
+            def create_mouse_press_handler(event_data):
+                def handler(mouse_event):
+                    if mouse_event.button() == Qt.MouseButton.LeftButton:
+                        print(f"[DEBUG] MoreEventsDialog mousePressEvent: {event_data.get('summary', '')}")
+                        from PyQt6.QtCore import QTimer
+                        
+                        # 기존 타이머 중지
+                        if hasattr(event_button, 'click_timer') and event_button.click_timer:
+                            event_button.click_timer.stop()
+                        
+                        # 단일클릭 타이머 시작
+                        event_button.click_timer = QTimer()
+                        event_button.click_timer.setSingleShot(True)
+                        event_button.click_timer.timeout.connect(lambda: self._handle_single_click(event_data))
+                        event_button.click_timer.start(300)
+                        print(f"[DEBUG] MoreEventsDialog 단일클릭 타이머 시작 (300ms)")
+                        
+                        # mouse_event.accept() 제거 - 다른 핸들러들(eventFilter)이 작동하도록 함
+                return handler
+            
+            def create_double_click_handler(event_data):
+                def handler(mouse_event):
+                    if mouse_event.button() == Qt.MouseButton.LeftButton:
+                        print(f"[DEBUG] MoreEventsDialog mouseDoubleClickEvent: {event_data.get('summary', '')}")
+                        
+                        # 단일클릭 타이머 중지
+                        if hasattr(event_button, 'click_timer') and event_button.click_timer:
+                            print(f"[DEBUG] MoreEventsDialog 단일클릭 타이머 중지됨")
+                            event_button.click_timer.stop()
+                            event_button.click_timer = None
+                        
+                        print(f"[DEBUG] MoreEventsDialog 더블클릭: 편집 요청")
+                        self.edit_requested.emit(event_data)
+                        # mouse_event.accept() 제거 - 다른 핸들러들이 작동하도록 함
+                return handler
+            
+            event_button.mousePressEvent = create_mouse_press_handler(event)
+            event_button.mouseDoubleClickEvent = create_double_click_handler(event)
             event_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             event_button.customContextMenuRequested.connect(lambda pos, e=event: self.show_context_menu(pos, e))
             event_list_layout.addWidget(event_button)
@@ -544,11 +737,27 @@ class MoreEventsDialog(BaseDialog):
         sender_button = self.sender()
         menu.exec(sender_button.mapToGlobal(pos))
 
+    def _handle_single_click(self, event_data):
+        """단일클릭 - 상세보기 다이얼로그 표시 (더보기 창은 유지)"""
+        print(f"[DEBUG] MoreEventsDialog 단일클릭: 상세보기 요청 - {event_data.get('summary', '')}")
+        # 상세보기를 직접 띄워서 z-order 보장
+        self.show_event_detail_directly(event_data)
+
 class EventPopover(BaseDialog):
+    detail_requested = pyqtSignal(dict)  # 상세보기 요청 시그널
+    edit_requested = pyqtSignal(dict)    # 편집 요청 시그널
+    
     def __init__(self, event_data, settings, parent=None):
         super().__init__(parent, settings)
+        self.event_data = event_data
+        self.click_timer = None  # 클릭 감지를 위한 타이머
+        
         self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        
+        # 마우스 이벤트 수신을 위한 설정
+        self.setMouseTracking(True)
+        print(f"[DEBUG] EventPopover 초기화 완료: 마우스 트래킹 설정됨")
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -574,6 +783,138 @@ class EventPopover(BaseDialog):
             content_layout.addWidget(time_label)
         
         self.apply_popover_opacity()
+    
+    def save_position(self):
+        """팝오버는 위치를 저장하지 않음 - 동적 위치 계산을 위해"""
+        pass
+    
+    def restore_position(self):
+        """팝오버는 저장된 위치를 복원하지 않음 - 동적 위치 계산을 위해"""
+        pass
+    
+    def showEvent(self, event):
+        """팝오버용 showEvent - BaseDialog의 위치 조정 기능 비활성화"""
+        super(BaseDialog, self).showEvent(event)  # QDialog의 showEvent 직접 호출
+        print(f"[DEBUG] EventPopover showEvent 호출됨 - 위치 조정 없음")
+
+    def mousePressEvent(self, event):
+        """팝오버 클릭 처리 - 월간뷰와 동일한 로직"""
+        print(f"[DEBUG] EventPopover mousePressEvent 호출됨 - 버튼: {event.button()}")
+        
+        if event.button() == Qt.MouseButton.LeftButton:
+            print(f"[DEBUG] EventPopover 왼쪽 클릭 감지 - 이벤트: {self.event_data.get('summary', 'Unknown')}")
+            from PyQt6.QtCore import QTimer
+            
+            # 기존 타이머 중지
+            if hasattr(self, 'click_timer') and self.click_timer:
+                print(f"[DEBUG] EventPopover 기존 타이머 중지")
+                self.click_timer.stop()
+                
+            # 단일클릭 타이머 시작
+            self.click_timer = QTimer()
+            self.click_timer.setSingleShot(True)
+            self.click_timer.timeout.connect(lambda: self._handle_single_click())
+            self.click_timer.start(300)
+            print(f"[DEBUG] EventPopover 단일클릭 타이머 시작 (300ms) - 타이머 ID: {id(self.click_timer)}")
+            
+            event.accept()
+            return
+        else:
+            print(f"[DEBUG] EventPopover 왼쪽 클릭이 아님 - 버튼: {event.button()}")
+            
+        print(f"[DEBUG] EventPopover super().mousePressEvent() 호출")
+        super().mousePressEvent(event)
+    
+    def mouseDoubleClickEvent(self, event):
+        """팝오버 더블클릭 처리"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            print(f"[DEBUG] EventPopover mouseDoubleClickEvent 시작")
+            
+            # 단일클릭 타이머 중지
+            if hasattr(self, 'click_timer') and self.click_timer:
+                print(f"[DEBUG] EventPopover 단일클릭 타이머 중지됨")
+                self.click_timer.stop()
+                self.click_timer = None
+                
+            print(f"[DEBUG] EventPopover 더블클릭: 편집 요청 (edit_requested 신호 발생) - {self.event_data.get('summary', '')}")
+            self.edit_requested.emit(self.event_data)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+    
+    def _handle_single_click(self):
+        """타이머 만료 시 단일클릭 처리 - 상세보기 다이얼로그 요청"""
+        print(f"[DEBUG] EventPopover _handle_single_click 실행됨 - 타이머 ID: {id(self.click_timer) if hasattr(self, 'click_timer') and self.click_timer else 'None'}")
+        
+        # 위젯이 삭제되었는지 확인 (안전장치)
+        try:
+            if not hasattr(self, 'event_data'):
+                print(f"[DEBUG] EventPopover: 위젯이 이미 삭제됨, 처리 중단")
+                return
+                
+            print(f"[DEBUG] EventPopover: 이벤트 데이터 확인 OK - {self.event_data.get('summary', 'Unknown')}")
+        except RuntimeError:
+            print(f"[DEBUG] EventPopover: 위젯이 이미 삭제됨 (RuntimeError)")
+            return
+        
+        if not hasattr(self, 'click_timer') or self.click_timer is None:
+            print(f"[DEBUG] EventPopover 단일클릭 타이머: 이미 취소됨")
+            return
+        
+        try:
+            print(f"[DEBUG] EventPopover 단일클릭 타이머 만료: 상세보기 요청 시작 - {self.event_data.get('summary', '')}")
+            print(f"[DEBUG] EventPopover detail_requested 신호 연결 상태 확인...")
+            
+            # 신호가 연결되어 있는지 확인
+            if self.detail_requested.receivers() > 0:
+                print(f"[DEBUG] EventPopover detail_requested 신호에 {self.detail_requested.receivers()}개 연결됨")
+            else:
+                print(f"[DEBUG] EventPopover detail_requested 신호에 연결된 슬롯 없음!")
+            
+            # 상세보기를 직접 띄워서 z-order 보장
+            self.show_event_detail_directly(self.event_data)
+            self.click_timer = None
+            print(f"[DEBUG] EventPopover 상세보기 직접 호출 완료")
+        except RuntimeError as e:
+            print(f"[DEBUG] EventPopover: 신호 발생 중 RuntimeError - {e}")
+            return
+    
+    def show_event_detail_directly(self, event_data):
+        """상세보기를 팝오버에서 직접 띄워서 z-order 보장"""
+        try:
+            print(f"[DEBUG] EventPopover: 상세보기 직접 띄우기 - {event_data.get('summary', '')}")
+            
+            from simple_event_detail_dialog import SimpleEventDetailDialog
+            
+            # main_widget을 parent를 통해 찾기
+            main_widget = self.parent()
+            while main_widget and not hasattr(main_widget, 'data_manager'):
+                main_widget = main_widget.parent()
+            
+            # 팝오버를 parent로 설정하여 z-order 보장
+            detail_dialog = SimpleEventDetailDialog(
+                event_data=event_data,
+                data_manager=getattr(main_widget, 'data_manager', None),
+                main_widget=main_widget,
+                parent=self  # 팝오버가 parent
+            )
+            
+            print(f"[DEBUG] EventPopover: 상세보기 다이얼로그 실행")
+            detail_dialog.exec()
+            print(f"[DEBUG] EventPopover: 상세보기 다이얼로그 닫힘")
+            
+        except Exception as e:
+            print(f"[ERROR] EventPopover 상세보기 직접 띄우기 실패: {e}")
+            # 실패시 기존 방식으로 폴백
+            self.detail_requested.emit(event_data)
+    
+    def closeEvent(self, event):
+        """위젯 종료 시 타이머 정리"""
+        if hasattr(self, 'click_timer') and self.click_timer:
+            print(f"[DEBUG] EventPopover: closeEvent에서 타이머 정리")
+            self.click_timer.stop()
+            self.click_timer = None
+        super().closeEvent(event)
 
     def apply_popover_opacity(self):
         if not self.settings: return
@@ -616,6 +957,9 @@ class AIEventInputDialog(BaseDialog):
         
         # 항상 위에 표시되도록 플래그 추가
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
+        # 저장된 위치로 창을 이동 (UI 초기화 전에)
+        self.restore_position()
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -632,6 +976,9 @@ class AIEventInputDialog(BaseDialog):
 
         self.text_input = QTextEdit()
         self.text_input.setPlaceholderText("여기에 이메일, 메신저 대화 내용 등을 붙여넣으세요...")
+        # 한국어 컨텍스트 메뉴 설정
+        self.text_input.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.text_input.customContextMenuRequested.connect(self._show_korean_context_menu)
         content_layout.addWidget(self.text_input)
 
         button_layout = QHBoxLayout()
@@ -644,6 +991,78 @@ class AIEventInputDialog(BaseDialog):
         button_layout.addWidget(self.cancel_button)
         button_layout.addWidget(self.analyze_button)
         content_layout.addLayout(button_layout)
+
+    def _show_korean_context_menu(self, pos):
+        """한국어 컨텍스트 메뉴를 표시합니다."""
+        menu = QMenu(self)
+        
+        # 투명도 설정
+        if self.settings:
+            main_opacity = self.settings.get("window_opacity", 0.95)
+            menu_opacity = main_opacity + (1 - main_opacity) * 0.85
+            menu.setWindowOpacity(menu_opacity)
+        
+        cursor = self.text_input.textCursor()
+        
+        # 실행 취소
+        if self.text_input.document().isUndoAvailable():
+            undo_action = QAction("실행 취소", self)
+            undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+            undo_action.triggered.connect(self.text_input.undo)
+            menu.addAction(undo_action)
+        
+        # 다시 실행
+        if self.text_input.document().isRedoAvailable():
+            redo_action = QAction("다시 실행", self)
+            redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+            redo_action.triggered.connect(self.text_input.redo)
+            menu.addAction(redo_action)
+        
+        if not menu.isEmpty():
+            menu.addSeparator()
+        
+        # 잘라내기
+        if cursor.hasSelection():
+            cut_action = QAction("잘라내기", self)
+            cut_action.setShortcut(QKeySequence.StandardKey.Cut)
+            cut_action.triggered.connect(self.text_input.cut)
+            menu.addAction(cut_action)
+        
+        # 복사
+        if cursor.hasSelection():
+            copy_action = QAction("복사", self)
+            copy_action.setShortcut(QKeySequence.StandardKey.Copy)
+            copy_action.triggered.connect(self.text_input.copy)
+            menu.addAction(copy_action)
+        
+        # 붙여넣기
+        from PyQt6.QtGui import QGuiApplication
+        clipboard = QGuiApplication.clipboard()
+        if clipboard.text():
+            paste_action = QAction("붙여넣기", self)
+            paste_action.setShortcut(QKeySequence.StandardKey.Paste)
+            paste_action.triggered.connect(self.text_input.paste)
+            menu.addAction(paste_action)
+        
+        # 삭제
+        if cursor.hasSelection():
+            menu.addSeparator()
+            delete_action = QAction("삭제", self)
+            delete_action.triggered.connect(lambda: cursor.removeSelectedText())
+            menu.addAction(delete_action)
+        
+        # 전체 선택
+        if self.text_input.toPlainText():
+            menu.addSeparator()
+            select_all_action = QAction("전체 선택", self)
+            select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
+            select_all_action.triggered.connect(self.text_input.selectAll)
+            menu.addAction(select_all_action)
+        
+        # 메뉴가 비어있지 않으면 표시
+        if not menu.isEmpty():
+            global_pos = self.text_input.mapToGlobal(pos)
+            menu.exec(global_pos)
 
     def get_text(self):
         return self.text_input.toPlainText()

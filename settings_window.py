@@ -15,7 +15,7 @@ from config import (
                     DEFAULT_NOTIFICATION_DURATION)
 
 PASTEL_COLORS = {
-    "기본": ["#ffadad", "#ffd6a5", "#fdffb6", "#caffbf", "#9bf6ff", "#a0c4ff", "#bdb2ff", "#ffc6ff", "#e4e4e4", "#f1f1f1"]
+    "기본": ["#C5504B", "#D24726", "#E36C09", "#70AD47", "#0F5298", "#7030A0", "#8064A2", "#B83DBA", "#44546A", "#595959"]
 }
 CUSTOM_COLOR_TEXT = "사용자 지정..."
 
@@ -34,6 +34,9 @@ class SettingsWindow(BaseDialog):
         self.setWindowTitle("설정")
         self.setModal(True)
         self.setMinimumSize(530, 620)
+        
+        # 저장된 위치로 창을 이동 (UI 초기화 전에)
+        self.restore_position()
         
         margin_widget = QWidget()
         margin_widget.setObjectName("settings_margin_background")

@@ -11,6 +11,8 @@ from config import LOCAL_CALENDAR_PROVIDER_NAME
 class BaseViewWidget(QWidget):
     add_event_requested = pyqtSignal(object)
     edit_event_requested = pyqtSignal(dict)
+    edit_requested = pyqtSignal(dict)  # 더블클릭 편집 요청 시그널
+    detail_requested = pyqtSignal(dict)  # 상세보기 요청 시그널
     navigation_requested = pyqtSignal(str)
     date_selected = pyqtSignal(datetime.date)
 
@@ -105,6 +107,12 @@ class BaseViewWidget(QWidget):
         
         self.current_popover = EventPopover(self.hovered_event_data, self.main_widget.settings, self)
         
+        # 팝오버 신호 연결
+        print(f"[DEBUG] BaseView: 팝오버 신호 연결 중 - {self.hovered_event_data.get('summary', '')}")
+        self.current_popover.detail_requested.connect(self.detail_requested.emit)
+        self.current_popover.edit_requested.connect(self.edit_requested.emit)
+        print(f"[DEBUG] BaseView: 팝오버 신호 연결 완료")
+        
         # ▼▼▼ [수정] 팝오버 위치 계산 로직 전체 변경 ▼▼▼
         popover_size = self.current_popover.sizeHint()
         cursor_pos = QCursor.pos()
@@ -143,7 +151,14 @@ class BaseViewWidget(QWidget):
         self.current_popover.move(x, y)
         # ▲▲▲ [수정] 종료 ▲▲▲
         
+        # 디버그 정보 추가
+        print(f"[DEBUG] BaseView: 팝오버 위치 설정 - x={x}, y={y}, size={popover_size}")
+        print(f"[DEBUG] BaseView: 커서 위치 - {cursor_pos}")
+        print(f"[DEBUG] BaseView: 화면 크기 - {screen_rect}")
+        
         self.current_popover.show()
+        print(f"[DEBUG] BaseView: 팝오버 show() 호출 완료")
+        print(f"[DEBUG] BaseView: 팝오버 visible={self.current_popover.isVisible()}, pos={self.current_popover.pos()}")
     
     # ▼▼▼ [수정] 아래 두 함수는 이제 비워두거나 간단하게 유지합니다. ▼▼▼
     def mouseMoveEvent(self, event):

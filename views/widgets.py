@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QGraphicsOpacityEffect
 
 class EventLabelWidget(QLabel):
     edit_requested = pyqtSignal(dict)
+    detail_requested = pyqtSignal(dict)  # 상세보기 요청 시그널
 
     def __init__(self, event, is_completed=False, is_other_month=False, main_widget=None, parent=None):
         super().__init__(parent)
@@ -16,6 +17,9 @@ class EventLabelWidget(QLabel):
         self.main_widget = main_widget
         self.setMouseTracking(True) 
         self.parent_view = self.main_widget.stacked_widget.currentWidget()
+        
+        # 클릭 감지 로직을 위한 속성
+        self.click_timer = None
 
         summary = event.get('summary', '제목 없음')
         if 'recurrence' in event:
@@ -81,13 +85,105 @@ class EventLabelWidget(QLabel):
     def setText(self, text):
         super().setText(text)
 
-    def mouseDoubleClickEvent(self, event):
+    def mousePressEvent(self, event):
+        """클릭 횟수 기반 감지 로직"""
         if event.button() == Qt.MouseButton.LeftButton:
-            if self.main_widget and self.main_widget.is_interaction_unlocked():
-                self.edit_requested.emit(self.event_data)
-                event.accept() 
-        else:
-            super().mouseDoubleClickEvent(event)
+            from PyQt6.QtCore import QTimer
+            from PyQt6.QtWidgets import QApplication
+            import time
+            
+            current_time = time.time() * 1000
+            timer_active = self.click_timer and self.click_timer.isActive()
+            
+            print(f"[DEBUG] EventLabelWidget mousePressEvent - 시간: {current_time:.0f}, 타이머활성: {timer_active}")
+            
+            # 이미 활성 타이머가 있으면 두 번째 클릭 (더블클릭)
+            if timer_active:
+                print(f"[DEBUG] EventLabelWidget 두 번째 클릭 감지: 편집창 요청, 타이머 중지")
+                
+                # 타이머 완전 중지
+                self.click_timer.stop()
+                self.click_timer.deleteLater()
+                self.click_timer = None
+                
+                # 편집창 요청
+                if self.main_widget and self.main_widget.is_interaction_unlocked():
+                    print(f"[DEBUG] EventLabelWidget edit_requested.emit() 호출")
+                    self.edit_requested.emit(self.event_data)
+                else:
+                    print(f"[DEBUG] EventLabelWidget 편집창 요청 차단 (unlocked: {self.main_widget.is_interaction_unlocked() if self.main_widget else 'None'})")
+                
+                event.accept()
+                return
+            
+            # 첫 번째 클릭 - 타이머 시작
+            double_click_interval = QApplication.instance().doubleClickInterval()
+            print(f"[DEBUG] EventLabelWidget 첫 번째 클릭: 타이머 시작 ({double_click_interval + 50}ms)")
+            
+            self.click_timer = QTimer()
+            self.click_timer.setSingleShot(True)
+            self.click_timer.timeout.connect(self._handle_single_click)
+            self.click_timer.start(double_click_interval + 50)
+            
+            event.accept()
+            return
+            
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        """더블클릭 이벤트는 이제 사용하지 않음 - mousePressEvent에서 처리"""
+        # mousePressEvent에서 모든 처리를 하므로 여기서는 이벤트만 차단
+        if event.button() == Qt.MouseButton.LeftButton:
+            import time
+            current_time = time.time() * 1000
+            print(f"[DEBUG] EventLabelWidget mouseDoubleClickEvent: 시간 {current_time:.0f} - 무시됨")
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def _handle_single_click(self):
+        """타이머 만료 시 단일클릭 처리 - 상세보기 다이얼로그 요청"""
+        print(f"[DEBUG] EventLabelWidget _handle_single_click 실행됨")
+        
+        # 위젯이 삭제되었는지 확인 (안전장치)
+        try:
+            if not hasattr(self, 'event_data'):
+                print(f"[DEBUG] EventLabelWidget: 위젯이 이미 삭제됨, 처리 중단")
+                return
+        except RuntimeError:
+            print(f"[DEBUG] EventLabelWidget: 위젯이 이미 삭제됨 (RuntimeError)")
+            return
+        
+        # 타이머가 이미 None이면 더블클릭에 의해 취소된 것
+        if not hasattr(self, 'click_timer') or self.click_timer is None:
+            print(f"[DEBUG] EventLabelWidget 단일클릭 타이머: 이미 취소됨 (타이머가 None)")
+            return
+        
+        try:
+            print(f"[DEBUG] EventLabelWidget 단일클릭 타이머 만료: 상세보기 요청 (detail_requested 신호 발생) - {self.event_data.get('summary', '')}")
+            self.detail_requested.emit(self.event_data)
+            self.click_timer = None
+            print(f"[DEBUG] EventLabelWidget _handle_single_click 완료")
+        except RuntimeError as e:
+            print(f"[DEBUG] EventLabelWidget: 신호 발생 중 RuntimeError - {e}")
+            return
+    
+    def closeEvent(self, event):
+        """위젯 종료 시 타이머 정리"""
+        if hasattr(self, 'click_timer') and self.click_timer:
+            print(f"[DEBUG] EventLabelWidget: closeEvent에서 타이머 정리")
+            self.click_timer.stop()
+            self.click_timer = None
+        super().closeEvent(event)
+    
+    def deleteLater(self):
+        """위젯 삭제 시 타이머 정리"""
+        if hasattr(self, 'click_timer') and self.click_timer:
+            print(f"[DEBUG] EventLabelWidget: deleteLater에서 타이머 정리")
+            self.click_timer.stop()
+            self.click_timer = None
+        super().deleteLater()
+
 
 class TimeScaleWidget(QWidget):
     def __init__(self, hour_height, parent=None):
@@ -169,10 +265,17 @@ def draw_event(painter, rect, event_data, time_text, summary_text, is_completed=
 
 class AgendaEventWidget(QWidget):
     """안건 뷰에 표시될 단일 이벤트 위젯입니다."""
+    detail_requested = pyqtSignal(dict)  # 상세보기 요청 시그널
+    edit_requested = pyqtSignal(dict)    # 편집 요청 시그널
+    
     def __init__(self, event_data, parent_view=None, parent=None):
         super().__init__(parent)
         self.event_data = event_data
         self.parent_view = parent_view
+        
+        # 클릭 감지 로직을 위한 속성
+        self.click_timer = None
+        
         self.init_ui()
 
     def _format_event_time(self):
@@ -266,6 +369,92 @@ class AgendaEventWidget(QWidget):
             opacity_effect = QGraphicsOpacityEffect(self)
             opacity_effect.setOpacity(0.5)
             self.setGraphicsEffect(opacity_effect)
+
+    def mousePressEvent(self, event):
+        """월간뷰와 동일한 클릭 처리 로직"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            print(f"[DEBUG] AgendaEventWidget mousePressEvent 시작")
+            from PyQt6.QtCore import QTimer
+            
+            print(f"[DEBUG] AgendaEventWidget 이벤트 감지됨 - {self.event_data.get('summary', '')}")
+            
+            # 기존 타이머 중지
+            if hasattr(self, 'click_timer') and self.click_timer:
+                print(f"[DEBUG] AgendaEventWidget 기존 타이머 중지")
+                self.click_timer.stop()
+                
+            # 단일클릭 타이머 시작 (더블클릭이 발생하면 mouseDoubleClickEvent에서 중지됨)
+            self.click_timer = QTimer()
+            self.click_timer.setSingleShot(True)
+            self.click_timer.timeout.connect(lambda: self._handle_single_click())
+            self.click_timer.start(300)  # 300ms 후 단일클릭 처리
+            print(f"[DEBUG] AgendaEventWidget 단일클릭 타이머 시작 (300ms)")
+            
+            # event.accept() 제거 - 이벤트를 소비하지 않아서 다른 핸들러들이 작동하도록 함
+            
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        """표준 더블클릭 이벤트 처리 - 월간뷰와 동일"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            print(f"[DEBUG] AgendaEventWidget mouseDoubleClickEvent 시작")
+            
+            # 단일클릭 타이머 중지
+            if hasattr(self, 'click_timer') and self.click_timer:
+                print(f"[DEBUG] AgendaEventWidget 단일클릭 타이머 중지됨")
+                self.click_timer.stop()
+                self.click_timer = None
+            else:
+                print(f"[DEBUG] AgendaEventWidget 단일클릭 타이머가 없음 또는 이미 None")
+                
+            print(f"[DEBUG] AgendaEventWidget 더블클릭: 편집 요청 (edit_requested 신호 발생) - {self.event_data.get('summary', '')}")
+            self.edit_requested.emit(self.event_data)
+            # event.accept() 제거 - 다른 핸들러들이 작동하도록 함
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def _handle_single_click(self):
+        """타이머 만료 시 단일클릭 처리 - 상세보기 다이얼로그 요청"""
+        print(f"[DEBUG] AgendaEventWidget _handle_single_click 실행됨")
+        
+        # 위젯이 삭제되었는지 확인 (안전장치)
+        try:
+            if not hasattr(self, 'event_data'):
+                print(f"[DEBUG] AgendaEventWidget: 위젯이 이미 삭제됨, 처리 중단")
+                return
+        except RuntimeError:
+            print(f"[DEBUG] AgendaEventWidget: 위젯이 이미 삭제됨 (RuntimeError)")
+            return
+        
+        # 타이머가 이미 None이면 더블클릭에 의해 취소된 것
+        if not hasattr(self, 'click_timer') or self.click_timer is None:
+            print(f"[DEBUG] AgendaEventWidget 단일클릭 타이머: 이미 취소됨 (타이머가 None)")
+            return
+        
+        try:
+            print(f"[DEBUG] AgendaEventWidget 단일클릭 타이머 만료: 상세보기 요청 (detail_requested 신호 발생) - {self.event_data.get('summary', '')}")
+            self.detail_requested.emit(self.event_data)
+            self.click_timer = None
+            print(f"[DEBUG] AgendaEventWidget _handle_single_click 완료")
+        except RuntimeError as e:
+            print(f"[DEBUG] AgendaEventWidget: 신호 발생 중 RuntimeError - {e}")
+            return
+
+    def closeEvent(self, event):
+        """위젯 종료 시 타이머 정리"""
+        if hasattr(self, 'click_timer') and self.click_timer:
+            print(f"[DEBUG] AgendaEventWidget: closeEvent에서 타이머 정리")
+            self.click_timer.stop()
+            self.click_timer = None
+        super().closeEvent(event)
+    
+    def deleteLater(self):
+        """위젯 삭제 시 타이머 정리"""
+        if hasattr(self, 'click_timer') and self.click_timer:
+            print(f"[DEBUG] AgendaEventWidget: deleteLater에서 타이머 정리")
+            self.click_timer.stop()
+            self.click_timer = None
+        super().deleteLater()
 
     def contextMenuEvent(self, event):
         if self.parent_view and self.parent_view.main_widget.is_interaction_unlocked():

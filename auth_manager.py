@@ -6,8 +6,7 @@ from googleapiclient.discovery import build
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
 # --- 설정 ---
-TOKEN_FILE = 'token.json'
-CREDENTIALS_FILE = 'credentials.json'
+from config import TOKEN_FILE, CREDENTIALS_FILE
 SCOPES = [
     'openid',
     'https://www.googleapis.com/auth/userinfo.email',

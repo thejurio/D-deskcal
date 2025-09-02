@@ -5,6 +5,7 @@ import copy
 import logging
 import time
 import psutil
+import socket
 
 if sys.platform == "win32":
     import win32gui
@@ -19,13 +20,14 @@ from PyQt6.QtGui import QAction, QIcon
 import keyboard
 from hotkey_manager import HotkeyManager
 from auth_manager import AuthManager
-from settings_manager import load_settings, save_settings
+from settings_manager import load_settings, save_settings, save_settings_safe
 from config import (
                     DEFAULT_WINDOW_GEOMETRY,
                     DEFAULT_LOCK_MODE_ENABLED,
                     DEFAULT_LOCK_MODE_KEY,
                     DEFAULT_WINDOW_MODE,
-                    DEFAULT_NOTIFICATION_DURATION
+                    DEFAULT_NOTIFICATION_DURATION,
+                    ERROR_LOG_FILE
 )
 
 from data_manager import DataManager
@@ -41,6 +43,33 @@ from custom_dialogs import AIEventInputDialog, CustomMessageBox
 from ai_confirmation_dialog import AIConfirmationDialog
 import gemini_parser
 from resource_path import resource_path, get_theme_path, get_icon_path, load_theme_with_icons
+from simple_event_detail_dialog import SimpleEventDetailDialog
+
+
+class SingleInstanceApp:
+    """Single instance application manager using socket lock."""
+    def __init__(self, app_name="DCWidget"):
+        self.app_name = app_name
+        self.lock_socket = None
+        
+    def is_already_running(self):
+        """Check if another instance is already running."""
+        try:
+            self.lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Use a less common port to avoid conflicts
+            self.lock_socket.bind(('127.0.0.1', 23741))
+            return False
+        except socket.error:
+            return True
+            
+    def cleanup(self):
+        """Clean up the socket lock."""
+        if self.lock_socket:
+            try:
+                self.lock_socket.close()
+            except:
+                pass
+
 
 def load_stylesheet(file_path):
     """Load stylesheet with proper resource path handling and icon path preprocessing"""
@@ -275,7 +304,7 @@ class MainWidget(QWidget):
     def toggle_lock_mode(self):
         is_enabled = self.settings.get("lock_mode_enabled", DEFAULT_LOCK_MODE_ENABLED)
         self.settings["lock_mode_enabled"] = not is_enabled
-        save_settings(self.settings)
+        save_settings_safe(self.settings)
         self.apply_window_settings()
 
     def update_lock_icon(self):
@@ -414,6 +443,16 @@ class MainWidget(QWidget):
 
         self.agenda_view.edit_event_requested.connect(self.open_event_editor)
         
+        # 상세보기 시그널 연결
+        self.month_view.detail_requested.connect(self.show_event_detail)
+        self.week_view.detail_requested.connect(self.show_event_detail)
+        self.agenda_view.detail_requested.connect(self.show_event_detail)
+        
+        # 편집 요청 시그널 연결 (더블클릭)
+        self.month_view.edit_requested.connect(self.open_event_editor)
+        self.week_view.edit_requested.connect(self.open_event_editor)
+        self.agenda_view.edit_requested.connect(self.open_event_editor)
+        
         self.data_manager.event_completion_changed.connect(self.month_view.refresh)
         self.data_manager.event_completion_changed.connect(self.week_view.refresh)
         self.data_manager.event_completion_changed.connect(self.agenda_view.refresh)
@@ -487,7 +526,7 @@ class MainWidget(QWidget):
 
     def quit_application(self):
         self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
-        save_settings(self.settings)
+        save_settings_safe(self.settings)
         self.data_manager.stop_caching_thread()
         self.hotkey_manager.stop()
         self.tray_icon.hide()
@@ -718,7 +757,7 @@ class MainWidget(QWidget):
                     QApplication.processEvents()  # UI 반응성 유지
 
                 self.settings['last_selected_calendar_id'] = calendar_id
-                save_settings(self.settings) # AI 추가 후에도 캘린더 ID 저장
+                save_settings_safe(self.settings) # AI 추가 후에도 캘린더 ID 저장
                 self.show_error_message(f"{len(final_events)}개의 일정을 성공적으로 추가했습니다.", ok_only=True, title="알림")
 
         except Exception as e:
@@ -768,7 +807,12 @@ class MainWidget(QWidget):
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
     def open_event_editor(self, data):
+        print(f"[DEBUG] UI_MAIN: open_event_editor 호출됨 - 데이터 타입: {type(data)}")
+        if isinstance(data, dict):
+            print(f"[DEBUG] UI_MAIN: 이벤트 편집 요청 - {data.get('summary', 'Unknown')}")
+        
         if self.active_dialog is not None:
+            print(f"[DEBUG] UI_MAIN: 이미 활성 다이얼로그가 있어서 활성화만 함")
             self.active_dialog.activateWindow()
             return
             
@@ -809,7 +853,7 @@ class MainWidget(QWidget):
                     QApplication.processEvents()  # UI 반응성 유지
 
                 self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
-                save_settings(self.settings)
+                save_settings_safe(self.settings)
 
                 if is_recurring:
                     # --- BUG FIX ---
@@ -828,6 +872,31 @@ class MainWidget(QWidget):
                 QApplication.processEvents()  # UI 반응성 유지
                 self.data_manager.delete_event(event_to_delete, deletion_mode=deletion_mode)
                 QApplication.processEvents()  # UI 반응성 유지
+
+    def show_event_detail(self, event_data):
+        """이벤트 상세보기 다이얼로그를 표시합니다."""
+        print(f"[DEBUG] UI_MAIN: show_event_detail 호출됨 - {event_data.get('summary', 'Unknown Event')}")
+        
+        if not self.is_interaction_unlocked():
+            print(f"[DEBUG] UI_MAIN: 상호작용이 잠겨있어서 상세보기 다이얼로그 열기 취소")
+            return
+            
+        try:
+            print(f"[DEBUG] UI_MAIN: 상세보기 다이얼로그 생성 중: {event_data.get('summary', 'Unknown Event')}")
+            
+            dialog = SimpleEventDetailDialog(
+                event_data=event_data,
+                data_manager=self.data_manager,
+                main_widget=self,
+                parent=self
+            )
+            
+            # 다이얼로그 표시 (편집은 다이얼로그 내부에서 자체적으로 처리)
+            dialog.exec()
+                
+        except Exception as e:
+            print(f"[ERROR] 이벤트 상세보기 다이얼로그 오류: {e}")
+            self.show_error_message(f"이벤트 상세정보를 표시하는 중 오류가 발생했습니다: {str(e)}")
 
     def show_error_message(self, message, ok_only=False, title="오류"):
         if not self.is_interaction_unlocked():
@@ -897,16 +966,17 @@ class MainWidget(QWidget):
                 self.start_resize()
             else:
                 self.is_moving = True
-            self.oldPos = event.globalPosition().toPoint()
+            self.oldPos = event.globalPosition().toPoint() if hasattr(event.globalPosition(), 'toPoint') else event.globalPosition()
 
     def mouseMoveEvent(self, event):
         if not self.is_interaction_unlocked():
             return
         if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
-            delta = event.globalPosition().toPoint() - self.oldPos
+            current_pos = event.globalPosition().toPoint() if hasattr(event.globalPosition(), 'toPoint') else event.globalPosition()
+            delta = current_pos - self.oldPos
             if self.is_moving:
                 self.move(self.x() + delta.x(), self.y() + delta.y())
-            self.oldPos = event.globalPosition().toPoint()
+            self.oldPos = current_pos
 
     def mouseReleaseEvent(self, event):
         if not self.is_interaction_unlocked() and not self.lock_key_is_pressed:
@@ -972,10 +1042,17 @@ class MainWidget(QWidget):
     
 
 if __name__ == '__main__':
+    # Single instance check
+    single_instance = SingleInstanceApp()
+    
+    if single_instance.is_already_running():
+        print("DCWidget is already running. Exiting...")
+        sys.exit(0)
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        filename='error.log',
+        filename=ERROR_LOG_FILE,
         filemode='a'
     )
     
@@ -986,7 +1063,7 @@ if __name__ == '__main__':
     if "user_timezone" not in settings:
         user_timezone = get_timezone_from_ip()
         settings["user_timezone"] = user_timezone
-        save_settings(settings)
+        save_settings_safe(settings)
 
     selected_theme = settings.get("theme", "dark")
     try:
@@ -998,4 +1075,9 @@ if __name__ == '__main__':
     widget = MainWidget(settings)
     widget.show()
     widget.start()
+    
+    # Cleanup single instance lock on exit
+    import atexit
+    atexit.register(single_instance.cleanup)
+    
     sys.exit(app.exec())
