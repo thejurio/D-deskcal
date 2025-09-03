@@ -112,8 +112,8 @@ class DayCellWidget(QWidget):
         if hasattr(self.parent(), 'get_event_at'):
             ev = self.parent().get_event_at(parent_posf)
             if ev:
-                # 일정이 있으면 편집 요청
-                self.parent().edit_event_requested.emit(ev)
+                # 일정이 있으면 상세보기 요청 (더블클릭 = 상세보기)
+                self.parent().detail_requested.emit(ev)
                 return
         
         # 일정이 없으면 새 일정 추가 처리
@@ -136,6 +136,7 @@ class MonthViewWidget(BaseViewWidget):
         self.date_to_cell_map = {}
         self.setMouseTracking(True)
         self.installEventFilter(self)  # 자기 자신도 필터링
+        self._pending_context_pos = None  # PyInstaller 환경 대응
         self.initUI()
 
         # 데이터 갱신 연결 (디바운스된 스마트 업데이트 사용)
@@ -146,6 +147,7 @@ class MonthViewWidget(BaseViewWidget):
         self._render_boxes = []           # [{'rect': QRectF, 'event': dict, 'left_round': bool, 'right_round': bool, 'y_level': int}]
         self._hidden_events_by_date = {}  # date -> [event,...]
         self._event_height = 18
+        
         self._lane_spacing = 2
         self._hover_event = None
         
@@ -747,24 +749,32 @@ class MonthViewWidget(BaseViewWidget):
         
         # _render_boxes가 없으면 None 반환
         if not hasattr(self, '_render_boxes') or not self._render_boxes:
+            print(f"[DEBUG] get_event_at: _render_boxes is empty or not exists, count={len(getattr(self, '_render_boxes', []))}")
             return None
             
+        print(f"[DEBUG] get_event_at: pos={pos}, render_boxes count={len(self._render_boxes)}")
+        
         # 역순으로 검사 (위쪽 레이어부터)
-        for item in reversed(self._render_boxes):
+        for i, item in enumerate(reversed(self._render_boxes)):
             rect = item['rect']
             
             # 기본 히트 테스트
             if rect.contains(pos):
+                print(f"[DEBUG] get_event_at: found event at index {len(self._render_boxes)-1-i}: {item['event'].get('summary')}")
                 return item['event']
+        
+        print(f"[DEBUG] get_event_at: no exact hit, trying with margin")
         
         # 정확한 히트가 없으면 약간의 마진을 두고 재검사
         margin = 3.0  # 3픽셀 마진 (터치 친화적)
-        for item in reversed(self._render_boxes):
+        for i, item in enumerate(reversed(self._render_boxes)):
             rect = item['rect']
             expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
             if expanded_rect.contains(pos):
+                print(f"[DEBUG] get_event_at: found event with margin at index {len(self._render_boxes)-1-i}: {item['event'].get('summary')}")
                 return item['event']
         
+        print(f"[DEBUG] get_event_at: no event found at position")
         return None
     
     def get_events_in_area(self, rect_area):
@@ -830,6 +840,23 @@ class MonthViewWidget(BaseViewWidget):
                 localf = ev.position()
                 pos_in_self = obj.mapTo(self, QPoint(int(localf.x()), int(localf.y())))
                 self._handle_hover_at(pos_in_self)
+        elif et == QEvent.Type.MouseButtonPress:
+            # PyInstaller 환경에서 안정적인 우클릭 처리
+            if isinstance(ev, QMouseEvent) and ev.button() == Qt.MouseButton.RightButton:
+                print(f"[DEBUG] eventFilter: RightClick detected at {ev.pos()}")
+                
+                # obj 로컬 좌표 -> MonthView 좌표 변환
+                if obj == self:
+                    context_pos = ev.pos()
+                else:
+                    context_pos = obj.mapTo(self, ev.pos())
+                
+                print(f"[DEBUG] eventFilter: Converted position={context_pos}")
+                
+                # 지연된 컨텍스트 메뉴 처리 (이벤트 루프에서 안전하게)
+                self._pending_context_pos = context_pos
+                QTimer.singleShot(0, self._process_deferred_context_menu)
+                return True  # 이벤트 전파 차단
         elif et in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
             if self._current_hover_event is not None:
                 # 지연된 leave 처리
@@ -848,6 +875,7 @@ class MonthViewWidget(BaseViewWidget):
         super().mouseMoveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
+        print(f"[DEBUG] MonthView mouseDoubleClickEvent 시작")
         if not self.main_widget.is_interaction_unlocked():
             return
         
@@ -856,24 +884,44 @@ class MonthViewWidget(BaseViewWidget):
         ev = self.get_event_at(pos)
         
         if ev:
-            # 일정이 발견되면 편집 모드로 열기
-            self.edit_event_requested.emit(ev)
+            # 일정이 발견되면 상세보기 다이얼로그로 열기 (더블클릭 = 상세보기)
+            print(f"[DEBUG] MonthView mouseDoubleClickEvent: 일정 발견 - {ev.get('summary', 'Unknown')} (더블클릭 - 상세보기)")
+            self.detail_requested.emit(ev)
         else:
-            # 일정이 없으면 새 일정 추가 모드
-            target = self.childAt(event.pos().toPoint())
+            # 일정이 없으면 새 일정 추가 모드 (날짜 영역에서만)
+            print(f"[DEBUG] MonthView mouseDoubleClickEvent: 빈 곳 더블클릭 - 날짜 확인 중")
+            target = self.childAt(event.pos())
             while target and not isinstance(target, DayCellWidget):
                 target = target.parent()
             if isinstance(target, DayCellWidget):
+                print(f"[DEBUG] MonthView mouseDoubleClickEvent: 날짜 영역에서 더블클릭 - 새 일정 추가")
                 self.add_event_requested.emit(target.date_obj)
+            else:
+                print(f"[DEBUG] MonthView mouseDoubleClickEvent: 날짜가 아닌 영역에서 더블클릭 - 무시")
 
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+
 
     def contextMenuEvent(self, event):
         if not self.main_widget.is_interaction_unlocked():
             return
+        
+        print(f"[DEBUG] MonthView contextMenuEvent: pos={event.pos()}")
+        
+        # 우선 렌더박스에서 이벤트 찾기
         target_event = self.get_event_at(event.pos())
+        print(f"[DEBUG] MonthView contextMenuEvent: get_event_at result={target_event.get('summary') if target_event else 'None'}")
+        
+        # 렌더박스에서 찾지 못했으면 위젯 트리에서 EventLabelWidget 찾기 (백업)
+        if not target_event:
+            target_widget = self.childAt(event.pos())
+            while target_widget and target_widget != self:
+                if hasattr(target_widget, 'event_data'):
+                    target_event = target_widget.event_data
+                    print(f"[DEBUG] MonthView contextMenuEvent: found via widget tree={target_event.get('summary')}")
+                    break
+                target_widget = target_widget.parent()
 
+        # 날짜 정보 찾기
         date_info = None
         target_widget = self.childAt(event.pos())
         while target_widget and target_widget != self:
@@ -882,8 +930,83 @@ class MonthViewWidget(BaseViewWidget):
                 break
             target_widget = target_widget.parent()
 
+        print(f"[DEBUG] MonthView contextMenuEvent: final target_event={target_event.get('summary') if target_event else 'None'}, date_info={date_info}")
+        
         # BaseView 공용 컨텍스트 메뉴
         self.show_context_menu(event.globalPos(), target_event, date_info)
+
+    def _process_deferred_context_menu(self):
+        """PyInstaller 환경을 위한 지연된 컨텍스트 메뉴 처리"""
+        if not hasattr(self, '_pending_context_pos') or self._pending_context_pos is None:
+            print(f"[DEBUG] _process_deferred_context_menu: No pending position")
+            return
+            
+        pos = self._pending_context_pos
+        self._pending_context_pos = None  # 처리 완료 표시
+        
+        print(f"[DEBUG] _process_deferred_context_menu: Processing at {pos}")
+        
+        if not self.main_widget.is_interaction_unlocked():
+            print(f"[DEBUG] _process_deferred_context_menu: Interaction locked, skipping")
+            return
+            
+        # 향상된 이벤트 탐지 (여러 방법으로 시도)
+        target_event = None
+        
+        # 방법 1: 기본 render_boxes 검색
+        target_event = self.get_event_at(pos)
+        print(f"[DEBUG] _process_deferred_context_menu: Method 1 result={target_event.get('summary') if target_event else 'None'}")
+        
+        # 방법 2: 확장된 히트 영역으로 재시도
+        if not target_event:
+            expanded_margin = 8.0  # PyInstaller 환경에서 더 큰 마진
+            target_event = self._get_event_at_with_margin(pos, expanded_margin)
+            print(f"[DEBUG] _process_deferred_context_menu: Method 2 (margin) result={target_event.get('summary') if target_event else 'None'}")
+        
+        # 방법 3: 위젯 트리 검색
+        if not target_event:
+            target_widget = self.childAt(pos)
+            while target_widget and target_widget != self:
+                if hasattr(target_widget, 'event_data'):
+                    target_event = target_widget.event_data
+                    print(f"[DEBUG] _process_deferred_context_menu: Method 3 (widget tree) result={target_event.get('summary')}")
+                    break
+                target_widget = target_widget.parent()
+
+        # 날짜 정보 찾기
+        date_info = None
+        target_widget = self.childAt(pos)
+        while target_widget and target_widget != self:
+            if isinstance(target_widget, DayCellWidget):
+                date_info = target_widget.date_obj
+                break
+            target_widget = target_widget.parent()
+
+        print(f"[DEBUG] _process_deferred_context_menu: Final result - event={target_event.get('summary') if target_event else 'None'}, date={date_info}")
+        
+        # 글로벌 위치 계산
+        global_pos = self.mapToGlobal(pos)
+        
+        # BaseView 공용 컨텍스트 메뉴 호출
+        self.show_context_menu(global_pos, target_event, date_info)
+
+    def _get_event_at_with_margin(self, pos, margin):
+        """확장된 마진으로 이벤트 검색 (PyInstaller 환경 대응)"""
+        if isinstance(pos, QPoint):
+            pos = QPointF(pos)
+        
+        if not hasattr(self, '_render_boxes') or not self._render_boxes:
+            return None
+            
+        # 큰 마진으로 검사
+        for item in reversed(self._render_boxes):
+            rect = item['rect']
+            expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
+            if expanded_rect.contains(pos):
+                print(f"[DEBUG] _get_event_at_with_margin: Found with margin {margin}: {item['event'].get('summary')}")
+                return item['event']
+        
+        return None
 
     # ---------------------------
     # 페인트

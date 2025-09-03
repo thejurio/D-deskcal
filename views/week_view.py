@@ -4,8 +4,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil import parser as dateutil_parser # [수정] dateutil.parser 임포트
 from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollArea, 
                              QPushButton, QToolTip, QStackedWidget)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QRectF, QSize
-from PyQt6.QtGui import QCursor, QPainter, QColor, QPen
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QRectF, QSize, QEvent
+from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QMouseEvent
 
 from custom_dialogs import WeekSelectionDialog
 from .widgets import draw_event
@@ -118,6 +118,8 @@ class AllDayCanvas(QWidget):
         self.column_x_coords = []
         self.event_rects = []
         self.hovered_event = None
+        self._pending_context_pos = None  # PyInstaller 환경 대응
+        self.installEventFilter(self)
 
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
@@ -177,13 +179,56 @@ class AllDayCanvas(QWidget):
             is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
             draw_event(painter, rect, event_data, time_text="", summary_text=summary, is_completed=is_completed)
 
+
     def mouseDoubleClickEvent(self, event):
         if not self.parent_view.main_widget.is_interaction_unlocked():
             return
             
         clicked_event = self.get_event_at(event.pos())
         if clicked_event:
-            self.parent_view.edit_event_requested.emit(clicked_event)
+            print(f"[DEBUG] AllDayCanvas mouseDoubleClickEvent: 일정 발견 - {clicked_event.get('summary', 'Unknown')} (더블클릭 - 상세보기)")
+            self.parent_view.detail_requested.emit(clicked_event)
+
+    def eventFilter(self, obj, ev):
+        """PyInstaller 환경에서 안정적인 우클릭 처리"""
+        if obj == self and ev.type() == QEvent.Type.MouseButtonPress:
+            if isinstance(ev, QMouseEvent) and ev.button() == Qt.MouseButton.RightButton:
+                print(f"[DEBUG] AllDayCanvas eventFilter: RightClick detected at {ev.pos()}")
+                
+                # 지연된 컨텍스트 메뉴 처리
+                self._pending_context_pos = ev.pos()
+                QTimer.singleShot(0, self._process_deferred_context_menu)
+                return True  # 이벤트 전파 차단
+        return super().eventFilter(obj, ev)
+
+    def _process_deferred_context_menu(self):
+        """PyInstaller 환경을 위한 지연된 컨텍스트 메뉴 처리"""
+        if not hasattr(self, '_pending_context_pos') or self._pending_context_pos is None:
+            print(f"[DEBUG] AllDayCanvas _process_deferred_context_menu: No pending position")
+            return
+            
+        pos = self._pending_context_pos
+        self._pending_context_pos = None
+        
+        print(f"[DEBUG] AllDayCanvas _process_deferred_context_menu: Processing at {pos}")
+        
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            print(f"[DEBUG] AllDayCanvas _process_deferred_context_menu: Interaction locked, skipping")
+            return
+            
+        # 이벤트 탐지
+        target_event = self.get_event_at(pos)
+        print(f"[DEBUG] AllDayCanvas _process_deferred_context_menu: Event found={target_event.get('summary') if target_event else 'None'}")
+        
+        # 날짜 정보 계산
+        date_info = self.parent_view._get_date_from_pos(pos) if hasattr(self.parent_view, '_get_date_from_pos') else None
+        
+        # 글로벌 위치 계산
+        global_pos = self.mapToGlobal(pos)
+        
+        # BaseView 공용 컨텍스트 메뉴 호출
+        self.parent_view.show_context_menu(global_pos, target_event, date_info)
+
 
 class TimeGridCanvas(QWidget):
     def __init__(self, parent_view):
@@ -196,6 +241,8 @@ class TimeGridCanvas(QWidget):
         min_height = self.parent_view.total_hours * self.parent_view.hour_height
         self.setMinimumHeight(min_height)
         self.hovered_event = None
+        self._pending_context_pos = None  # PyInstaller 환경 대응
+        self.installEventFilter(self)
         
     def mouseMoveEvent(self, event):
         super().mouseMoveEvent(event)
@@ -289,17 +336,63 @@ class TimeGridCanvas(QWidget):
             draw_event(painter, rect, event_data, time_text=time_text, summary_text=summary, is_completed=is_completed)
         painter.restore()
 
+
     def mouseDoubleClickEvent(self, event):
         if not self.parent_view.main_widget.is_interaction_unlocked():
             return
             
         clicked_event = self.get_event_at(event.pos())
         if clicked_event:
-            self.parent_view.edit_event_requested.emit(clicked_event)
+            print(f"[DEBUG] TimeGridCanvas mouseDoubleClickEvent: 일정 발견 - {clicked_event.get('summary', 'Unknown')} (더블클릭 - 상세보기)")
+            self.parent_view.detail_requested.emit(clicked_event)
         else:
+            print(f"[DEBUG] TimeGridCanvas mouseDoubleClickEvent: 빈 곳 더블클릭 - 새 일정 추가")
             target_datetime = self.parent_view._get_datetime_from_pos(event.pos())
             if target_datetime:
                 self.parent_view.add_event_requested.emit(target_datetime)
+
+    def eventFilter(self, obj, ev):
+        """PyInstaller 환경에서 안정적인 우클릭 처리"""
+        if obj == self and ev.type() == QEvent.Type.MouseButtonPress:
+            if isinstance(ev, QMouseEvent) and ev.button() == Qt.MouseButton.RightButton:
+                print(f"[DEBUG] TimeGridCanvas eventFilter: RightClick detected at {ev.pos()}")
+                
+                # 지연된 컨텍스트 메뉴 처리
+                self._pending_context_pos = ev.pos()
+                QTimer.singleShot(0, self._process_deferred_context_menu)
+                return True  # 이벤트 전파 차단
+        return super().eventFilter(obj, ev)
+
+    def _process_deferred_context_menu(self):
+        """PyInstaller 환경을 위한 지연된 컨텍스트 메뉴 처리"""
+        if not hasattr(self, '_pending_context_pos') or self._pending_context_pos is None:
+            print(f"[DEBUG] TimeGridCanvas _process_deferred_context_menu: No pending position")
+            return
+            
+        pos = self._pending_context_pos
+        self._pending_context_pos = None
+        
+        print(f"[DEBUG] TimeGridCanvas _process_deferred_context_menu: Processing at {pos}")
+        
+        if not self.parent_view.main_widget.is_interaction_unlocked():
+            print(f"[DEBUG] TimeGridCanvas _process_deferred_context_menu: Interaction locked, skipping")
+            return
+            
+        # 이벤트 탐지
+        target_event = self.get_event_at(pos)
+        print(f"[DEBUG] TimeGridCanvas _process_deferred_context_menu: Event found={target_event.get('summary') if target_event else 'None'}")
+        
+        # 날짜 정보 계산 (빈 공간인 경우)
+        date_info = None
+        if not target_event:
+            date_info = self.parent_view._get_datetime_from_pos(pos)
+        
+        # 글로벌 위치 계산
+        global_pos = self.mapToGlobal(pos)
+        
+        # BaseView 공용 컨텍스트 메뉴 호출
+        self.parent_view.show_context_menu(global_pos, target_event, date_info)
+
 
 class WeekViewWidget(BaseViewWidget):
     def __init__(self, main_widget):
