@@ -45,6 +45,14 @@ import gemini_parser
 from resource_path import resource_path, get_theme_path, get_icon_path, load_theme_with_icons
 from simple_event_detail_dialog import SimpleEventDetailDialog
 
+# Auto-update integration
+try:
+    from auto_update_integration import integrate_auto_update
+    AUTO_UPDATE_AVAILABLE = True
+except ImportError:
+    print("Warning: Auto-update module not found. Auto-update disabled.")
+    AUTO_UPDATE_AVAILABLE = False
+
 
 class SingleInstanceApp:
     """Single instance application manager using socket lock."""
@@ -117,6 +125,15 @@ class MainWidget(QWidget):
 
         self._interaction_unlocked = False
         self.lock_key_is_pressed = False
+
+        # Auto-update integration - initialize before initUI to avoid AttributeError
+        self.auto_updater = None
+        if AUTO_UPDATE_AVAILABLE and self.settings.get("auto_update_enabled", True):
+            try:
+                self.auto_updater = integrate_auto_update(self)
+                print("Auto-update system initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize auto-update system: {e}")
 
         self.initUI()
 
@@ -227,6 +244,28 @@ class MainWidget(QWidget):
                 windows_startup.remove_from_startup()
         except Exception as e:
             print(f"자동 시작 설정 동기화 중 오류 발생: {e}")
+
+    def handle_auto_update_setting_changed(self):
+        """자동 업데이트 설정 변경 처리"""
+        if not AUTO_UPDATE_AVAILABLE:
+            return
+
+        auto_update_enabled = self.settings.get("auto_update_enabled", True)
+        
+        try:
+            if auto_update_enabled and not self.auto_updater:
+                # 자동 업데이트 활성화
+                self.auto_updater = integrate_auto_update(self)
+                print("Auto-update enabled")
+            elif not auto_update_enabled and self.auto_updater:
+                # 자동 업데이트 비활성화
+                self.auto_updater.stop_periodic_check()
+                self.auto_updater = None
+                print("Auto-update disabled")
+            # 트레이 메뉴 다시 설정 (업데이트 메뉴 표시/숨김)
+            self.setup_tray_icon()
+        except Exception as e:
+            print(f"Auto-update setting change error: {e}")
 
     def force_set_desktop_widget_mode(self):
         if sys.platform != "win32":
@@ -489,6 +528,12 @@ class MainWidget(QWidget):
         refresh_action.triggered.connect(lambda: self.data_manager.force_sync_month(self.current_date.year, self.current_date.month))
         tray_menu.addAction(refresh_action)
 
+        # Auto-update menu item
+        if AUTO_UPDATE_AVAILABLE and hasattr(self, 'auto_updater') and self.auto_updater:
+            update_action = QAction("업데이트 확인", self)
+            update_action.triggered.connect(self.auto_updater.manual_check)
+            tray_menu.addAction(update_action)
+
         tray_menu.addSeparator()
 
         quit_action = QAction("종료", self)
@@ -658,6 +703,9 @@ class MainWidget(QWidget):
 
                 if "ai_add_event_hotkey" in changed_fields:
                     self.hotkey_manager.register_and_start()
+
+                if "auto_update_enabled" in changed_fields:
+                    self.handle_auto_update_setting_changed()
 
                 grid_structure_changes = {"start_day_of_week", "hide_weekends"}
                 if any(field in changed_fields for field in grid_structure_changes):

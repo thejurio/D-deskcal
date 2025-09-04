@@ -2,6 +2,9 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 import keyboard
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 class HotkeyManager(QObject):
     """
@@ -14,7 +17,7 @@ class HotkeyManager(QObject):
         super().__init__()
         self.settings = settings
         self.lock = threading.Lock()
-        print("[HotkeyManager] 초기화 완료 (using keyboard library).")
+        logger.info("HotkeyManager initialized successfully")
 
     def _on_trigger_factory(self, action_name):
         """
@@ -36,17 +39,17 @@ class HotkeyManager(QObject):
         if not hotkey_str:
             return None
         
-        print(f"[HotkeyManager] DEBUG: 단축키 문자열 포맷팅 시도: '{hotkey_str}'")
+        logger.debug(f"Attempting to format hotkey string: '{hotkey_str}'")
         try:
             # 공백 제거 및 소문자 변환
             formatted_hotkey = hotkey_str.lower().replace(" ", "")
             # '+'로 연결된 부분들을 다시 '+'로 합칩니다. e.g., 'ctrl+shift+a'
             parts = formatted_hotkey.split('+')
             formatted_hotkey = '+'.join(parts)
-            print(f"[HotkeyManager] DEBUG: keyboard 라이브러리 형식으로 변환 완료: '{formatted_hotkey}'")
+            logger.debug(f"Successfully converted to keyboard library format: '{formatted_hotkey}'")
             return formatted_hotkey
         except Exception as e:
-            print(f"[HotkeyManager] ERROR: 단축키 포맷팅 중 오류 발생 '{hotkey_str}': {e}")
+            logger.error(f"Error formatting hotkey '{hotkey_str}': {e}")
             return None
 
     def register_and_start(self):
@@ -55,11 +58,11 @@ class HotkeyManager(QObject):
         이전의 모든 단축키는 해제하고 새로 등록합니다.
         """
         with self.lock:
-            print("[HotkeyManager] 단축키 등록 및 리스너 시작 요청...")
+            logger.info("Starting hotkey registration and listener...")
             self._stop_listener_unsafe()
 
             ai_hotkey_str = self.settings.get("ai_add_event_hotkey")
-            print(f"[HotkeyManager] DEBUG: 설정에서 읽어온 단축키: '{ai_hotkey_str}'")
+            logger.debug(f"Hotkey loaded from settings: '{ai_hotkey_str}'")
 
             if ai_hotkey_str:
                 formatted_hotkey = self._format_hotkey_for_keyboard(ai_hotkey_str)
@@ -70,11 +73,11 @@ class HotkeyManager(QObject):
                             self._on_trigger_factory("ai_add_event"),
                             suppress=False
                         )
-                        print(f"[HotkeyManager] SUCCESS: '{formatted_hotkey}' 단축키가 성공적으로 등록되었습니다.")
+                        logger.info(f"Successfully registered hotkey: '{formatted_hotkey}'")
                     except Exception as e:
-                        print(f"[HotkeyManager] CRITICAL ERROR: 단축키 등록에 실패했습니다: {e}")
+                        logger.error(f"Failed to register hotkey: {e}")
             else:
-                print("[HotkeyManager] 등록할 단축키가 없습니다.")
+                logger.warning("No hotkey to register")
 
     def stop(self):
         """모든 단축키 리스너를 안전하게 해제합니다."""
@@ -83,10 +86,10 @@ class HotkeyManager(QObject):
 
     def _stop_listener_unsafe(self):
         """락(lock) 내부에서 모든 단축키를 해제하는 도우미 메서드."""
-        print("[HotkeyManager] 모든 단축키 리스너를 해제합니다...")
+        logger.info("Unhooking all hotkey listeners...")
         try:
             keyboard.unhook_all()
-            print("[HotkeyManager] 모든 단축키가 성공적으로 해제되었습니다.")
+            logger.info("All hotkeys successfully unhooked")
         except Exception as e:
             # unhook_all_hotkeys는 실패할 경우가 거의 없지만, 만약을 대비해 로깅합니다.
-            print(f"[HotkeyManager] ERROR: 단축키 해제 중 예외 발생: {e}")
+            logger.error(f"Exception occurred while unhooking hotkeys: {e}")

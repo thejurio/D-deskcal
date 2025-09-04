@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout, QScrollA
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRect, QRectF, QSize, QEvent
 from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QMouseEvent
 
-from custom_dialogs import WeekSelectionDialog
+from custom_dialogs import WeekSelectionDialog, MoreEventsDialog
 from .widgets import draw_event
 from .layout_calculator import WeekLayoutCalculator
 from .base_view import BaseViewWidget
@@ -30,6 +30,7 @@ class ClickableLabel(QLabel):
 TIME_GRID_LEFT = 50
 HEADER_HEIGHT = 30
 ALL_DAY_LANE_HEIGHT = 25
+MAX_ALL_DAY_LANES = 2  # 최대 2개 레인까지만 표시, 3개 이상시 더보기
 HORIZONTAL_MARGIN = 2
 
 class HeaderCanvas(QWidget):
@@ -115,8 +116,10 @@ class AllDayCanvas(QWidget):
         self.parent_view = parent_view
         self.setMouseTracking(True)
         self.event_positions = []
+        self.hidden_events = []  # 더보기로 숨겨진 이벤트들
         self.column_x_coords = []
         self.event_rects = []
+        self.more_button_rects = []  # 더보기 버튼 클릭 영역
         self.hovered_event = None
         self._pending_context_pos = None  # PyInstaller 환경 대응
         self.installEventFilter(self)
@@ -136,9 +139,36 @@ class AllDayCanvas(QWidget):
         self.parent_view.handle_hover_leave(self)
     
     def set_data(self, positions, num_lanes, column_x_coords):
-        self.event_positions = positions
+        # 더보기 기능 적용: 최대 레인 수 제한
+        if num_lanes > MAX_ALL_DAY_LANES:
+            # 표시할 이벤트와 숨길 이벤트 분리
+            visible_positions = []
+            self.hidden_events = []
+            
+            # 레인별로 분류
+            lanes = [[] for _ in range(num_lanes)]
+            for pos in positions:
+                lanes[pos['lane']].append(pos)
+            
+            # 최대 레인까지만 표시
+            for lane_idx in range(min(MAX_ALL_DAY_LANES, num_lanes)):
+                visible_positions.extend(lanes[lane_idx])
+            
+            # 나머지는 숨김
+            for lane_idx in range(MAX_ALL_DAY_LANES, num_lanes):
+                self.hidden_events.extend([pos['event'] for pos in lanes[lane_idx]])
+            
+            self.event_positions = visible_positions
+            display_lanes = MAX_ALL_DAY_LANES
+        else:
+            self.event_positions = positions
+            self.hidden_events = []
+            display_lanes = num_lanes
+            
         self.column_x_coords = column_x_coords
-        height = num_lanes * ALL_DAY_LANE_HEIGHT + 5 if num_lanes > 0 else 0
+        # 더보기 표시를 위해 추가 공간 확보 (더보기 버튼용 한 레인 추가)
+        extra_lane = 1 if self.hidden_events else 0
+        height = (display_lanes + extra_lane) * ALL_DAY_LANE_HEIGHT + 5 if display_lanes > 0 or extra_lane > 0 else 0
         self.setFixedHeight(height)
         self.setVisible(height > 0)
         self.update()
@@ -147,6 +177,13 @@ class AllDayCanvas(QWidget):
         for rect, event_data in self.event_rects:
             if rect.contains(pos):
                 return event_data
+        return None
+    
+    def get_more_button_at(self, pos):
+        """더보기 버튼 클릭 확인"""
+        for rect, col in self.more_button_rects:
+            if rect.contains(pos):
+                return col
         return None
 
     def paintEvent(self, event):
@@ -178,10 +215,43 @@ class AllDayCanvas(QWidget):
             
             is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
             draw_event(painter, rect, event_data, time_text="", summary_text=summary, is_completed=is_completed)
+        
+        # 더보기 버튼 그리기
+        if self.hidden_events:
+            self.more_button_rects.clear()
+            for col in range(len(self.column_x_coords) - 1):
+                start_x = self.column_x_coords[col]
+                end_x = self.column_x_coords[col + 1]
+                
+                x = start_x + (HORIZONTAL_MARGIN / 2)
+                y = MAX_ALL_DAY_LANES * ALL_DAY_LANE_HEIGHT + 2
+                width = (end_x - start_x) - HORIZONTAL_MARGIN
+                height = ALL_DAY_LANE_HEIGHT - 4
+                
+                rect = QRect(int(x), int(y), int(width), int(height))
+                self.more_button_rects.append((rect, col))
+                
+                # 더보기 버튼 배경
+                painter.fillRect(rect, QColor(100, 100, 100, 100))
+                painter.setPen(QPen(QColor(150, 150, 150), 1))
+                painter.drawRoundedRect(rect, 3, 3)
+                
+                # 더보기 텍스트
+                painter.setPen(QPen(QColor(255, 255, 255), 1))
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"+{len(self.hidden_events)}")
 
 
     def mouseDoubleClickEvent(self, event):
         if not self.parent_view.main_widget.is_interaction_unlocked():
+            return
+        
+        # 더보기 버튼 클릭 확인
+        more_col = self.get_more_button_at(event.pos())
+        if more_col is not None and self.hidden_events:
+            # 해당 컬럼의 날짜 계산
+            start_of_week = self.parent_view._get_start_of_week()
+            date_obj = start_of_week + datetime.timedelta(days=more_col)
+            self.parent_view.show_more_events_popup(date_obj, self.hidden_events)
             return
             
         clicked_event = self.get_event_at(event.pos())
@@ -653,3 +723,16 @@ class WeekViewWidget(BaseViewWidget):
         num_days = 5 if self.main_widget.settings.get("hide_weekends", False) else 7
         end_of_week = start_of_week + datetime.timedelta(days=num_days - 1)
         return start_of_week, end_of_week
+    
+    def show_more_events_popup(self, date_obj, events):
+        """월간뷰의 더보기 팝업 기능 재활용"""
+        if not self.main_widget.is_interaction_unlocked():
+            return
+        dialog = MoreEventsDialog(
+            date_obj, events, None,
+            settings=self.main_widget.settings,
+            pos=QCursor.pos(), data_manager=self.data_manager
+        )
+        dialog.edit_requested.connect(self.edit_event_requested)
+        dialog.delete_requested.connect(self.confirm_delete_event)
+        dialog.exec()

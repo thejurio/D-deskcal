@@ -1,11 +1,14 @@
 import datetime
 import uuid
+import logging
 from dateutil.rrule import rrulestr, YEARLY, MONTHLY, WEEKLY, DAILY
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                              QTextEdit, QPushButton, QCheckBox, QComboBox,
                              QWidget, QCalendarWidget, QTimeEdit, QSizePolicy)
 from PyQt6.QtGui import QIcon, QColor, QPixmap, QCursor
 from PyQt6.QtCore import QDateTime, Qt, QTimer, QEvent, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 from custom_dialogs import CustomMessageBox, BaseDialog, RecurringDeleteDialog
 from config import LOCAL_CALENDAR_PROVIDER_NAME
@@ -331,7 +334,7 @@ class EventEditorWindow(BaseDialog):
             elif rule._count: parts.append(f"{rule._count}회")
             return ", ".join(parts)
         except Exception as e:
-            print(f"RRULE 텍스트 변환 오류: {e}")
+            logger.error(f"RRULE text conversion error: {e}")
             return rrule_str
 
     def sync_end_date_on_recurrence(self):
@@ -445,7 +448,7 @@ class EventEditorWindow(BaseDialog):
                     duration = end_dt - start_dt
                     end_dt, start_dt = first_occurrence_dt + duration, first_occurrence_dt
             except Exception as e:
-                print(f"반복 규칙의 첫 발생일 계산 중 오류: {e}")
+                logger.error(f"Error calculating first occurrence date for recurrence rule: {e}")
         if is_all_day:
             event_body['start'] = {'date': start_dt.strftime('%Y-%m-%d')}
             event_body['end'] = {'date': (end_dt + datetime.timedelta(days=1)).strftime('%Y-%m-%d')}

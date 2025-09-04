@@ -151,7 +151,16 @@ class UpdateDownloader(QObject):
             else:
                 current_exe_dir = Path.cwd()
             
-            # 업데이트 스크립트 생성
+            print(f"추출 디렉토리: {extract_dir}")
+            print(f"현재 실행 디렉토리: {current_exe_dir}")
+            
+            # 추출된 파일 내용 확인
+            print("추출된 파일 목록:")
+            for item in extract_dir.rglob("*"):
+                if item.is_file():
+                    print(f"  {item.relative_to(extract_dir)}")
+            
+            # 업데이트 스크립트 생성 및 실행
             self._create_update_script(extract_dir, current_exe_dir)
             
             self.installation_complete.emit()
@@ -163,28 +172,87 @@ class UpdateDownloader(QObject):
         """업데이트 설치를 위한 배치 스크립트를 생성합니다."""
         script_path = Path(self.temp_dir) / "update.bat"
         
+        # 현재 실행 파일명 결정
+        if getattr(sys, 'frozen', False):
+            current_exe = Path(sys.executable).name
+        else:
+            current_exe = "D-deskcal.exe"
+        
         script_content = f'''@echo off
 echo D-deskcal 업데이트 설치 중...
+echo 로그 파일: {target_dir}\\update_log.txt
+echo.
 
-timeout /t 3 /nobreak >nul
+REM 로그 파일 생성
+echo 업데이트 시작: %date% %time% > "{target_dir}\\update_log.txt"
+echo 소스 디렉토리: {source_dir} >> "{target_dir}\\update_log.txt"
+echo 타겟 디렉토리: {target_dir} >> "{target_dir}\\update_log.txt"
+
+echo 프로그램 종료를 기다리는 중...
+timeout /t 5 /nobreak >nul
+
+echo 현재 실행 파일 정보: >> "{target_dir}\\update_log.txt"
+dir "{target_dir}\\{current_exe}" >> "{target_dir}\\update_log.txt" 2>&1
 
 echo 기존 파일 백업 중...
-if exist "{target_dir}\\backup" rmdir /s /q "{target_dir}\\backup"
-mkdir "{target_dir}\\backup"
-xcopy "{target_dir}\\*.*" "{target_dir}\\backup\\" /e /y /q
+if exist "{target_dir}\\backup" rmdir /s /q "{target_dir}\\backup" 2>nul
+mkdir "{target_dir}\\backup" 2>nul
+if exist "{target_dir}\\{current_exe}" (
+    copy "{target_dir}\\{current_exe}" "{target_dir}\\backup\\" /y >nul 2>&1
+    echo 기존 실행 파일 백업 완료 >> "{target_dir}\\update_log.txt"
+)
 
 echo 새 파일 설치 중...
-xcopy "{source_dir}\\D-deskcal\\*.*" "{target_dir}\\" /e /y /q
+echo 소스 디렉토리 내용: >> "{target_dir}\\update_log.txt"
+dir "{source_dir}" /s >> "{target_dir}\\update_log.txt"
+echo.
+
+REM 추출된 파일 구조에서 실행 파일 찾기
+if exist "{source_dir}\\D-deskcal.exe" (
+    echo 직접 경로에서 실행 파일 발견
+    echo 직접 경로에서 실행 파일 발견 >> "{target_dir}\\update_log.txt"
+    copy "{source_dir}\\D-deskcal.exe" "{target_dir}\\" /y
+    if %errorlevel% equ 0 (
+        echo 실행 파일 복사 성공 >> "{target_dir}\\update_log.txt"
+    ) else (
+        echo 실행 파일 복사 실패: %errorlevel% >> "{target_dir}\\update_log.txt"
+    )
+    if exist "{source_dir}\\_internal" xcopy "{source_dir}\\_internal" "{target_dir}\\_internal\\" /e /y /q
+) else if exist "{source_dir}\\D-deskcal\\D-deskcal.exe" (
+    echo D-deskcal 폴더에서 실행 파일 발견
+    echo D-deskcal 폴더에서 실행 파일 발견 >> "{target_dir}\\update_log.txt"
+    copy "{source_dir}\\D-deskcal\\D-deskcal.exe" "{target_dir}\\" /y
+    if %errorlevel% equ 0 (
+        echo 실행 파일 복사 성공 >> "{target_dir}\\update_log.txt"
+    ) else (
+        echo 실행 파일 복사 실패: %errorlevel% >> "{target_dir}\\update_log.txt"
+    )
+    if exist "{source_dir}\\D-deskcal\\_internal" xcopy "{source_dir}\\D-deskcal\\_internal" "{target_dir}\\_internal\\" /e /y /q
+) else (
+    echo 실행 파일을 찾을 수 없습니다!
+    echo 실행 파일을 찾을 수 없음 >> "{target_dir}\\update_log.txt"
+    echo 사용 가능한 파일: >> "{target_dir}\\update_log.txt"
+    dir "{source_dir}" /s /b >> "{target_dir}\\update_log.txt"
+    pause
+    goto :end
+)
+
+echo 업데이트 후 파일 정보: >> "{target_dir}\\update_log.txt"
+dir "{target_dir}\\{current_exe}" >> "{target_dir}\\update_log.txt" 2>&1
 
 echo 업데이트 완료!
 echo D-deskcal을 다시 시작합니다...
+timeout /t 2 /nobreak >nul
 
-start "" "{target_dir}\\D-deskcal.exe"
+start "" "{target_dir}\\{current_exe}"
 
 echo 임시 파일 정리 중...
-timeout /t 2 /nobreak >nul
-rmdir /s /q "{self.temp_dir}"
+timeout /t 3 /nobreak >nul
+rmdir /s /q "{self.temp_dir}" 2>nul
 
+echo 업데이트 완료: %date% %time% >> "{target_dir}\\update_log.txt"
+
+:end
 exit
 '''
         
@@ -249,12 +317,20 @@ class AutoUpdateManager(QObject):
     
     def download_and_install_update(self, release_data):
         """업데이트를 다운로드하고 설치합니다."""
-        self.downloader.download_update(release_data)
+        print(f"업데이트 다운로드 시작: {release_data.get('tag_name', 'Unknown')}")
         
-        # 다운로드 완료 시 자동 설치
+        # 다운로드 완료 시 자동 설치 연결 (중복 연결 방지)
+        try:
+            self.downloader.download_complete.disconnect()
+        except TypeError:
+            pass  # 연결이 없으면 무시
+            
         self.downloader.download_complete.connect(
             self.downloader.install_update
         )
+        
+        # 다운로드 시작
+        self.downloader.download_update(release_data)
 
 def run_update_check(current_version, update_callback, error_callback, no_update_callback):
     """

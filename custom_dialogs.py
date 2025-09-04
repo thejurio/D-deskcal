@@ -751,6 +751,7 @@ class EventPopover(BaseDialog):
         super().__init__(parent, settings)
         self.event_data = event_data
         self.click_timer = None  # 클릭 감지를 위한 타이머
+        self.double_click_detected = False  # 더블클릭 감지 플래그
         
         self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -800,6 +801,8 @@ class EventPopover(BaseDialog):
     def mousePressEvent(self, event):
         """팝오버 클릭 처리 - 월간뷰와 동일한 로직"""
         print(f"[DEBUG] EventPopover mousePressEvent 호출됨 - 버튼: {event.button()}")
+        print(f"[DEBUG] EventPopover 클릭 위치: {event.pos()}, 글로벌: {event.globalPos()}")
+        print(f"[DEBUG] EventPopover 현재 크기: {self.size()}, 가시성: {self.isVisible()}")
         
         if event.button() == Qt.MouseButton.LeftButton:
             print(f"[DEBUG] EventPopover 왼쪽 클릭 감지 - 이벤트: {self.event_data.get('summary', 'Unknown')}")
@@ -817,6 +820,9 @@ class EventPopover(BaseDialog):
             self.click_timer.start(300)
             print(f"[DEBUG] EventPopover 단일클릭 타이머 시작 (300ms) - 타이머 ID: {id(self.click_timer)}")
             
+            # 팝오버를 즉시 닫아서 클릭 이벤트가 원본 위젯으로 전달되도록 함
+            self.close()
+            
             event.accept()
             return
         else:
@@ -830,6 +836,10 @@ class EventPopover(BaseDialog):
         if event.button() == Qt.MouseButton.LeftButton:
             print(f"[DEBUG] EventPopover mouseDoubleClickEvent 시작")
             
+            # 더블클릭 감지 플래그 설정
+            self.double_click_detected = True
+            print(f"[DEBUG] EventPopover mouseDoubleClickEvent: 더블클릭 감지 플래그 설정")
+            
             # 단일클릭 타이머 중지
             if hasattr(self, 'click_timer') and self.click_timer:
                 print(f"[DEBUG] EventPopover 단일클릭 타이머 중지됨")
@@ -838,6 +848,10 @@ class EventPopover(BaseDialog):
                 
             print(f"[DEBUG] EventPopover 더블클릭: 편집 요청 (edit_requested 신호 발생) - {self.event_data.get('summary', '')}")
             self.edit_requested.emit(self.event_data)
+            
+            # 100ms 후 플래그 리셋
+            QTimer.singleShot(100, lambda: setattr(self, 'double_click_detected', False))
+            
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
@@ -862,6 +876,12 @@ class EventPopover(BaseDialog):
             return
         
         try:
+            # 더블클릭이 감지되었으면 처리하지 않음
+            if self.double_click_detected:
+                print(f"[DEBUG] EventPopover: 더블클릭이 감지되어 단일클릭 처리 건너뜀")
+                self.click_timer = None
+                return
+                
             print(f"[DEBUG] EventPopover 단일클릭 타이머 만료: 상세보기 요청 시작 - {self.event_data.get('summary', '')}")
             print(f"[DEBUG] EventPopover detail_requested 신호 연결 상태 확인...")
             

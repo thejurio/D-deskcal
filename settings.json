@@ -1,24 +1,24 @@
 {
     "user_timezone": "Asia/Seoul",
     "selected_calendars": [
-        "family01556510902891015712@group.calendar.google.com",
         "ko.south_korea#holiday@group.v.calendar.google.com",
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "thejurio@gmail.com",
+        "family01556510902891015712@group.calendar.google.com",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
-        "family01556510902891015712@group.calendar.google.com": "#b99aff",
-        "thejurio@gmail.com": "#a0aee5",
-        "ko.south_korea#holiday@group.v.calendar.google.com": "#e95f72",
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#a17cdd",
-        "local_calendar": "#4CAF50"
+        "family01556510902891015712@group.calendar.google.com": "#0F5298",
+        "thejurio@gmail.com": "#44546A",
+        "ko.south_korea#holiday@group.v.calendar.google.com": "#D24726",
+        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#E36C09",
+        "local_calendar": "#70AD47"
     },
     "sync_interval_minutes": 5,
     "start_day_of_week": 6,
     "hide_weekends": false,
     "window_opacity": 1.0,
-    "theme": "dark",
+    "theme": "light",
     "lock_mode_enabled": false,
     "start_on_boot": false,
     "notifications_enabled": true,
@@ -27,13 +27,47 @@
     "all_day_notification_enabled": true,
     "all_day_notification_time": "09:00",
     "geometry": [
-        1173,
-        118,
+        1280,
+        0,
         639,
         772
     ],
     "gemini_api_key": "AIzaSyBNGWOIvVTTYP4GLroRNN9gFMduWiZhsFs",
     "last_selected_calendar_id": "local_calendar",
     "unlock_key": "control",
-    "ai_add_event_hotkey": "Ctrl + K"
+    "ai_add_event_hotkey": "Ctrl + K",
+    "dialog_positions": {
+        "EventEditorWindow": {
+            "x": 725,
+            "y": 209
+        },
+        "RecurrenceRuleDialog": {
+            "x": 752,
+            "y": 277
+        },
+        "CustomMessageBox": {
+            "x": 1291,
+            "y": 377
+        },
+        "NewDateSelectionDialog": {
+            "x": 790,
+            "y": 316
+        },
+        "RecurringDeleteDialog": {
+            "x": 1366,
+            "y": 332
+        },
+        "SimpleEventDetailDialog": {
+            "x": 1306,
+            "y": 79
+        },
+        "WeekSelectionDialog": {
+            "x": 1331,
+            "y": 292
+        },
+        "SettingsWindow": {
+            "x": 649,
+            "y": 166
+        }
+    }
 }

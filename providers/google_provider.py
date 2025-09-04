@@ -1,8 +1,11 @@
 import datetime
 import threading
+import logging
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+logger = logging.getLogger(__name__)
 
 from providers.base_provider import BaseCalendarProvider
 from config import (GOOGLE_CALENDAR_PROVIDER_NAME)
@@ -125,7 +128,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             
             created_event['calendarId'] = calendar_id
             
-            print(f"Google Calendar에 '{created_event.get('summary')}' 일정이 추가되었습니다.")
+            logger.info(f"Event '{created_event.get('summary')}' added to Google Calendar")
             return created_event
         except HttpError as e:
             error_message = f"Google Calendar 이벤트 추가 중 오류 발생: {e}"

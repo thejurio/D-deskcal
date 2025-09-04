@@ -1,16 +1,19 @@
 # simple_event_detail_dialog.py
 """
 간단하고 확실하게 작동하는 이벤트 상세보기 다이얼로그
-BaseDialog 문제를 해결하기 위해 QDialog 직접 상속
+BaseDialog를 상속하여 다른 다이얼로그와 통일성 확보
 """
 
 import datetime
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                            QFrame, QMessageBox, QWidget)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont
+import re
+from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+                            QFrame, QMessageBox, QWidget, QTextEdit, QScrollArea, QTextBrowser)
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QUrl
+from PyQt6.QtGui import QDesktopServices
+from custom_dialogs import BaseDialog
+from event_detail_texts import get_text, get_weekday_text
 
-class SimpleEventDetailDialog(QDialog):
+class SimpleEventDetailDialog(BaseDialog):
     """간단하고 확실한 이벤트 상세보기 다이얼로그"""
     
     # 시그널 정의
@@ -18,25 +21,21 @@ class SimpleEventDetailDialog(QDialog):
     event_deleted = pyqtSignal(str)
     
     def __init__(self, event_data, data_manager, main_widget, parent=None):
-        super().__init__(parent)
+        # BaseDialog 초기화 (settings 전달)
+        settings = getattr(main_widget, 'settings', None) if main_widget else None
+        super().__init__(parent=parent, settings=settings)
         
         print(f"[DEBUG] SimpleEventDetailDialog 초기화 시작")
         
-        self.setWindowTitle("일정 상세보기")
+        self.setWindowTitle(get_text("window_title"))
         self.setModal(True)
-        # 창 크기를 70%로 조정 (원래 600 → 420)
-        self.setFixedSize(420, 500)
-        
-        # 창 제목표시줄 숨기기 + 항상 위에 표시
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        # 창 크기를 400x515으로 변경 (15px 증가)
+        self.setFixedSize(400, 515)
         
         self.event_data = event_data
         self.data_manager = data_manager
         self.main_widget = main_widget
         self.original_event_id = event_data.get('id')
-        
-        # 마우스 드래그를 위한 변수 초기화
-        self.oldPos = None
         
         # 다크모드 확인
         self.is_dark_mode = main_widget.settings.get('dark_mode', False) if main_widget and hasattr(main_widget, 'settings') else False
@@ -76,32 +75,9 @@ class SimpleEventDetailDialog(QDialog):
         
         print(f"[DEBUG] SimpleEventDetailDialog 최상위 설정 완료 (플래그 변경 없음)")
     
-    def mousePressEvent(self, event):
-        """마우스 드래그를 위한 이벤트 핸들러"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.oldPos = event.globalPosition().toPoint() if hasattr(event.globalPosition(), 'toPoint') else event.globalPosition()
-            # 드래그 시작 시 크기 제약 완화 (지오메트리 오류 방지)
-            self.setMinimumSize(0, 0)
-            self.setMaximumSize(16777215, 16777215)  # Qt 최대값
-
-    def mouseMoveEvent(self, event):
-        """마우스 드래그 이벤트 핸들러"""
-        if self.oldPos and event.buttons() == Qt.MouseButton.LeftButton:
-            current_pos = event.globalPosition().toPoint() if hasattr(event.globalPosition(), 'toPoint') else event.globalPosition()
-            delta = current_pos - self.oldPos
-            
-            # 새로운 위치 계산
-            new_x = self.x() + delta.x()
-            new_y = self.y() + delta.y()
-            
-            # 최소 이동 거리 체크 (성능 향상 및 중복 방지)
-            if abs(delta.x()) > 1 or abs(delta.y()) > 1:
-                self.move(new_x, new_y)
-                self.oldPos = current_pos
-
     def mouseReleaseEvent(self, event):
-        """마우스 드래그 종료 이벤트 핸들러"""
-        self.oldPos = None
+        """마우스 드래그 종료 이벤트 핸들러 - 크기 고정 추가"""
+        super().mouseReleaseEvent(event)
         # 드래그 종료 시 현재 크기로 고정 (지오메트리 오류 방지)
         current_size = self.size()
         self.setFixedSize(current_size)
@@ -110,58 +86,7 @@ class SimpleEventDetailDialog(QDialog):
         """각 다이얼로그 타입별로 고유 키를 반환합니다."""
         return self.__class__.__name__
     
-    def save_position(self):
-        """현재 창의 위치를 설정에 저장합니다."""
-        if not self.main_widget or not hasattr(self.main_widget, 'settings'):
-            print(f"[DEBUG] {self.get_dialog_key()} main_widget 또는 settings가 없어서 위치 저장 건너뜀")
-            return
-        
-        try:
-            from settings_manager import load_settings, save_settings
-            
-            dialog_key = self.get_dialog_key()
-            current_settings = load_settings()
-            
-            if 'dialog_positions' not in current_settings:
-                current_settings['dialog_positions'] = {}
-            
-            position = {'x': self.x(), 'y': self.y()}
-            current_settings['dialog_positions'][dialog_key] = position
-            
-            print(f"[DEBUG] {dialog_key} 위치 저장: {position}")
-            save_settings(current_settings)
-            print(f"[DEBUG] {dialog_key} 위치 저장 완료!")
-            
-        except Exception as e:
-            print(f"[ERROR] {self.get_dialog_key()} 위치 저장 실패: {e}")
-    
-    def restore_position(self):
-        """저장된 위치에서 창을 엽니다."""
-        if not self.main_widget or not hasattr(self.main_widget, 'settings'):
-            print(f"[DEBUG] {self.get_dialog_key()} main_widget 또는 settings가 없어서 위치 복원 건너뜀")
-            return
-        
-        try:
-            from settings_manager import load_settings
-            
-            dialog_key = self.get_dialog_key()
-            current_settings = load_settings()
-            
-            if 'dialog_positions' in current_settings and dialog_key in current_settings['dialog_positions']:
-                pos_data = current_settings['dialog_positions'][dialog_key]
-                print(f"[DEBUG] {dialog_key} 저장된 위치로 이동: {pos_data}")
-                self.move(pos_data['x'], pos_data['y'])
-            else:
-                print(f"[DEBUG] {dialog_key} 저장된 위치 없음")
-                
-        except Exception as e:
-            print(f"[ERROR] {self.get_dialog_key()} 위치 복원 실패: {e}")
-    
-    def closeEvent(self, event):
-        """창을 닫을 때 위치를 저장합니다."""
-        print(f"[DEBUG] {self.get_dialog_key()} closeEvent 호출됨")
-        self.save_position()
-        super().closeEvent(event)
+    # BaseDialog에서 상속받은 위치 관리 기능을 사용하므로 제거됨
     
     def init_ui(self):
         """간단한 UI 초기화"""
@@ -169,116 +94,167 @@ class SimpleEventDetailDialog(QDialog):
         
         # 메인 레이아웃
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 테마 파일의 스타일을 사용하도록 오브젝트 이름 설정
+        # 배경 위젯 생성 (BaseDialog 패턴을 따름)
+        background_widget = QWidget()
+        background_widget.setObjectName("event_detail_background")
+        main_layout.addWidget(background_widget)
+        
+        # 실제 내용 레이아웃 - 간격 줄임
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        content_layout.setSpacing(8)
+        
+        # 다이얼로그 자체에도 오브젝트 이름 설정
         self.setObjectName("event_detail_dialog")
         
         print(f"[DEBUG] 다이얼로그 오브젝트 이름 설정: event_detail_dialog")
         
-        # 제목 - 테마 파일의 스타일 사용
-        self.title_label = QLabel("제목을 불러오는 중...")
-        title_font = QFont()
-        title_font.setPointSize(13)
-        title_font.setBold(True)
-        self.title_label.setFont(title_font)
+        # 제목 - 테마 파일의 스타일 사용 (하드코딩 폰트 제거)
+        self.title_label = QLabel(get_text("loading_title"))
         self.title_label.setWordWrap(True)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setObjectName("event_detail_title")
-        main_layout.addWidget(self.title_label)
+        content_layout.addWidget(self.title_label)
         
-        # 정보 영역
+        # 정보 영역을 스크롤 가능하게 만들기
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setObjectName("event_detail_scroll")
+        
         info_widget = QWidget()
         info_layout = QVBoxLayout(info_widget)
-        info_layout.setSpacing(12)
+        info_layout.setSpacing(8)  # 간격 줄임
         
-        # 정보 컨테이너들 - 초기에는 모두 숨김
-        self.date_container = self._create_info_section("날짜", "")
-        self.time_container = self._create_info_section("시간", "")
-        self.description_container = self._create_info_section("설명", "")
-        self.calendar_container = self._create_info_section("캘린더", "")
+        # 정보 컨테이너들 - 초기에는 모두 숨김 (텍스트는 테마 파일에서 가져옴)
+        self.date_container = self._create_info_section(get_text("date_label"), "", single_line=True)
+        self.time_container = self._create_info_section(get_text("time_label"), "", single_line=True)
+        self.description_container = self._create_info_section(get_text("description_label"), "", single_line=False, max_lines=3)
+        self.calendar_container = self._create_info_section(get_text("calendar_label"), "", single_line=True)
         
         info_layout.addWidget(self.date_container)
         info_layout.addWidget(self.time_container)
         info_layout.addWidget(self.description_container)
         info_layout.addWidget(self.calendar_container)
         
-        main_layout.addWidget(info_widget)
+        # 신축성 공간을 info_layout에 추가하여 내용을 위쪽에 정렬
+        info_layout.addStretch()
         
-        # 신축성 공간
-        main_layout.addStretch()
+        scroll_area.setWidget(info_widget)
+        content_layout.addWidget(scroll_area)
         
-        # 버튼 영역
+        # 버튼 영역 - 간격 줄임
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(8)
         
-        # 버튼들 - 테마 파일의 스타일 사용
-        self.edit_btn = QPushButton("편집")
-        self.edit_btn.setFont(self._get_button_font())
-        self.edit_btn.setMinimumHeight(45)
+        # 버튼들 - 테마 파일의 스타일 사용, 높이를 70%로 줄임 (32px → 22px)
+        self.edit_btn = QPushButton(get_text("edit_button"))
         self.edit_btn.setObjectName("event_detail_edit_button")
+        self.edit_btn.setFixedHeight(22)  # 버튼 높이 70%로 줄임
         self.edit_btn.clicked.connect(self._edit_event)
         button_layout.addWidget(self.edit_btn)
         
-        self.delete_btn = QPushButton("삭제")
-        self.delete_btn.setFont(self._get_button_font())
-        self.delete_btn.setMinimumHeight(45)
+        self.delete_btn = QPushButton(get_text("delete_button"))
         self.delete_btn.setObjectName("event_detail_delete_button")
+        self.delete_btn.setFixedHeight(22)  # 버튼 높이 70%로 줄임
         self.delete_btn.clicked.connect(self._delete_event)
         button_layout.addWidget(self.delete_btn)
         
-        self.close_btn = QPushButton("닫기")
-        self.close_btn.setFont(self._get_button_font())
-        self.close_btn.setMinimumHeight(45)
+        self.close_btn = QPushButton(get_text("close_button"))
         self.close_btn.setObjectName("event_detail_close_button")
+        self.close_btn.setFixedHeight(22)  # 버튼 높이 70%로 줄임
         self.close_btn.clicked.connect(self.accept)
         button_layout.addWidget(self.close_btn)
         
-        main_layout.addLayout(button_layout)
+        content_layout.addLayout(button_layout)
         
         print("[DEBUG] UI 초기화 완료")
     
-    def _create_info_section(self, label_text, content_text=""):
+    def _create_info_section(self, label_text, content_text="", single_line=True, max_lines=1):
         """정보 섹션 생성"""
         container = QFrame()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
+        layout.setSpacing(3)  # 라벨과 내용 간격 줄임
         
-        # 라벨 - 테마 파일 스타일 사용
+        # 라벨 - 테마 파일 스타일 사용 (하드코딩 폰트 제거)
         label = QLabel(label_text)
-        label_font = QFont()
-        label_font.setPointSize(11)
-        label_font.setBold(True)
-        label.setFont(label_font)
         label.setObjectName("event_detail_label")
         layout.addWidget(label)
         
-        # 내용 - 테마 파일 스타일 사용
-        content = QLabel(content_text)
-        content.setWordWrap(True)
-        content_font = QFont()
-        content_font.setPointSize(11)
-        content.setFont(content_font)
-        content.setObjectName("event_detail_content")
-        content.setMinimumHeight(40)
-        layout.addWidget(content)
-        
-        # 내용 라벨을 찾기 쉽도록 속성 설정
-        container.content_label = content
+        # 내용 - 단일줄 vs 다중줄 처리
+        if single_line or max_lines == 1:
+            # 단일줄 처리 (날짜, 시간, 캘린더)
+            content = QLabel(content_text)
+            content.setWordWrap(False)
+            content.setObjectName("event_detail_content")
+            # 텍스트가 길면 생략 부호 표시
+            content.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(content)
+            container.content_label = content
+        else:
+            # 다중줄 처리 (설명) - QTextBrowser 사용하여 링크 처리
+            content = QTextBrowser()
+            content.setObjectName("event_detail_content")
+            content.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            content.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            
+            # 최대 줄 수에 따른 높이 설정 - 3줄이 잘리지 않도록 충분히 늘림, 5픽셀 추가 증가
+            content.setMaximumHeight(max_lines * 25 + 35)  # 줄 높이를 25px로 늘리고 여백 35px 추가 (10px 추가 증가)
+            content.setMinimumHeight(90)  # 최소 높이도 10픽셀 추가 늘림
+            
+            # QTextBrowser는 자동으로 외부 링크를 처리함
+            content.setOpenExternalLinks(True)
+            
+            layout.addWidget(content)
+            container.content_label = content
         
         # 초기에는 숨김
         container.hide()
         
         return container
     
-    def _get_button_font(self):
-        """버튼 폰트 - 적절한 크기 (15pt)"""
-        font = QFont()
-        font.setPointSize(10)  # 15 → 10pt로 조정
-        font.setBold(True)
-        return font
+    
+    def _convert_text_to_html_with_links(self, text):
+        """텍스트에서 URL을 찾아 HTML 링크로 변환"""
+        if not text:
+            return text
+            
+        # HTML 이스케이프 처리
+        import html
+        text = html.escape(text)
+            
+        # URL 패턴 (http, https, www로 시작하는 URL)
+        url_pattern = r'(https?://[^\s<>"{}|\\^`\[\]]+|www\.[^\s<>"{}|\\^`\[\]]+)'
+        
+        def replace_url(match):
+            url = match.group(1)
+            if not url.startswith('http'):
+                url = 'http://' + url
+            return f'<a href="{url}">{match.group(1)}</a>'
+        
+        # URL을 링크로 변환
+        html_text = re.sub(url_pattern, replace_url, text)
+        
+        # 줄바꿈을 <br>로 변환
+        html_text = html_text.replace('\n', '<br>')
+        
+        # 간단한 스타일 추가 (주황빛 빨강으로 고정)
+        styled_html = f'''
+        <style>
+            a {{ color: #FF5722 !important; text-decoration: underline; }}
+            a:hover {{ color: #FF8A80 !important; }}
+            a:visited {{ color: #D84315 !important; }}
+        </style>
+        {html_text}
+        '''
+        
+        return styled_html
+    
+    # _get_button_font 메서드 제거 - 테마 파일에서 관리
     
     def load_event_data(self):
         """이벤트 데이터 로드"""
@@ -291,7 +267,7 @@ class SimpleEventDetailDialog(QDialog):
                 return
             
             # 제목 설정 - summary 또는 subject에서
-            title = self.event_data.get('summary') or self.event_data.get('subject', '제목 없음')
+            title = self.event_data.get('summary') or self.event_data.get('subject', get_text("no_title"))
             self.title_label.setText(title)
             print(f"[DEBUG] 제목 설정: {title}")
             
@@ -382,13 +358,13 @@ class SimpleEventDetailDialog(QDialog):
                         else:
                             end_date = datetime.datetime.fromisoformat(end_info).date()
                 
-                # 날짜 문자열 생성
+                # 날짜 형식은 텍스트 파일에서 가져옴
                 if end_date and end_date != start_date:
-                    return f"{start_date.strftime('%Y년 %m월 %d일')} ~ {end_date.strftime('%Y년 %m월 %d일')}"
+                    date_format = get_text("date_range_format")
+                    return f"{start_date.strftime(get_text('date_format'))} ~ {end_date.strftime(get_text('date_format'))}"
                 else:
-                    weekdays = ['월', '화', '수', '목', '금', '토', '일']
-                    weekday = weekdays[start_date.weekday()]
-                    return f"{start_date.strftime('%Y년 %m월 %d일')} ({weekday})"
+                    weekday = get_weekday_text(start_date.weekday())
+                    return f"{start_date.strftime(get_text('date_format'))} ({weekday})"
                     
         except Exception as e:
             print(f"[ERROR] 날짜 문자열 파싱 실패: {e}")
@@ -444,16 +420,16 @@ class SimpleEventDetailDialog(QDialog):
                     end_dt = datetime.datetime.fromisoformat(end_info.replace('Z', '+00:00'))
                 
                 if end_dt:
-                    return f"{start_dt.strftime('%H:%M')} ~ {end_dt.strftime('%H:%M')}"
+                    return f"{start_dt.strftime(get_text('time_format'))} ~ {end_dt.strftime(get_text('time_format'))}"
                 else:
-                    return start_dt.strftime('%H:%M')
+                    return start_dt.strftime(get_text('time_format'))
             else:
                 # dateTime이 없으면 종일 이벤트
-                return "종일"
+                return get_text("all_day")
                 
         except Exception as e:
             print(f"[ERROR] 시간 문자열 파싱 실패: {e}")
-            return "종일"
+            return get_text("all_day")
     
     def _load_description(self):
         """설명 로드"""
@@ -473,7 +449,15 @@ class SimpleEventDetailDialog(QDialog):
                              self.event_data.get('description'))
             
             if description and description.strip():
-                self.description_container.content_label.setText(description.strip())
+                # 하이퍼링크가 포함된 HTML로 변환
+                html_description = self._convert_text_to_html_with_links(description.strip())
+                
+                # QTextBrowser나 QTextEdit인 경우 setHtml 사용
+                if isinstance(self.description_container.content_label, (QTextEdit, QTextBrowser)):
+                    self.description_container.content_label.setHtml(html_description)
+                else:
+                    self.description_container.content_label.setText(description.strip())
+                    
                 self.description_container.show()
                 print(f"[DEBUG] 설명 설정: {description[:50]}...")
             else:
@@ -565,12 +549,12 @@ class SimpleEventDetailDialog(QDialog):
                         if cal.get('id') == calendar_id:
                             # 구글 캘린더 API에서 오는 실제 속성들 확인
                             if cal.get('primary', False):
-                                display_text += " (기본)"
+                                display_text += get_text("primary_calendar")
                             elif cal.get('accessRole') in ['owner', 'writer', 'reader']:
                                 if cal.get('accessRole') == 'reader':
-                                    display_text += " (읽기전용)"
+                                    display_text += get_text("reader_calendar")
                                 elif cal.get('accessRole') == 'writer':
-                                    display_text += " (편집가능)"
+                                    display_text += get_text("writer_calendar")
                             break
                 
                 self.calendar_container.content_label.setText(display_text)
@@ -589,7 +573,7 @@ class SimpleEventDetailDialog(QDialog):
             else:
                 # 최후의 폴백
                 print(f"[DEBUG] ❌ 모든 방법으로 캘린더 이름을 찾지 못함")
-                calendar_name = "알 수 없는 캘린더"
+                calendar_name = get_text("unknown_calendar")
                 calendar_color = self.event_data.get('color', '#4285F4')
                 
                 self.calendar_container.content_label.setText(calendar_name)
@@ -608,52 +592,55 @@ class SimpleEventDetailDialog(QDialog):
             traceback.print_exc()
     
     def _edit_event(self):
-        """일정 편집"""
+        """일정 편집 - 메인위젯의 편집 시스템 사용"""
         try:
-            if not self.main_widget.is_interaction_unlocked():
+            if hasattr(self.main_widget, 'is_interaction_unlocked') and not self.main_widget.is_interaction_unlocked():
                 return
             
-            from event_editor_window import EventEditorWindow
-            
-            editor = EventEditorWindow(
-                mode='edit',
-                data=self.event_data,
-                calendars=getattr(self.data_manager, 'calendars', None),
-                settings=getattr(self.main_widget, 'settings', None) if self.main_widget else None,
-                parent=self,
-                data_manager=self.data_manager
-            )
-            
-            # 편집창을 열기 전에 상세창 닫기
-            self.accept()
-            
-            if editor.exec() == QDialog.DialogCode.Accepted:
-                updated_event = editor.get_event_data()
-                self.event_edited.emit(updated_event)
+            # 메인위젯의 open_event_editor 사용 (컨텍스트메뉴와 동일한 방식)
+            if self.main_widget and hasattr(self.main_widget, 'open_event_editor'):
+                print(f"[DEBUG] SimpleEventDetailDialog: 메인위젯의 open_event_editor 호출")
+                self.main_widget.open_event_editor(self.event_data)
+                
+                # 편집 창이 열린 후 상세보기 창은 닫기
+                self.close()
+            else:
+                print(f"[ERROR] 메인위젯에서 open_event_editor를 찾을 수 없음")
+                QMessageBox.warning(self, "오류", "편집 기능을 사용할 수 없습니다.")
                 
         except Exception as e:
+            print(f"[ERROR] 일정 편집 중 오류: {e}")
             QMessageBox.warning(self, "오류", f"일정 편집 중 오류가 발생했습니다: {str(e)}")
     
     def _delete_event(self):
-        """일정 삭제"""
+        """일정 삭제 - 컨텍스트메뉴와 동일한 삭제 확인창 사용"""
         try:
-            if not self.main_widget.is_interaction_unlocked():
+            if hasattr(self.main_widget, 'is_interaction_unlocked') and not self.main_widget.is_interaction_unlocked():
                 return
             
-            event_title = self.event_data.get('summary', '제목 없음')
-            
-            reply = QMessageBox.question(
-                self,
-                "일정 삭제",
-                f"'{event_title}' 일정을 삭제하시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+            # 컨텍스트메뉴와 동일한 삭제 확인 다이얼로그 사용
+            from event_editor_window import EventEditorWindow
+            chosen_mode = EventEditorWindow.show_delete_confirmation(
+                self.event_data, self, self.main_widget.settings
             )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                self.data_manager.delete_event(self.event_data)
+
+            if chosen_mode:
+                # 사용자가 삭제를 확정했을 경우, DataManager 호출
+                event_to_delete = self.event_data.copy()
+
+                # DataManager가 'body' 키를 포함하는 래핑된 딕셔너리를 예상하므로,
+                # 'body' 키가 없는 경우 데이터 구조를 맞춰줍니다.
+                if 'body' not in event_to_delete:
+                     event_to_delete = {
+                        'calendarId': self.event_data.get('calendarId'),
+                        'provider': self.event_data.get('provider'),
+                        'body': self.event_data
+                     }
+                
+                self.data_manager.delete_event(event_to_delete, deletion_mode=chosen_mode)
                 self.event_deleted.emit(self.original_event_id)
                 self.accept()
                 
         except Exception as e:
-            QMessageBox.warning(self, "오류", f"일정 삭제 중 오류가 발생했습니다: {str(e)}")
+            print(f"[ERROR] 일정 삭제 처리 중 오류: {e}")
+            QMessageBox.warning(self, "오류", f"일정 삭제 처리 중 오류가 발생했습니다: {str(e)}")

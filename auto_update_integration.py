@@ -5,15 +5,32 @@ Provides easy integration with the main UI application
 
 import os
 import sys
+import logging
 from pathlib import Path
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox, QProgressDialog, QApplication
 
+logger = logging.getLogger(__name__)
+
 try:
     from update_manager import AutoUpdateManager
 except ImportError:
-    print("Warning: update_manager module not found. Auto-update disabled.")
+    logger.warning("Update manager module not found - auto-update disabled")
     AutoUpdateManager = None
+
+try:
+    from custom_update_dialogs import (
+        UpdateAvailableDialog, 
+        UpdateProgressDialog, 
+        UpdateCompleteDialog, 
+        UpdateErrorDialog,
+        NoUpdateDialog
+    )
+    from update_dialog_texts import get_update_text
+    CUSTOM_DIALOGS_AVAILABLE = True
+except ImportError:
+    logger.warning("Custom update dialogs not found - using default dialogs")
+    CUSTOM_DIALOGS_AVAILABLE = False
 
 
 class AutoUpdateDialog(QObject):
@@ -26,9 +43,13 @@ class AutoUpdateDialog(QObject):
         self.parent = parent
         self.update_manager = None
         self.progress_dialog = None
+        self.is_silent_check = False  # silent 모드 플래그 추가
         
         # Get current version
         self.current_version = self._get_current_version()
+        
+        # Get settings from parent if available
+        self.settings = getattr(parent, 'settings', None) if parent else None
         
         if AutoUpdateManager:
             self.update_manager = AutoUpdateManager(self.current_version)
@@ -54,21 +75,35 @@ class AutoUpdateDialog(QObject):
         
         # 다운로더 시그널
         if hasattr(self.update_manager, 'downloader'):
-            self.update_manager.downloader.download_progress.connect(self._on_download_progress)
-            self.update_manager.downloader.download_complete.connect(self._on_download_complete)
-            self.update_manager.downloader.installation_complete.connect(self._on_installation_complete)
-            self.update_manager.downloader.download_error.connect(self._on_download_error)
-            self.update_manager.downloader.installation_error.connect(self._on_installation_error)
+            downloader = self.update_manager.downloader
+            logger.debug("Connecting downloader signals...")
+            downloader.download_progress.connect(self._on_download_progress)
+            downloader.download_complete.connect(self._on_download_complete)
+            downloader.installation_complete.connect(self._on_installation_complete)
+            downloader.download_error.connect(self._on_download_error)
+            downloader.installation_error.connect(self._on_installation_error)
+            logger.debug("Downloader signals connected successfully")
     
     def check_for_updates(self, silent=False):
         """업데이트 확인을 시작합니다."""
+        # silent 모드 플래그 저장
+        self.is_silent_check = silent
+        
         if not self.update_manager:
             if not silent:
-                QMessageBox.information(
-                    self.parent,
-                    "업데이트 확인",
-                    "자동 업데이트 기능을 사용할 수 없습니다.\n수동으로 업데이트를 확인해주세요."
-                )
+                if CUSTOM_DIALOGS_AVAILABLE:
+                    dialog = UpdateErrorDialog(
+                        get_update_text("auto_update_unavailable"),
+                        parent=self.parent,
+                        settings=self.settings
+                    )
+                    dialog.exec()
+                else:
+                    QMessageBox.information(
+                        self.parent,
+                        "업데이트 확인",
+                        "자동 업데이트 기능을 사용할 수 없습니다.\n수동으로 업데이트를 확인해주세요."
+                    )
             return
         
         self.update_manager.check_for_updates(silent)
@@ -82,105 +117,178 @@ class AutoUpdateDialog(QObject):
         version = release_data.get('tag_name', '').lstrip('v')
         release_notes = release_data.get('body', '업데이트 정보를 불러올 수 없습니다.')
         
-        # 릴리스 노트를 간략하게 정리
-        if len(release_notes) > 300:
-            release_notes = release_notes[:300] + "..."
-        
-        msg = QMessageBox(self.parent)
-        msg.setWindowTitle("업데이트 사용 가능")
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setText(f"새로운 버전 v{version}이 사용 가능합니다.")
-        msg.setDetailedText(f"현재 버전: {self.current_version}\n새 버전: {version}\n\n릴리스 노트:\n{release_notes}")
-        msg.setInformativeText("지금 업데이트하시겠습니까?")
-        
-        update_button = msg.addButton("업데이트", QMessageBox.ButtonRole.AcceptRole)
-        later_button = msg.addButton("나중에", QMessageBox.ButtonRole.RejectRole)
-        
-        msg.exec()
-        
-        if msg.clickedButton() == update_button:
-            self._start_update_download(release_data)
+        if CUSTOM_DIALOGS_AVAILABLE:
+            dialog = UpdateAvailableDialog(
+                release_data, 
+                self.current_version,
+                parent=self.parent,
+                settings=self.settings
+            )
+            if dialog.exec() == dialog.Accepted:
+                self._start_update_download(release_data)
+        else:
+            # 릴리스 노트를 간략하게 정리
+            if len(release_notes) > 300:
+                release_notes = release_notes[:300] + "..."
+            
+            msg = QMessageBox(self.parent)
+            msg.setWindowTitle("업데이트 사용 가능")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setText(f"새로운 버전 v{version}이 사용 가능합니다.")
+            msg.setDetailedText(f"현재 버전: {self.current_version}\n새 버전: {version}\n\n릴리스 노트:\n{release_notes}")
+            msg.setInformativeText("지금 업데이트하시겠습니까?")
+            
+            update_button = msg.addButton("업데이트", QMessageBox.ButtonRole.AcceptRole)
+            later_button = msg.addButton("나중에", QMessageBox.ButtonRole.RejectRole)
+            
+            msg.exec()
+            
+            if msg.clickedButton() == update_button:
+                self._start_update_download(release_data)
     
     def _on_no_update(self):
         """업데이트가 없을 때"""
-        QMessageBox.information(
-            self.parent,
-            "업데이트 확인",
-            f"현재 최신 버전({self.current_version})을 사용 중입니다."
-        )
+        # silent 모드가 아닐 때만 메시지 표시 (수동 확인 시에만)
+        if not self.is_silent_check:
+            if CUSTOM_DIALOGS_AVAILABLE:
+                dialog = NoUpdateDialog(
+                    self.current_version,
+                    parent=self.parent,
+                    settings=self.settings
+                )
+                dialog.exec()
+            else:
+                QMessageBox.information(
+                    self.parent,
+                    "업데이트 확인",
+                    f"현재 최신 버전({self.current_version})을 사용 중입니다."
+                )
     
     def _on_update_error(self, error_message):
         """업데이트 확인 실패시"""
-        QMessageBox.warning(
-            self.parent,
-            "업데이트 확인 실패",
-            f"업데이트를 확인할 수 없습니다:\n{error_message}\n\n"
-            "인터넷 연결을 확인하고 다시 시도해주세요."
-        )
+        if CUSTOM_DIALOGS_AVAILABLE:
+            dialog = UpdateErrorDialog(
+                get_update_text("error_message", error=error_message),
+                parent=self.parent,
+                settings=self.settings
+            )
+            dialog.exec()
+        else:
+            QMessageBox.warning(
+                self.parent,
+                "업데이트 확인 실패",
+                f"업데이트를 확인할 수 없습니다:\n{error_message}\n\n"
+                "인터넷 연결을 확인하고 다시 시도해주세요."
+            )
     
     def _start_update_download(self, release_data):
         """업데이트 다운로드 시작"""
-        self.progress_dialog = QProgressDialog(
-            "업데이트를 다운로드하고 있습니다...",
-            "취소",
-            0, 100,
-            self.parent
-        )
-        self.progress_dialog.setWindowTitle("업데이트 다운로드")
-        self.progress_dialog.setModal(True)
-        self.progress_dialog.show()
+        logger.info(f"Starting update download: {release_data.get('tag_name', 'Unknown')}")
+        
+        if CUSTOM_DIALOGS_AVAILABLE:
+            self.progress_dialog = UpdateProgressDialog(
+                parent=self.parent,
+                settings=self.settings
+            )
+            self.progress_dialog.show()
+        else:
+            self.progress_dialog = QProgressDialog(
+                "업데이트를 다운로드하고 있습니다...",
+                "취소",
+                0, 100,
+                self.parent
+            )
+            self.progress_dialog.setWindowTitle("업데이트 다운로드")
+            self.progress_dialog.setModal(True)
+            self.progress_dialog.show()
         
         # 다운로드 시작
+        logger.info("Starting download and installation process...")
         self.update_manager.download_and_install_update(release_data)
     
     def _on_download_progress(self, progress):
         """다운로드 진행률 업데이트"""
+        logger.debug(f"Download progress: {progress}%")
         if self.progress_dialog:
-            self.progress_dialog.setValue(progress)
+            if CUSTOM_DIALOGS_AVAILABLE and hasattr(self.progress_dialog, 'update_progress'):
+                self.progress_dialog.update_progress(progress, get_update_text("download_progress", percent=progress))
+            else:
+                self.progress_dialog.setValue(progress)
     
     def _on_download_complete(self, file_path):
         """다운로드 완료"""
+        logger.info(f"Download completed: {file_path}")
         if self.progress_dialog:
-            self.progress_dialog.setLabelText("업데이트를 설치하고 있습니다...")
-            self.progress_dialog.setCancelButton(None)  # 설치 중에는 취소 불가
+            if CUSTOM_DIALOGS_AVAILABLE and hasattr(self.progress_dialog, 'update_progress'):
+                self.progress_dialog.update_progress(100, get_update_text("installing_message"))
+                self.progress_dialog.set_cancel_enabled(False)  # 설치 중에는 취소 불가
+            else:
+                self.progress_dialog.setLabelText("업데이트를 설치하고 있습니다...")
+                self.progress_dialog.setCancelButton(None)  # 설치 중에는 취소 불가
     
     def _on_installation_complete(self):
         """설치 완료"""
         if self.progress_dialog:
             self.progress_dialog.close()
         
-        msg = QMessageBox(self.parent)
-        msg.setWindowTitle("업데이트 완료")
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.setText("업데이트가 완료되었습니다.")
-        msg.setInformativeText("프로그램을 다시 시작합니다.")
-        msg.addButton("확인", QMessageBox.ButtonRole.AcceptRole)
-        msg.exec()
+        if CUSTOM_DIALOGS_AVAILABLE:
+            dialog = UpdateCompleteDialog(
+                parent=self.parent,
+                settings=self.settings
+            )
+            dialog.exec()
+        else:
+            msg = QMessageBox(self.parent)
+            msg.setWindowTitle("업데이트 완료")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setText("업데이트가 완료되었습니다.")
+            msg.setInformativeText("업데이트 스크립트가 실행되었습니다.\n프로그램이 자동으로 종료되고 새 버전으로 재시작됩니다.")
+            msg.addButton("확인", QMessageBox.ButtonRole.AcceptRole)
+            msg.exec()
+        
+        logger.info("Update installation completed - shutting down program...")
         
         # 프로그램 종료 (업데이트 스크립트가 재시작함)
-        QApplication.quit()
+        import sys
+        sys.exit(0)
     
     def _on_download_error(self, error_message):
         """다운로드 실패"""
         if self.progress_dialog:
             self.progress_dialog.close()
         
-        QMessageBox.critical(
-            self.parent,
-            "업데이트 실패",
-            f"업데이트 다운로드에 실패했습니다:\n{error_message}"
-        )
+        if CUSTOM_DIALOGS_AVAILABLE:
+            dialog = UpdateErrorDialog(
+                get_update_text("download_error_message", error=error_message),
+                parent=self.parent,
+                settings=self.settings
+            )
+            dialog.exec()
+        else:
+            QMessageBox.critical(
+                self.parent,
+                "업데이트 실패",
+                f"업데이트 다운로드에 실패했습니다:\n{error_message}"
+            )
     
     def _on_installation_error(self, error_message):
         """설치 실패"""
         if self.progress_dialog:
             self.progress_dialog.close()
         
-        QMessageBox.critical(
-            self.parent,
-            "설치 실패",
-            f"업데이트 설치에 실패했습니다:\n{error_message}"
-        )
+        if CUSTOM_DIALOGS_AVAILABLE:
+            dialog = UpdateErrorDialog(
+                get_update_text("install_error_message", error=error_message),
+                parent=self.parent,
+                settings=self.settings
+            )
+            dialog.exec()
+        else:
+            QMessageBox.critical(
+                self.parent,
+                "설치 실패",
+                f"업데이트 설치에 실패했습니다:\n{error_message}"
+            )
 
 
 class AutoUpdateChecker:
@@ -199,8 +307,8 @@ class AutoUpdateChecker:
     
     def start_periodic_check(self):
         """주기적 업데이트 확인 시작"""
-        # 시작 10초 후 첫 번째 체크 (silent)
-        QTimer.singleShot(10000, lambda: self.update_dialog.check_for_updates(silent=True))
+        # 시작 5초 후 첫 번째 체크 (자동이므로 silent=True)
+        QTimer.singleShot(5000, lambda: self.update_dialog.check_for_updates(silent=True))
         
         # 그 후 24시간마다 체크
         self.timer.start(self.check_interval)

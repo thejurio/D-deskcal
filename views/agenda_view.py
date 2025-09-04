@@ -44,6 +44,9 @@ class AgendaViewWidget(BaseViewWidget):
             self.add_date_header(date)
             for event in events:
                 event_widget = AgendaEventWidget(event, parent_view=self)
+                # AgendaEventWidget의 신호를 AgendaViewWidget으로 전달
+                event_widget.detail_requested.connect(self.detail_requested.emit)
+                event_widget.edit_requested.connect(self.edit_event_requested.emit)
                 self.events_layout.addWidget(event_widget)
 
     def clear_layout(self):
@@ -62,8 +65,22 @@ class AgendaViewWidget(BaseViewWidget):
         day_names = ["월", "화", "수", "목", "금", "토", "일"]
         header_text = f"{date.month}월 {date.day}일 {day_names[date.weekday()]}요일"
         
+        # 오늘 날짜인지 확인
+        today = datetime.date.today()
+        is_today = (date == today)
+        
+        if is_today:
+            header_text = f"{header_text} (오늘)"
+        
         date_label = QLabel(header_text)
         date_label.setObjectName("agenda_date_header")
+        
+        # 오늘 날짜면 특별한 속성 설정
+        if is_today:
+            date_label.setProperty("isToday", True)
+            date_label.style().unpolish(date_label)
+            date_label.style().polish(date_label)
+        
         self.events_layout.addWidget(date_label)
 
     def change_date(self, new_date):

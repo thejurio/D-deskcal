@@ -46,8 +46,14 @@ class DistanceBasedTaskQueue:
         # 각 거리별 워커의 활성 작업 추적
         self._active_tasks = {i: None for i in range(7)}
 
+    def _ensure_mutex_valid(self):
+        """mutex가 유효한지 확인하고 필요시 재초기화"""
+        if not hasattr(self, '_mutex') or not isinstance(self._mutex, QMutex):
+            self._mutex = QMutex()
+
     def add_task(self, distance, task_data):
         """거리 기반으로 작업 추가"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             # 거리 범위 제한 (0-6)
             distance = min(max(distance, 0), 6)
@@ -70,6 +76,7 @@ class DistanceBasedTaskQueue:
 
     def get_next_task_for_distance(self, distance):
         """특정 거리의 워커가 다음 작업 가져오기"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             if distance in self._queues and self._queues[distance]:
                 task_data = self._queues[distance].popleft()
@@ -80,6 +87,7 @@ class DistanceBasedTaskQueue:
 
     def mark_task_completed(self, distance, task_data):
         """작업 완료 처리"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             if self._active_tasks.get(distance) == task_data:
                 self._active_tasks[distance] = None
@@ -87,6 +95,7 @@ class DistanceBasedTaskQueue:
 
     def interrupt_and_add_current_month(self, task_data):
         """현재 월은 모든 작업을 중단하고 최우선 처리"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             # 현재 처리 중인 작업 중단
             if self._active_tasks[0] is not None:
@@ -103,6 +112,7 @@ class DistanceBasedTaskQueue:
 
     def clear_orphaned_pending(self):
         """큐에는 없지만 pending 상태인 고아 작업들 정리"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             all_queued_tasks = set()
             for queue in self._queues.values():
@@ -118,6 +128,7 @@ class DistanceBasedTaskQueue:
 
     def get_queue_status(self):
         """각 거리별 큐 상태 반환 (디버그용)"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             status = {}
             for distance, queue in self._queues.items():
@@ -129,6 +140,7 @@ class DistanceBasedTaskQueue:
             return status
 
     def __len__(self):
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             return len(self._pending_tasks)
 
@@ -233,6 +245,11 @@ class DistanceBasedCachingManager(QObject):
         
         logger.info("[캐시 DEBUG] DistanceBasedCachingManager 초기화 완료 (7개 워커)")
 
+    def _ensure_mutex_valid(self):
+        """mutex가 유효한지 확인하고 필요시 재초기화"""
+        if not hasattr(self, '_mutex') or not isinstance(self._mutex, QMutex):
+            self._mutex = QMutex()
+
     def _init_workers(self):
         """7개 거리별 워커 초기화"""
         for distance in range(7):
@@ -257,6 +274,7 @@ class DistanceBasedCachingManager(QObject):
 
     def request_caching_around(self, year, month, skip_current=False):
         """거리별 병렬 캐싱 요청"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             self._last_viewed_month = (year, month)
             
@@ -308,6 +326,7 @@ class DistanceBasedCachingManager(QObject):
 
     def request_current_month_sync(self):
         """현재 월 동기화 요청"""
+        self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             if self._last_viewed_month:
                 task_data = ("month", self._last_viewed_month)
@@ -677,13 +696,13 @@ class DataManager(QObject):
                         
                         # [추가] 삭제 대기 중인 이벤트는 provider에서 가져와도 무시
                         if event_id in self.pending_deletion_ids:
-                            print(f"[DELETE DEBUG] Filtered out pending deletion event from provider: {event_id}")
+                            logger.debug(f"Filtered out pending deletion event: {event_id}")
                             continue
                         
                         # 반복일정인 경우 마스터 ID도 확인
                         recurring_event_id = event.get('recurringEventId')
                         if recurring_event_id and recurring_event_id in self.pending_deletion_ids:
-                            print(f"[DELETE DEBUG] Filtered out recurring instance of pending deletion master from provider: {recurring_event_id}")
+                            logger.debug(f"Filtered out recurring instance of pending deletion: {recurring_event_id}")
                             continue
                         
                         cal_id = event.get('calendarId')
@@ -1137,12 +1156,12 @@ class DataManager(QObject):
                             # 실제 원격 API 호출
                             real_event = provider.add_event(self.event_data, self.data_manager)
                             if real_event:
-                                print(f"[RECURRING SYNC DEBUG] API 호출 성공: real_id={real_event.get('id')}")
+                                logger.debug(f"Recurring sync API call success: real_id={real_event.get('id')}")
                                 logger.info(f"원격 반복일정 API 호출 성공: real_id={real_event.get('id')}")
-                                print(f"[RECURRING SYNC DEBUG] Calling _replace_optimistic_recurring_events")
+                                logger.debug("Calling _replace_optimistic_recurring_events")
                                 # 성공: 모든 반복 인스턴스를 실제 이벤트 기반으로 교체
                                 self.data_manager._replace_optimistic_recurring_events(temp_id, real_event, provider_name)
-                                print(f"[RECURRING SYNC DEBUG] _replace_optimistic_recurring_events completed")
+                                logger.debug("_replace_optimistic_recurring_events completed")
                             else:
                                 logger.warning(f"원격 반복일정 API 호출 실패: provider.add_event returned None")
                                 # 실패: 동기화 실패 상태로 마크
@@ -1477,11 +1496,11 @@ class DataManager(QObject):
     # Local-first delete_event method
     def delete_event(self, event_data, deletion_mode='all'):
         """Enhanced Local-first event deletion with recurring events support"""
-        print(f"[DELETE DEBUG PRINT] delete_event called!")  # 강제 출력
+        logger.info("delete_event called")
         event_body = event_data.get('body', event_data)
         event_id = event_body.get('id')
         
-        print(f"[DELETE DEBUG PRINT] Event ID: {event_id}, mode: {deletion_mode}")  # 강제 출력
+        logger.info(f"Deleting event: {event_id}, mode: {deletion_mode}")
         logger.info(f"[DELETE DEBUG] Enhanced Local-first delete_event: id={event_id}, mode={deletion_mode}")
         logger.info(f"[DELETE DEBUG] Event data: {event_data}")
         logger.info(f"[DELETE DEBUG] Event body keys: {list(event_body.keys())}")
@@ -1536,7 +1555,7 @@ class DataManager(QObject):
         try:
             # [추가] 배치 삭제 모드 시작 - UI refresh 차단
             self.batch_deletion_mode = True
-            print(f"[DELETE DEBUG] Batch deletion mode started")
+            logger.debug("Batch deletion mode started")
             logger.info(f"[DELETE DEBUG] Batch deletion mode started")
             
             event_body = event_data.get('body', event_data)
@@ -1560,7 +1579,7 @@ class DataManager(QObject):
             for cache_key, events in self.event_cache.items():
                 # 삭제할 이벤트들 찾기
                 events_to_remove = []
-                print(f"[DELETE DEBUG] Checking cache_key {cache_key} with {len(events)} events")
+                logger.debug(f"Checking cache_key {cache_key} with {len(events)} events")
                 logger.info(f"[DELETE DEBUG] Checking cache_key {cache_key} with {len(events)} events")
                 
                 for i, event in enumerate(events):
@@ -1576,12 +1595,12 @@ class DataManager(QObject):
                         deleted_event_ids.append(event_id)  # 삭제된 ID 기록
                         # 완료 상태도 정리
                         self.unmark_event_as_completed(event.get('id'))
-                        print(f"[DELETE DEBUG] Found recurring instance to delete: {event.get('id')}")
-                        print(f"[DELETE DEBUG] Event summary: {event.get('summary', 'NO_SUMMARY')}")
+                        logger.debug(f"Found recurring instance to delete: {event.get('id')}")
+                        logger.debug(f"Event summary: {event.get('summary', 'NO_SUMMARY')}")
                         logger.info(f"[DELETE DEBUG] Found recurring instance to delete: {event.get('id')}")
                         logger.info(f"[DELETE DEBUG] Event summary: {event.get('summary', 'NO_SUMMARY')}")
                     else:
-                        print(f"[DELETE DEBUG] Event {event_id} not related to master {master_event_id}")
+                        logger.debug(f"Event {event_id} not related to master {master_event_id}")
                         logger.debug(f"[DELETE DEBUG] Event {event_id} not related to master {master_event_id}")
                 
                 # 이벤트 삭제 (안전한 방식으로)
@@ -1598,7 +1617,7 @@ class DataManager(QObject):
                     instances_deleted += deleted_count
                     affected_months.add(cache_key)
                     
-                    print(f"[DELETE DEBUG] Deleted {deleted_count} events from cache_key {cache_key}")
+                    logger.debug(f"Deleted {deleted_count} events from cache_key {cache_key}")
                     logger.info(f"Deleted {deleted_count} events from cache_key {cache_key}")
             
             # [추가] 삭제된 이벤트 ID들을 pending deletion으로 추가
@@ -1661,7 +1680,7 @@ class DataManager(QObject):
         if event_id and '_' in event_id and event_id.split('_')[-1].endswith('Z'):
             # 타임스탬프 부분을 제거하여 마스터 ID 추출
             master_id = event_id.rsplit('_', 1)[0]
-            print(f"[DELETE DEBUG] _extract_master_event_id: {event_id} -> {master_id}")
+            logger.debug(f"Master event ID extracted: {event_id} -> {master_id}")
             return master_id
         
         return event_id
@@ -1788,16 +1807,16 @@ class DataManager(QObject):
                                               self.deleted_event.get('recurringEventId') or
                                               has_timestamp_suffix)  # Google recurring event pattern
                                 
-                                print(f"[DELETE DEBUG] Checking recurring status: deletion_mode={self.deletion_mode}, is_recurring={is_recurring}")
-                                print(f"[DELETE DEBUG] Event ID pattern: {event_id}")
-                                print(f"[DELETE DEBUG] Deleted event recurringEventId: {self.deleted_event.get('recurringEventId')}")
-                                print(f"[DELETE DEBUG] has_timestamp_suffix: {has_timestamp_suffix}")
+                                logger.debug(f"Checking recurring status: mode={self.deletion_mode}, is_recurring={is_recurring}")
+                                logger.debug(f"Event ID pattern: {event_id}")
+                                logger.debug(f"Deleted event recurringEventId: {self.deleted_event.get('recurringEventId')}")
+                                logger.debug(f"Has timestamp suffix: {has_timestamp_suffix}")
                                 
                                 if self.deletion_mode == 'all' and is_recurring:
-                                    print(f"[DELETE DEBUG] Calling _remove_all_recurring_from_pending_deletion")
+                                    logger.debug("Calling _remove_all_recurring_from_pending_deletion")
                                     self.data_manager._remove_all_recurring_from_pending_deletion(event_id, self.deleted_event)
                                 else:
-                                    print(f"[DELETE DEBUG] Calling _remove_from_pending_deletion (single)")
+                                    logger.debug("Calling _remove_from_pending_deletion (single)")
                                     self.data_manager._remove_from_pending_deletion(event_id)
                             else:
                                 # 실패: 이벤트를 캐시에 복원
@@ -2225,10 +2244,10 @@ class DataManager(QObject):
         self.calendar_fetch_thread.deleteLater()
         self.calendar_fetch_thread = None
         self.calendar_fetcher = None
-        print("캘린더 목록 스레드 정리 완료.")
+        logger.info("Calendar list thread cleanup completed")
 
     def _on_calendars_fetched(self, calendars):
-        print(f"{len(calendars)}개의 캘린더 목록을 비동기적으로 수신했습니다.")
+        logger.info(f"Received {len(calendars)} calendars asynchronously")
         self.calendar_list_cache = calendars
         self._default_color_map_cache = None
         self.calendar_list_changed.emit()
@@ -2541,7 +2560,7 @@ class DataManager(QObject):
     
 
     def load_initial_month(self):
-        print("초기 데이터 로딩을 요청합니다...")
+        logger.info("Requesting initial data loading...")
         self.get_all_calendars(fetch_if_empty=True)
         today = datetime.date.today()
         self.get_events(today.year, today.month)

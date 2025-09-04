@@ -269,6 +269,8 @@ class MonthViewWidget(BaseViewWidget):
         nav_layout.addStretch(1)
         nav_layout.addWidget(next_button)
 
+        # 3픽셀 여백 추가 후 네비게이션 바 추가 (2픽셀 위로 이동)
+        self.main_layout.addSpacing(3)
         self.main_layout.addLayout(nav_layout)
 
         self.calendar_grid = QGridLayout()
@@ -465,14 +467,21 @@ class MonthViewWidget(BaseViewWidget):
             cell_widget.day_label.setStyleSheet(
                 f"color: {font_color.name()}; background-color: transparent;"
             )
+            
+            # 기본적으로 autoFillBackground를 False로 설정
+            cell_widget.setAutoFillBackground(False)
 
             if current_day_obj == today:
                 cell_widget.setProperty("isToday", True)
                 cell_widget.style().unpolish(cell_widget)
                 cell_widget.style().polish(cell_widget)
+                # 오늘 강조를 위한 추가 처리 - 레이어 순서 보장
+                cell_widget.setAutoFillBackground(True)
                 cell_widget.day_label.setStyleSheet(
                     f"color: {colors['today_fg'].name()}; font-weight: bold; background-color: transparent;"
                 )
+                # 오늘 셀을 다른 위젯보다 앞으로 가져와서 하이라이트가 보이도록 함
+                cell_widget.raise_()
 
             self.calendar_grid.addWidget(cell_widget, grid_row, grid_col)
             self.date_to_cell_map[current_day_obj] = cell_widget
@@ -669,6 +678,12 @@ class MonthViewWidget(BaseViewWidget):
                     first_visible_run = False
 
         self.update()  # paintEvent 트리거
+        
+        # 오늘 날짜 셀이 있으면 맨 앞으로 가져와서 하이라이트가 보이도록 함
+        today = datetime.date.today()
+        if today in self.date_to_cell_map:
+            today_cell = self.date_to_cell_map[today]
+            today_cell.raise_()
         
         # 진행 중 플래그 해제
         self._drawing_in_progress = False
