@@ -2,6 +2,7 @@ import datetime
 import uuid
 import logging
 from dateutil.rrule import rrulestr, YEARLY, MONTHLY, WEEKLY, DAILY
+from rrule_parser import RRuleParser
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                              QTextEdit, QPushButton, QCheckBox, QComboBox,
                              QWidget, QCalendarWidget, QTimeEdit, QSizePolicy)
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 from custom_dialogs import CustomMessageBox, BaseDialog, RecurringDeleteDialog
 from config import LOCAL_CALENDAR_PROVIDER_NAME
 from recurrence_dialog import RecurrenceRuleDialog
-from custom_dialogs import CustomMessageBox, BaseDialog, RecurringDeleteDialog
+from recurrence_change_dialog import RecurrenceConversionDialog, RecurrenceChangeDialog
 
 class DateSelector(QWidget):
     """
@@ -80,6 +81,8 @@ class EventEditorWindow(BaseDialog):
         self.event_data = data if isinstance(data, dict) else {}
         self.date_info = data if isinstance(data, (datetime.date, datetime.datetime)) else None
         self.custom_rrule = None
+        self.original_rrule = None  # 원본 반복 규칙 저장
+        self.recurrence_change_mode = None  # 반복 규칙 변경 모드 추적
         self.data_manager = data_manager
         self.initial_completed_state = False
         
@@ -289,7 +292,16 @@ class EventEditorWindow(BaseDialog):
         start_date = self.start_date_selector.dateTime().date()
         dialog = RecurrenceRuleDialog(rrule_str=self.custom_rrule, start_date=start_date, parent=self, settings=self.settings, pos=self.mapToGlobal(self.recurrence_edit_button.pos()))
         if dialog.exec():
-            self.custom_rrule, new_start_date = dialog.get_rule_data()
+            new_rrule, new_start_date = dialog.get_rule_data()
+            
+            # 반복 규칙 변경 감지 및 처리
+            if self.mode == 'edit':
+                change_detected = self._detect_recurrence_change(new_rrule)
+                if change_detected:
+                    if not self._handle_recurrence_change(new_rrule):
+                        return  # 사용자가 취소했음
+            
+            self.custom_rrule = new_rrule
             if self.custom_rrule:
                 current_start_dt = self.get_start_datetime()
                 new_start_qdt = QDateTime(new_start_date, current_start_dt.time())
@@ -309,33 +321,26 @@ class EventEditorWindow(BaseDialog):
             self.recurrence_edit_button.setText("반복 안 함")
 
     def rrule_to_text(self, rrule_str, dtstart):
-        if not rrule_str: return "반복 안 함"
+        """RRULE 문자열을 사용자가 읽기 쉬운 텍스트로 변환"""
+        if not rrule_str:
+            return "반복 안 함"
+        
         try:
+            # RRuleParser를 사용하여 텍스트 변환
+            parser = RRuleParser()
+            
+            # dtstart를 datetime으로 변환
             if not isinstance(dtstart, datetime.datetime):
                 dtstart = datetime.datetime.combine(dtstart, datetime.time.min)
-            rule = rrulestr(rrule_str.replace("RRULE:", ""), dtstart=dtstart)
-            parts, interval = [], rule._interval
-            if rule._freq == YEARLY: parts.append("매년" if interval == 1 else f"{interval}년마다")
-            elif rule._freq == MONTHLY: parts.append("매월" if interval == 1 else f"{interval}개월마다")
-            elif rule._freq == WEEKLY: parts.append("매주" if interval == 1 else f"{interval}주마다")
-            elif rule._freq == DAILY: parts.append("매일" if interval == 1 else f"{interval}일마다")
-            if rule._freq == WEEKLY and rule._byweekday:
-                days = ["월", "화", "수", "목", "금", "토", "일"]
-                selected_days = sorted(rule._byweekday)
-                parts.append(" ".join([days[i] for i in selected_days]) + "요일")
-            if rule._freq == MONTHLY:
-                if rule._bymonthday: parts.append(f"{rule._bymonthday[0]}일")
-                elif rule._byweekday and rule._bysetpos:
-                    pos_map = {1: "첫째 주", 2: "둘째 주", 3: "셋째 주", 4: "넷째 주", -1: "마지막 주"}
-                    days = ["월", "화", "수", "목", "금", "토", "일"]
-                    pos, day_of_week = rule._bysetpos[0], rule._byweekday[0]
-                    parts.append(f"{pos_map[pos]} {days[day_of_week]}요일")
-            if rule._until: parts.append(f"{rule._until.strftime('%Y-%m-%d')}까지")
-            elif rule._count: parts.append(f"{rule._count}회")
-            return ", ".join(parts)
+            
+            # 개선된 파서 사용
+            result = parser.rrule_to_text(rrule_str, dtstart)
+            return result
+            
         except Exception as e:
             logger.error(f"RRULE text conversion error: {e}")
-            return rrule_str
+            # 오류 시에도 사용자 친화적인 메시지 반환
+            return "반복 일정"
 
     def sync_end_date_on_recurrence(self):
         if self.custom_rrule:
@@ -419,6 +424,7 @@ class EventEditorWindow(BaseDialog):
             self.set_end_datetime(end_dt)
             if 'recurrence' in self.event_data:
                 self.custom_rrule = self.event_data['recurrence'][0]
+                self.original_rrule = self.custom_rrule  # 원본 저장
                 self.update_recurrence_button_text()
                 self.sync_end_date_on_recurrence()
         elif self.mode == 'new' and self.date_info:
@@ -433,6 +439,82 @@ class EventEditorWindow(BaseDialog):
     def get_deletion_mode(self):
         return getattr(self, 'deletion_mode', 'all')
     
+    def _detect_recurrence_change(self, new_rrule):
+        """반복 규칙 변경 감지"""
+        original_has_recurrence = bool(self.original_rrule)
+        new_has_recurrence = bool(new_rrule)
+        
+        logger.info(f"반복 규칙 변경 감지: 원본={self.original_rrule}, 신규={new_rrule}")
+        
+        # 변경 타입 결정
+        if not original_has_recurrence and new_has_recurrence:
+            self.recurrence_change_mode = "single_to_recurring"
+            return True
+        elif original_has_recurrence and not new_has_recurrence:
+            self.recurrence_change_mode = "recurring_to_single" 
+            return True
+        elif original_has_recurrence and new_has_recurrence and self.original_rrule != new_rrule:
+            self.recurrence_change_mode = "modify_recurrence"
+            return True
+        else:
+            self.recurrence_change_mode = None
+            return False
+    
+    def _handle_recurrence_change(self, new_rrule):
+        """반복 규칙 변경 처리"""
+        event_title = self.summary_edit.text() or "(제목 없음)"
+        
+        if self.recurrence_change_mode == "single_to_recurring":
+            # 단일 → 반복: 간단한 확인만
+            dialog = RecurrenceConversionDialog(
+                parent=self, 
+                settings=self.settings,
+                pos=self.pos(),
+                from_recurring=False,
+                event_title=event_title
+            )
+            if dialog.exec():
+                logger.info("단일 → 반복 일정 변환 확인됨")
+                return True
+            else:
+                logger.info("단일 → 반복 일정 변환 취소됨")
+                return False
+                
+        elif self.recurrence_change_mode == "recurring_to_single":
+            # 반복 → 단일: 이후/전체 선택 필요
+            dialog = RecurrenceConversionDialog(
+                parent=self,
+                settings=self.settings, 
+                pos=self.pos(),
+                from_recurring=True,
+                event_title=event_title
+            )
+            if dialog.exec():
+                self.recurrence_change_option = dialog.get_selected_option()
+                logger.info(f"반복 → 단일 일정 변환: {self.recurrence_change_option}")
+                return True
+            else:
+                logger.info("반복 → 단일 일정 변환 취소됨")
+                return False
+                
+        elif self.recurrence_change_mode == "modify_recurrence":
+            # 반복 규칙 변경: 이후/전체 선택 필요
+            dialog = RecurrenceChangeDialog(
+                parent=self,
+                settings=self.settings,
+                pos=self.pos(),
+                change_type="modify"
+            )
+            if dialog.exec():
+                self.recurrence_change_option = dialog.get_selected_option()
+                logger.info(f"반복 규칙 변경: {self.recurrence_change_option}")
+                return True
+            else:
+                logger.info("반복 규칙 변경 취소됨")
+                return False
+        
+        return False
+
     def get_event_data(self):
         summary, description = self.summary_edit.text(), self.description_edit.toPlainText()
         is_all_day = self.all_day_checkbox.isChecked()
@@ -473,5 +555,11 @@ class EventEditorWindow(BaseDialog):
         if self.mode == 'edit' and self.original_calendar_id and self.original_provider:
             result['originalCalendarId'] = self.original_calendar_id
             result['originalProvider'] = self.original_provider
+            
+        # Add recurrence change info if applicable
+        if self.mode == 'edit' and self.recurrence_change_mode:
+            result['recurrence_change_mode'] = self.recurrence_change_mode
+            result['recurrence_change_option'] = getattr(self, 'recurrence_change_option', 'all')
+            result['original_rrule'] = self.original_rrule
             
         return result

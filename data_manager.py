@@ -2303,6 +2303,11 @@ class DataManager(QObject):
     
     def update_event(self, event_data):
         """Local-first event update: UI 즉시 업데이트 → 백그라운드 동기화 (반복 일정 포함)"""
+        # Check for recurrence change first
+        recurrence_change_mode = event_data.get('recurrence_change_mode')
+        if recurrence_change_mode:
+            return self._handle_recurrence_change(event_data)
+        
         # Check if calendar has changed (move operation needed)
         original_calendar_id = event_data.get('originalCalendarId')
         original_provider = event_data.get('originalProvider')
@@ -2485,6 +2490,247 @@ class DataManager(QObject):
         
         # 백그라운드 스레드에서 실행
         task = RemoteUpdateTask(self, event_data, updated_event, original_event)
+        QThreadPool.globalInstance().start(task)
+    
+    def _handle_recurrence_change(self, event_data):
+        """반복 규칙 변경 처리"""
+        recurrence_change_mode = event_data.get('recurrence_change_mode')
+        recurrence_change_option = event_data.get('recurrence_change_option', 'all')
+        event_body = event_data.get('body', {})
+        event_id = event_body.get('id')
+        
+        logger.info(f"반복 규칙 변경 처리: mode={recurrence_change_mode}, option={recurrence_change_option}, id={event_id}")
+        
+        if recurrence_change_mode == "single_to_recurring":
+            return self._convert_single_to_recurring(event_data)
+        elif recurrence_change_mode == "recurring_to_single":
+            return self._convert_recurring_to_single(event_data, recurrence_change_option)
+        elif recurrence_change_mode == "modify_recurrence":
+            return self._modify_recurrence_rule(event_data, recurrence_change_option)
+        else:
+            logger.error(f"알 수 없는 반복 규칙 변경 모드: {recurrence_change_mode}")
+            return False
+    
+    def _convert_single_to_recurring(self, event_data):
+        """단일 일정을 반복 일정으로 변환"""
+        try:
+            event_body = event_data.get('body', {})
+            event_id = event_body.get('id')
+            
+            # 1. 기존 단일 일정 찾기 및 삭제
+            original_event, cache_key = self._find_and_backup_event(event_id)
+            if not original_event:
+                logger.error(f"변환할 단일 일정을 찾을 수 없음: {event_id}")
+                return False
+            
+            # 기존 일정을 캐시에서 제거
+            if cache_key and cache_key in self.event_cache:
+                self.event_cache[cache_key] = [e for e in self.event_cache[cache_key] if e.get('id') != event_id]
+            
+            # 2. 새로운 반복 일정으로 업데이트
+            updated_event = self._create_optimistic_updated_event(original_event, event_data)
+            
+            # 3. 반복 일정 인스턴스들 생성 및 캐시에 추가
+            self._generate_recurring_instances_for_cache(updated_event)
+            
+            # 4. UI 업데이트
+            if cache_key:
+                year, month = cache_key
+                self.data_updated.emit(year, month)
+            
+            # 5. 백그라운드 동기화
+            self._queue_remote_recurrence_conversion(event_data, original_event, "single_to_recurring")
+            
+            logger.info(f"단일 → 반복 일정 변환 완료: {event_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"단일 → 반복 일정 변환 실패: {e}")
+            return False
+    
+    def _convert_recurring_to_single(self, event_data, option):
+        """반복 일정을 단일 일정으로 변환"""
+        try:
+            event_body = event_data.get('body', {})
+            event_id = event_body.get('id')
+            
+            if option == "instance":
+                # 이 인스턴스만 단일 일정으로 변환
+                return self._convert_single_instance_to_single(event_data)
+            elif option == "future":
+                # 이후 모든 인스턴스를 단일 일정으로 변환 (반복 종료)
+                return self._convert_future_instances_to_single(event_data)
+            elif option == "all":
+                # 모든 반복을 삭제하고 하나의 단일 일정으로 변환
+                return self._convert_all_recurring_to_single(event_data)
+            else:
+                logger.error(f"알 수 없는 변환 옵션: {option}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"반복 → 단일 일정 변환 실패: {e}")
+            return False
+    
+    def _modify_recurrence_rule(self, event_data, option):
+        """반복 규칙 수정"""
+        try:
+            event_body = event_data.get('body', {})
+            event_id = event_body.get('id')
+            original_rrule = event_data.get('original_rrule')
+            new_rrule = event_body.get('recurrence', [None])[0] if event_body.get('recurrence') else None
+            
+            if option == "future":
+                # 이후 모든 일정의 반복 규칙 변경
+                return self._modify_future_recurrence(event_data, original_rrule, new_rrule)
+            elif option == "all":
+                # 모든 반복 일정의 규칙 변경
+                return self._modify_all_recurrence(event_data, original_rrule, new_rrule)
+            else:
+                logger.error(f"알 수 없는 수정 옵션: {option}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"반복 규칙 수정 실패: {e}")
+            return False
+    
+    def _convert_single_instance_to_single(self, event_data):
+        """단일 인스턴스만 일반 일정으로 변환 (반복에서 제외)"""
+        # 이는 예외 처리와 동일한 로직 (반복에서 해당 날짜 제외)
+        event_body = event_data.get('body', {})
+        event_id = event_body.get('id')
+        
+        # 예외 날짜로 추가
+        original_id = event_id.split('_')[0] if '_' in event_id else event_id
+        start_str = event_body.get('start', {}).get('dateTime') or event_body.get('start', {}).get('date')
+        
+        if start_str:
+            try:
+                import datetime
+                if 'T' in start_str:
+                    exception_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00')).isoformat()
+                else:
+                    exception_date = start_str
+                    
+                # 로컬 제공자에 예외 추가
+                for provider in self.providers:
+                    if provider.name == LOCAL_CALENDAR_PROVIDER_NAME:
+                        with provider._get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO event_exceptions (original_event_id, exception_date) VALUES (?, ?)",
+                                (original_id, exception_date)
+                            )
+                            conn.commit()
+                        break
+                
+                # 새로운 단일 일정 생성
+                event_body['id'] = str(uuid.uuid4())  # 새로운 ID
+                event_body.pop('recurrence', None)  # 반복 제거
+                
+                # 캐시에 단일 일정으로 추가
+                updated_event = self._create_optimistic_updated_event({}, event_data)
+                self._add_event_to_cache(updated_event)
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"인스턴스 변환 실패: {e}")
+                return False
+        
+        return False
+    
+    def _generate_recurring_instances_for_cache(self, master_event):
+        """마스터 이벤트로부터 반복 인스턴스들을 생성하여 캐시에 추가"""
+        # 이는 기존 캐싱 로직을 활용하여 반복 인스턴스들 생성
+        try:
+            import datetime
+            from dateutil.rrule import rrulestr
+            
+            recurrence = master_event.get('recurrence', [])
+            if not recurrence:
+                return
+            
+            rrule_str = recurrence[0]
+            start_str = master_event.get('start', {}).get('dateTime') or master_event.get('start', {}).get('date')
+            
+            if not start_str:
+                return
+            
+            # 현재 보이는 달들의 범위에서 인스턴스 생성
+            current_date = datetime.date.today()
+            for month_offset in range(-3, 4):  # 현재 기준 ±3개월
+                target_date = current_date.replace(day=1)
+                if month_offset != 0:
+                    year = target_date.year
+                    month = target_date.month + month_offset
+                    while month <= 0:
+                        month += 12
+                        year -= 1
+                    while month > 12:
+                        month -= 12
+                        year += 1
+                    target_date = target_date.replace(year=year, month=month)
+                
+                # 해당 월의 인스턴스들 생성
+                month_start = target_date
+                if target_date.month == 12:
+                    month_end = target_date.replace(year=target_date.year+1, month=1, day=1) - datetime.timedelta(days=1)
+                else:
+                    month_end = target_date.replace(month=target_date.month+1, day=1) - datetime.timedelta(days=1)
+                
+                # RRULE 파싱하여 인스턴스 생성 (local_provider 로직 활용)
+                for provider in self.providers:
+                    if provider.name == LOCAL_CALENDAR_PROVIDER_NAME:
+                        instances = provider.get_events(month_start, month_end, self)
+                        recurring_instances = [e for e in instances if e.get('id', '').startswith(master_event['id'])]
+                        
+                        cache_key = (target_date.year, target_date.month)
+                        if cache_key not in self.event_cache:
+                            self.event_cache[cache_key] = []
+                        
+                        # 기존 인스턴스 제거 후 새로운 인스턴스 추가
+                        self.event_cache[cache_key] = [e for e in self.event_cache[cache_key] 
+                                                     if not e.get('id', '').startswith(master_event['id'])]
+                        self.event_cache[cache_key].extend(recurring_instances)
+                        break
+                        
+        except Exception as e:
+            logger.error(f"반복 인스턴스 생성 실패: {e}")
+    
+    def _queue_remote_recurrence_conversion(self, event_data, original_event, conversion_type):
+        """백그라운드에서 반복 규칙 변환 동기화"""
+        class RecurrenceConversionTask(QRunnable):
+            def __init__(self, data_manager, event_data, original_event, conversion_type):
+                super().__init__()
+                self.data_manager = data_manager
+                self.event_data = event_data
+                self.original_event = original_event
+                self.conversion_type = conversion_type
+                
+            def run(self):
+                provider_name = self.event_data.get('provider')
+                
+                for provider in self.data_manager.providers:
+                    if provider.name == provider_name:
+                        try:
+                            if self.conversion_type == "single_to_recurring":
+                                # 기존 단일 일정 삭제 후 새로운 반복 일정 추가
+                                provider.delete_event({'body': self.original_event}, self.data_manager)
+                                result = provider.add_event(self.event_data, self.data_manager)
+                            else:
+                                # 기타 변환 타입들
+                                result = provider.update_event(self.event_data, self.data_manager)
+                            
+                            if result:
+                                logger.info(f"반복 규칙 변환 원격 동기화 성공: {self.conversion_type}")
+                            else:
+                                logger.error(f"반복 규칙 변환 원격 동기화 실패: {self.conversion_type}")
+                                
+                        except Exception as e:
+                            logger.error(f"반복 규칙 변환 원격 동기화 오류: {e}")
+                        break
+        
+        task = RecurrenceConversionTask(self, event_data, original_event, conversion_type)
         QThreadPool.globalInstance().start(task)
     
     def _queue_remote_recurring_update(self, event_data, original_instances):

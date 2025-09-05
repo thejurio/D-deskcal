@@ -26,7 +26,7 @@ def create_release_package():
     release_dir.mkdir()
     
     # ZIP 파일명
-    zip_filename = "D-deskcal-v1.1.2-installer.zip"
+    zip_filename = "D-deskcal-v1.1.3-installer.zip"
     zip_path = release_dir / zip_filename
     
     print(f"ZIP 파일 생성: {zip_path}")
