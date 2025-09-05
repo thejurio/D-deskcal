@@ -7,6 +7,11 @@ import time
 import psutil
 import socket
 
+# 로깅 설정 초기화
+from logger_config import setup_logger
+setup_logger()
+logger = logging.getLogger(__name__)
+
 if sys.platform == "win32":
     import win32gui
     import win32con
@@ -188,7 +193,7 @@ class MainWidget(QWidget):
             self.notification_popups = []
 
         duration = self.settings.get("notification_duration", DEFAULT_NOTIFICATION_DURATION)
-        popup = NotificationPopup(title, message, duration_seconds=duration)
+        popup = NotificationPopup(title, message, duration_seconds=duration, settings=self.settings)
 
         # 팝업이 표시된 후 크기 계산을 위해 show() 먼저 호출
         popup.show()
@@ -445,6 +450,7 @@ class MainWidget(QWidget):
 
         # 중앙: 월간, 주간
         center_layout = QHBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addStretch(1)
         center_layout.addWidget(month_button)
         center_layout.addWidget(week_button)
@@ -609,13 +615,17 @@ class MainWidget(QWidget):
             self.month_view.set_resizing(False)
             self.week_view.set_resizing(False)
 
-    def apply_background_opacity(self, opacity=None):
+    def apply_background_opacity(self, opacity=None, theme_name=None):
         if opacity is None:
             opacity = self.settings.get("window_opacity", 0.95)
 
-        theme_name = self.settings.get("theme", "dark")
-        alpha = int(opacity * 255)
-
+        if theme_name is None:
+            theme_name = self.settings.get("theme", "dark")
+        
+        # 메인 위젯은 완전히 불투명하게 설정 (콘텐츠가 투명해지지 않도록)
+        self.setWindowOpacity(1.0)
+        
+        # 배경 위젯에만 RGBA 투명도 적용 (배경만 투명)
         if theme_name == "dark":
             base_color = "30, 30, 30"
         else: # light theme
@@ -623,7 +633,8 @@ class MainWidget(QWidget):
 
         style = f"""
             QWidget#main_background {{
-                background-color: rgba({base_color}, {alpha});
+                background-color: rgba({base_color}, {opacity});
+                border: 1px solid rgba(100, 100, 100, 0.8);
                 border-radius: 10px;
             }}
         """
@@ -679,8 +690,8 @@ class MainWidget(QWidget):
             settings_dialog = SettingsWindow(self.data_manager, self.settings, None, pos=self._get_dialog_pos())
             self.active_dialog = settings_dialog
 
-            settings_dialog.transparency_changed.connect(self.apply_background_opacity)
-            settings_dialog.theme_changed.connect(self.apply_theme)
+            settings_dialog.transparency_changed.connect(self.on_opacity_preview_changed)
+            settings_dialog.theme_changed.connect(self.on_theme_preview_changed)
 
             result = settings_dialog.exec()
             self.active_dialog = None
@@ -732,40 +743,53 @@ class MainWidget(QWidget):
 
     def open_ai_input_dialog(self):
         if not self.is_interaction_unlocked():
+            logger.debug("AI input dialog blocked due to interaction lock")
             return
 
+        logger.info("Starting AI event input dialog")
         input_dialog = AIEventInputDialog(None, self.settings, pos=self._get_dialog_pos())
         if not input_dialog.exec():
+            logger.info("AI input dialog cancelled by user")
             return
 
         text_to_analyze = input_dialog.get_text()
         if not text_to_analyze:
+            logger.warning("AI input dialog: No text provided for analysis")
             self.show_error_message("분석할 텍스트가 입력되지 않았습니다.")
             return
 
         api_key = self.settings.get("gemini_api_key")
         if not api_key:
+            logger.error("AI event creation failed: Gemini API key not configured")
             self.show_error_message("Gemini API 키가 설정되지 않았습니다.\n[설정 > 계정] 탭에서 API 키를 먼저 등록해주세요.")
             return
 
+        logger.info(f"Starting AI event parsing with text length: {len(text_to_analyze)} characters")
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             parsed_events = gemini_parser.parse_events_with_gemini(api_key, text_to_analyze)
             QApplication.restoreOverrideCursor()
 
             if not parsed_events:
+                logger.warning("AI parsing completed but no valid events were found")
                 self.show_error_message("텍스트에서 유효한 일정 정보를 찾지 못했습니다.")
                 return
+            
+            logger.info(f"AI parsing successful: {len(parsed_events)} events parsed")
 
             confirmation_dialog = AIConfirmationDialog(parsed_events, self.data_manager, None, self.settings, pos=self._get_dialog_pos())
             if confirmation_dialog.exec():
                 final_events, calendar_id, provider_name = confirmation_dialog.get_final_events_and_calendar()
+                logger.info(f"AI confirmation dialog completed: {len(final_events)} events confirmed, target calendar: {calendar_id}")
 
                 if not calendar_id:
+                    logger.error("AI event creation failed: No calendar selected")
                     self.show_error_message("일정을 추가할 캘린더를 선택해주세요.")
                     return
 
-                for event in final_events:
+                logger.info(f"Starting creation of {len(final_events)} AI-generated events")
+                for i, event in enumerate(final_events):
+                    logger.debug(f"Processing AI event {i+1}/{len(final_events)}: {event.get('title', 'Unnamed')}")
                     is_deadline_only = event.get('isDeadlineOnly', False)
                     is_all_day = event.get('isAllDay', False)
 
@@ -804,12 +828,16 @@ class MainWidget(QWidget):
                     self.data_manager.add_event(event_to_add)
                     QApplication.processEvents()  # UI 반응성 유지
 
+                logger.info(f"AI event creation completed successfully: {len(final_events)} events added to calendar {calendar_id}")
                 self.settings['last_selected_calendar_id'] = calendar_id
                 save_settings_safe(self.settings) # AI 추가 후에도 캘린더 ID 저장
                 self.show_error_message(f"{len(final_events)}개의 일정을 성공적으로 추가했습니다.", ok_only=True, title="알림")
+            else:
+                logger.info("AI confirmation dialog cancelled by user")
 
         except Exception as e:
             QApplication.restoreOverrideCursor()
+            logger.error(f"AI event creation failed with exception: {e}", exc_info=True)
             self.show_error_message(f"AI 분석 중 오류가 발생했습니다:\n{e}")
 
     def open_search_dialog(self):
@@ -835,13 +863,35 @@ class MainWidget(QWidget):
         self.set_current_date(target_date)
         QTimer.singleShot(50, lambda: self.open_event_editor(event_data))
 
+    def on_opacity_preview_changed(self, opacity):
+        """설정창에서 투명도 미리보기 변경 처리"""
+        # 현재 설정창에서 설정 중인 테마 값을 가져와서 적용
+        if hasattr(self.active_dialog, 'temp_settings'):
+            current_theme = self.active_dialog.temp_settings.get("theme", "dark")
+            self.apply_background_opacity(opacity=opacity, theme_name=current_theme)
+        else:
+            self.apply_background_opacity(opacity=opacity)
+
+    def on_theme_preview_changed(self, theme_name):
+        """설정창에서 테마 미리보기 변경 처리"""
+        # 현재 설정창에서 설정 중인 투명도 값을 가져와서 적용
+        if hasattr(self.active_dialog, 'temp_settings'):
+            current_opacity = self.active_dialog.temp_settings.get("window_opacity", 0.95)
+            self.apply_background_opacity(opacity=current_opacity, theme_name=theme_name)
+        
+        # 전체 테마 적용
+        self.apply_theme(theme_name)
+
     def apply_theme(self, theme_name):
         try:
             stylesheet = load_stylesheet(f'{theme_name}_theme.qss')
             app = QApplication.instance()
             app.setStyleSheet(stylesheet)
 
-            self.apply_background_opacity()
+            # 설정창 미리보기가 아닌 경우에만 배경 투명도 적용
+            # (미리보기는 on_theme_preview_changed에서 처리)
+            if not hasattr(self, 'active_dialog') or self.active_dialog is None:
+                self.apply_background_opacity(theme_name=theme_name)
 
             for widget in app.topLevelWidgets():
                 widget.style().unpolish(widget)
@@ -855,12 +905,15 @@ class MainWidget(QWidget):
             print(f"경고: '{theme_name}_theme.qss' 파일을 찾을 수 없습니다.")
 
     def open_event_editor(self, data):
-        print(f"[DEBUG] UI_MAIN: open_event_editor 호출됨 - 데이터 타입: {type(data)}")
         if isinstance(data, dict):
-            print(f"[DEBUG] UI_MAIN: 이벤트 편집 요청 - {data.get('summary', 'Unknown')}")
+            logger.info(f"Event editor requested for editing event: {data.get('summary', 'Unnamed')}")
+        elif isinstance(data, (datetime.date, datetime.datetime)):
+            logger.info(f"Event editor requested for new event on date: {data}")
+        else:
+            logger.info(f"Event editor requested with data type: {type(data)}")
         
         if self.active_dialog is not None:
-            print(f"[DEBUG] UI_MAIN: 이미 활성 다이얼로그가 있어서 활성화만 함")
+            logger.debug("Event editor blocked: another dialog is already active")
             self.active_dialog.activateWindow()
             return
             
@@ -887,18 +940,25 @@ class MainWidget(QWidget):
             if result == QDialog.DialogCode.Accepted:
                 event_data = editor.get_event_data()
                 if not event_data.get('calendarId'):
+                    logger.error("Event save failed: No calendar ID available")
                     self.show_error_message("캘린더 목록이 아직 로딩되지 않았습니다. 잠시 후 다시 시도해주세요.")
                     return
 
                 is_recurring = 'recurrence' in event_data.get('body', {})
+                event_summary = event_data.get('body', {}).get('summary', 'Unnamed')
+                
                 if editor.mode == 'new':
+                    logger.info(f"Creating new event: '{event_summary}' (recurring: {is_recurring})")
                     QApplication.processEvents()  # UI 반응성 유지
                     self.data_manager.add_event(event_data)
                     QApplication.processEvents()  # UI 반응성 유지
+                    logger.info(f"New event creation completed: '{event_summary}'")
                 else:
+                    logger.info(f"Updating existing event: '{event_summary}' (recurring: {is_recurring})")
                     QApplication.processEvents()  # UI 반응성 유지
                     self.data_manager.update_event(event_data)
                     QApplication.processEvents()  # UI 반응성 유지
+                    logger.info(f"Event update completed: '{event_summary}'")
 
                 self.settings['last_selected_calendar_id'] = event_data.get('calendarId')
                 save_settings_safe(self.settings)
@@ -917,20 +977,25 @@ class MainWidget(QWidget):
             elif result == EventEditorWindow.DeleteRole:
                 event_to_delete = editor.get_event_data()
                 deletion_mode = editor.get_deletion_mode() # Get the user's choice
+                event_summary = event_to_delete.get('body', {}).get('summary', event_to_delete.get('summary', 'Unnamed'))
+                
+                logger.info(f"Deleting event: '{event_summary}' (mode: {deletion_mode})")
                 QApplication.processEvents()  # UI 반응성 유지
                 self.data_manager.delete_event(event_to_delete, deletion_mode=deletion_mode)
                 QApplication.processEvents()  # UI 반응성 유지
+                logger.info(f"Event deletion completed: '{event_summary}'")
 
     def show_event_detail(self, event_data):
         """이벤트 상세보기 다이얼로그를 표시합니다."""
-        print(f"[DEBUG] UI_MAIN: show_event_detail 호출됨 - {event_data.get('summary', 'Unknown Event')}")
+        event_title = event_data.get('summary', 'Unknown Event')
+        logger.debug(f"Event detail dialog requested for: {event_title}")
         
         if not self.is_interaction_unlocked():
-            print(f"[DEBUG] UI_MAIN: 상호작용이 잠겨있어서 상세보기 다이얼로그 열기 취소")
+            logger.debug("Event detail dialog blocked due to interaction lock")
             return
             
         try:
-            print(f"[DEBUG] UI_MAIN: 상세보기 다이얼로그 생성 중: {event_data.get('summary', 'Unknown Event')}")
+            logger.info(f"Opening event detail dialog for: {event_title}")
             
             dialog = SimpleEventDetailDialog(
                 event_data=event_data,
@@ -943,7 +1008,7 @@ class MainWidget(QWidget):
             dialog.exec()
                 
         except Exception as e:
-            print(f"[ERROR] 이벤트 상세보기 다이얼로그 오류: {e}")
+            logger.error(f"Event detail dialog error: {e}", exc_info=True)
             self.show_error_message(f"이벤트 상세정보를 표시하는 중 오류가 발생했습니다: {str(e)}")
 
     def show_error_message(self, message, ok_only=False, title="오류"):

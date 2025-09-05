@@ -224,9 +224,9 @@ QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
     border-right: 1px solid #404040;
     border-bottom: 1px solid #404040;
 }
-/* Today's date highlighting */
+/* Today's date highlighting - 이제 paintEvent에서 처리 */
 #calendar_grid DayCellWidget[isToday="true"] {
-    background-color: rgba(0, 120, 215, 80);
+    /* background-color는 paintEvent에서 처리되므로 제거 */
     border-radius: 5px;
     border: none;
 }

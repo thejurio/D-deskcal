@@ -17,6 +17,10 @@ class CalendarPopup(QDialog):
     def __init__(self, parent=None, current_date_str=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.Popup)
+        
+        # 달력 팝업은 고정된 불투명도 적용 (메인 프로그램의 투명도 설정과 독립적)
+        self.setWindowOpacity(0.95)
+        
         layout = QVBoxLayout(self)
         self.calendar = QCalendarWidget()
         

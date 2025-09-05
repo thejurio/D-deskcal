@@ -501,9 +501,10 @@ class WeekViewWidget(BaseViewWidget):
         center_layout = QHBoxLayout()
         center_layout.setContentsMargins(0,0,0,0)
         center_layout.setSpacing(5)
-        center_layout.addStretch(11)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_layout.addStretch(1)
         center_layout.addWidget(self.week_range_label)
-        center_layout.addStretch(10)
+        center_layout.addStretch(1)
 
         nav_layout.addWidget(prev_button)
         nav_layout.addLayout(center_layout)

@@ -18,10 +18,8 @@ class BaseDialog(QDialog):
         self.apply_opacity()
 
     def apply_opacity(self):
-        if self.settings:
-            main_opacity = self.settings.get("window_opacity", 0.95)
-            dialog_opacity = main_opacity + (1 - main_opacity) * 0.85
-            self.setWindowOpacity(dialog_opacity)
+        # 모든 다이얼로그는 고정된 불투명도 적용 (메인 프로그램의 투명도 설정과 독립적)
+        self.setWindowOpacity(0.95)
     
     def ensure_on_top(self):
         """이 다이얼로그가 다른 다이얼로그들 위에 나타나도록 보장합니다."""

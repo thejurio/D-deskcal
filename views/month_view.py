@@ -260,7 +260,8 @@ class MonthViewWidget(BaseViewWidget):
 
         center_nav_layout = QHBoxLayout()
         center_nav_layout.setSpacing(0)
-        center_nav_layout.setContentsMargins(25, 0, 0, 0)
+        center_nav_layout.setContentsMargins(0, 0, 0, 0)
+        center_nav_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_nav_layout.addWidget(self.month_button)
 
         nav_layout.addWidget(prev_button)
@@ -1030,6 +1031,36 @@ class MonthViewWidget(BaseViewWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        # 1. 최하단 레이어: 오늘 날짜 하이라이트 그리기
+        today = datetime.date.today()
+        if today in self.date_to_cell_map:
+            today_cell = self.date_to_cell_map[today]
+            today_rect = today_cell.geometry()
+            
+            painter.save()
+            # 테마에 따른 하이라이트 색상 가져오기  
+            theme = self.main_widget.settings.get("theme", "dark") if hasattr(self.main_widget, 'settings') else "dark"
+            if theme == "light":
+                highlight_color = QColor(0, 120, 215, 80)  # 라이트 테마
+            else:
+                highlight_color = QColor(0, 120, 215, 80)  # 다크 테마
+            
+            # 오늘 날짜 셀에만 둥근 모서리 하이라이트 그리기
+            painter.setBrush(highlight_color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            
+            # 둥근 모서리 반지름 (셀 크기에 비례해서 적당히)
+            corner_radius = min(today_rect.width(), today_rect.height()) * 0.1
+            corner_radius = max(corner_radius, 5)  # 최소 5px
+            corner_radius = min(corner_radius, 12) # 최대 12px
+            
+            painter.drawRoundedRect(today_rect, corner_radius, corner_radius)
+            painter.restore()
+
+        # 2. 중간 레이어: 날짜 구분선 그리기 (CSS에서 처리되는 border)
+        # 구분선은 CSS border로 처리되므로 여기서는 추가 작업 불필요
+
+        # 3. 최상단 레이어: 일정 블럭들 그리기
         for item in self._render_boxes:
             rect = item['rect']
             ev = item['event']
