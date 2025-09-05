@@ -7,59 +7,24 @@ from dateutil.rrule import rrulestr
 from datetime import timezone
 
 from .base_provider import BaseCalendarProvider
-from config import (DB_FILE, LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
+from config import (LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_LOCAL_CALENDAR_COLOR)
+from db_manager import get_db_manager
 
 class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, db_connection=None):
         self.settings = settings
         self._connection = db_connection
         self.name = LOCAL_CALENDAR_PROVIDER_NAME
-        self._check_and_migrate_db()
+        self.db_manager = get_db_manager()
+        # Migrate existing data if needed
+        self.db_manager.migrate_existing_data()
 
     def _get_connection(self):
         if self._connection:
             return self._connection
-        return sqlite3.connect(DB_FILE)
-
-    def _check_and_migrate_db(self):
-        try:
-            self._init_db_table() 
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(events)")
-                columns = [row[1] for row in cursor.fetchall()]
-                if 'rrule' not in columns:
-                    cursor.execute("ALTER TABLE events ADD COLUMN rrule TEXT")
-                    conn.commit()
-        except sqlite3.Error as e:
-            print(f"DB 마이그레이션 중 오류 발생: {e}")
-
-    def _init_db_table(self):
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS events (
-                        id TEXT PRIMARY KEY,
-                        start_date TEXT NOT NULL,
-                        end_date TEXT NOT NULL,
-                        rrule TEXT,
-                        event_json TEXT NOT NULL
-                    )
-                """)
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS event_exceptions (
-                        original_event_id TEXT NOT NULL,
-                        exception_date TEXT NOT NULL,
-                        PRIMARY KEY (original_event_id, exception_date)
-                    )
-                """)
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_date ON events (start_date)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_end_date ON events (end_date)")
-                conn.commit()
-        except sqlite3.Error as e:
-            print(f"로컬 DB 테이블 초기화 중 오류 발생: {e}")
+        # Return a context manager for database operations
+        return self.db_manager.get_local_connection()
 
     def get_events(self, start_date, end_date, data_manager=None):
         final_events = []
@@ -73,7 +38,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
                     exceptions[org_id].add(ex_date_str)
 
                 cursor.execute("""
-                    SELECT event_json, rrule FROM events
+                    SELECT event_json, rrule FROM local_events
                     WHERE (rrule IS NULL AND start_date <= ? AND end_date >= ?) OR rrule IS NOT NULL
                 """, (end_date.isoformat(), start_date.isoformat()))
 
@@ -89,9 +54,13 @@ class LocalCalendarProvider(BaseCalendarProvider):
                             aware_end = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00'))
                             duration = aware_end - aware_start
                             
+                            # RRULE 파싱을 위해 naive datetime 사용 (시간대 문제 해결)
                             dtstart_for_rule = aware_start.replace(tzinfo=None)
                             
-                            rule = rrulestr(f"RRULE:{rrule_str}", dtstart=dtstart_for_rule)
+                            # RRULE 문자열에서 UNTIL 값을 naive로 변환
+                            modified_rrule = self._convert_rrule_until_to_naive(rrule_str, aware_start.tzinfo)
+                            
+                            rule = rrulestr(f"RRULE:{modified_rrule}", dtstart=dtstart_for_rule)
                             view_start_dt = datetime.datetime.combine(start_date, datetime.time.min)
                             view_end_dt = datetime.datetime.combine(end_date, datetime.time.max)
 
@@ -144,7 +113,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
             body['calendarId'] = LOCAL_CALENDAR_ID
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT OR REPLACE INTO events (id, start_date, end_date, rrule, event_json) VALUES (?, ?, ?, ?, ?)",
+                cursor.execute("INSERT OR REPLACE INTO local_events (id, start_date, end_date, rrule, event_json) VALUES (?, ?, ?, ?, ?)",
                                (event_id, start_date, end_date, rrule_str, json.dumps(body)))
                 conn.commit()
             return body
@@ -175,9 +144,9 @@ class LocalCalendarProvider(BaseCalendarProvider):
                 cursor = conn.cursor()
                 if deletion_mode == 'all':
                     print(f"DEBUG: Deleting all instances of event {original_id}")
-                    cursor.execute("DELETE FROM events WHERE id = ?", (original_id,))
+                    cursor.execute("DELETE FROM local_events WHERE id = ?", (original_id,))
                     deleted_count = cursor.rowcount
-                    print(f"DEBUG: Deleted {deleted_count} events from events table")
+                    print(f"DEBUG: Deleted {deleted_count} events from local_events table")
                     cursor.execute("DELETE FROM event_exceptions WHERE original_event_id = ?", (original_id,))
                     exceptions_deleted = cursor.rowcount
                     print(f"DEBUG: Deleted {exceptions_deleted} exceptions")
@@ -187,7 +156,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
                     cursor.execute("INSERT OR IGNORE INTO event_exceptions (original_event_id, exception_date) VALUES (?, ?)",
                                    (original_id, aware_start.isoformat()))
                 elif deletion_mode == 'future':
-                    cursor.execute("SELECT rrule FROM events WHERE id = ?", (original_id,))
+                    cursor.execute("SELECT rrule FROM local_events WHERE id = ?", (original_id,))
                     result = cursor.fetchone()
                     if not result: return False
                     rrule_str = result[0]
@@ -199,7 +168,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
                     parts = [p for p in rrule_str.split(';') if not p.startswith('UNTIL=') and not p.startswith('COUNT=')]
                     parts.append(f'UNTIL={until_str}')
                     new_rrule = ';'.join(parts)
-                    cursor.execute("UPDATE events SET rrule = ? WHERE id = ?", (new_rrule, original_id))
+                    cursor.execute("UPDATE local_events SET rrule = ? WHERE id = ?", (new_rrule, original_id))
                 conn.commit()
                 print(f"DEBUG: Successfully committed local event deletion")
             return True
@@ -227,7 +196,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT event_json FROM events WHERE event_json LIKE ? OR event_json LIKE ?",
+                cursor.execute("SELECT event_json FROM local_events WHERE event_json LIKE ? OR event_json LIKE ?",
                                (f'%summary":"%{search_term}%', f'%description":"%{search_term}%'))
                 for row in cursor.fetchall():
                     event = json.loads(row[0])
@@ -241,3 +210,34 @@ class LocalCalendarProvider(BaseCalendarProvider):
             if data_manager: data_manager.report_error(error_message)
             else: print(error_message)
             return []
+    
+    def _convert_rrule_until_to_naive(self, rrule_str, original_tz):
+        """RRULE 문자열의 UNTIL 값을 naive datetime으로 변환하여 시간대 충돌 방지"""
+        if 'UNTIL=' not in rrule_str:
+            return rrule_str
+        
+        try:
+            parts = rrule_str.split(';')
+            new_parts = []
+            
+            for part in parts:
+                if part.startswith('UNTIL='):
+                    until_str = part.split('=')[1]
+                    
+                    # UTC 시간을 파싱 (예: 20251206T235959Z)
+                    if until_str.endswith('Z'):
+                        # UTC 시간을 naive datetime으로 변환
+                        naive_until_str = until_str[:-1]  # 'Z' 제거
+                        new_parts.append(f'UNTIL={naive_until_str}')
+                    else:
+                        # 이미 naive 형식이면 그대로 유지
+                        new_parts.append(part)
+                else:
+                    new_parts.append(part)
+            
+            return ';'.join(new_parts)
+            
+        except Exception as e:
+            # 변환 실패 시 원본 반환 (다른 오류 방지)
+            print(f"RRULE UNTIL 변환 실패: {e}")
+            return rrule_str

@@ -12,6 +12,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
 from custom_dialogs import BaseDialog
 from event_detail_texts import get_text, get_weekday_text
+from rrule_parser import RRuleParser
 
 class SimpleEventDetailDialog(BaseDialog):
     """간단하고 확실한 이벤트 상세보기 다이얼로그"""
@@ -132,11 +133,13 @@ class SimpleEventDetailDialog(BaseDialog):
         # 정보 컨테이너들 - 초기에는 모두 숨김 (텍스트는 테마 파일에서 가져옴)
         self.date_container = self._create_info_section(get_text("date_label"), "", single_line=True)
         self.time_container = self._create_info_section(get_text("time_label"), "", single_line=True)
+        self.recurrence_container = self._create_info_section(get_text("recurrence_label"), "", single_line=True)
         self.description_container = self._create_info_section(get_text("description_label"), "", single_line=False, max_lines=3)
         self.calendar_container = self._create_info_section(get_text("calendar_label"), "", single_line=True)
         
         info_layout.addWidget(self.date_container)
         info_layout.addWidget(self.time_container)
+        info_layout.addWidget(self.recurrence_container)
         info_layout.addWidget(self.description_container)
         info_layout.addWidget(self.calendar_container)
         
@@ -276,6 +279,9 @@ class SimpleEventDetailDialog(BaseDialog):
             
             # 시간 정보 로드  
             self._load_time_info()
+            
+            # 반복 규칙 로드
+            self._load_recurrence_info()
             
             # 설명 로드
             self._load_description()
@@ -431,22 +437,136 @@ class SimpleEventDetailDialog(BaseDialog):
             print(f"[ERROR] 시간 문자열 파싱 실패: {e}")
             return get_text("all_day")
     
+    def _load_recurrence_info(self):
+        """반복 규칙 정보 로드"""
+        try:
+            recurrence_rule = None
+            recurrence_text = "반복 안 함"  # 기본값
+            
+            print("[DEBUG] ========== 반복 규칙 정보 로드 시작 ==========")
+            print(f"[DEBUG] Event data keys: {list(self.event_data.keys())}")
+            
+            # 다양한 위치에서 반복 규칙 찾기
+            if 'body' in self.event_data:
+                body = self.event_data['body']
+                print(f"[DEBUG] Body keys: {list(body.keys())}")
+                # recurrence 배열에서 RRULE 찾기 (Google Calendar 형식)
+                if 'recurrence' in body and body['recurrence']:
+                    recurrence_rule = body['recurrence'][0]  # 첫 번째 규칙 사용
+                    print(f"[DEBUG] ✅ body.recurrence에서 규칙 발견: {recurrence_rule}")
+                else:
+                    print("[DEBUG] ❌ body.recurrence 없음 또는 비어있음")
+            else:
+                print("[DEBUG] ❌ 'body' 키가 없음")
+            
+            # 직접 recurrence 필드 확인
+            if not recurrence_rule and 'recurrence' in self.event_data and self.event_data['recurrence']:
+                recurrence_rule = self.event_data['recurrence'][0]
+                print(f"[DEBUG] ✅ recurrence 필드에서 규칙 발견: {recurrence_rule}")
+            
+            # rrule 필드 확인 (로컬 캘린더 등)
+            if not recurrence_rule and 'rrule' in self.event_data and self.event_data['rrule']:
+                recurrence_rule = f"RRULE:{self.event_data['rrule']}"
+                print(f"[DEBUG] ✅ rrule 필드에서 규칙 발견: {recurrence_rule}")
+            
+            # originalId가 있으면 반복 일정의 인스턴스일 가능성
+            if not recurrence_rule and 'originalId' in self.event_data:
+                print("[DEBUG] ✅ originalId 발견 - 반복 일정의 인스턴스")
+                recurrence_text = "반복 일정의 인스턴스"
+            
+            # 반복 규칙이 있으면 파싱해서 사용자 친화적 텍스트 생성
+            if recurrence_rule:
+                try:
+                    parser = RRuleParser()
+                    
+                    # 시작 날짜 정보 가져오기
+                    start_datetime = None
+                    if 'body' in self.event_data and 'start' in self.event_data['body']:
+                        start_info = self.event_data['body']['start']
+                    elif 'start' in self.event_data:
+                        start_info = self.event_data['start']
+                    else:
+                        start_info = None
+                    
+                    if start_info:
+                        start_str = start_info.get('dateTime', start_info.get('date'))
+                        if start_str:
+                            try:
+                                start_datetime = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                            except:
+                                start_datetime = datetime.datetime.now()
+                    
+                    if not start_datetime:
+                        start_datetime = datetime.datetime.now()
+                    
+                    # RRULE을 사용자 친화적 텍스트로 변환
+                    recurrence_text = parser.rrule_to_text(recurrence_rule, start_datetime)
+                    print(f"[DEBUG] ✅ 반복 규칙 텍스트 생성: {recurrence_text}")
+                    
+                except Exception as e:
+                    print(f"[DEBUG] ❌ 반복 규칙 파싱 실패: {e}")
+                    recurrence_text = "반복 일정"
+            
+            print(f"[DEBUG] 최종 recurrence_text: '{recurrence_text}'")
+            
+            # 반복 정보가 실제로 있는 경우에만 표시 ("반복 안 함"은 표시하지 않음)
+            if recurrence_text and recurrence_text.strip() and recurrence_text != "반복 안 함":
+                self.recurrence_container.content_label.setText(recurrence_text)
+                self.recurrence_container.show()
+                print(f"[DEBUG] ✅ 반복 규칙 표시 완료: {recurrence_text}")
+            else:
+                print(f"[DEBUG] ❌ 일반 일정이므로 반복 섹션 숨김")
+            
+            print(f"[DEBUG] ========== 반복 규칙 정보 로드 완료 ==========")
+            
+        except Exception as e:
+            print(f"[ERROR] 반복 규칙 정보 로드 실패: {e}")
+            # 오류 시에는 반복 섹션을 숨김 (일반 일정으로 처리)
+            try:
+                if hasattr(self, 'recurrence_container'):
+                    print(f"[DEBUG] ❌ 예외 발생으로 반복 섹션 숨김")
+            except Exception as e2:
+                print(f"[ERROR] 예외 처리 중에도 오류: {e2}")
+            import traceback
+            traceback.print_exc()
+    
     def _load_description(self):
         """설명 로드"""
         try:
             description = None
             
+            print("[DEBUG] ========== 설명 정보 로드 시작 ==========")
+            print(f"[DEBUG] Event data keys: {list(self.event_data.keys())}")
+            
             # 다양한 속성에서 설명 찾기
             if 'body' in self.event_data:
                 body = self.event_data['body']
-                description = body.get('body') or body.get('bodyPreview') or body.get('content')
+                print(f"[DEBUG] Body keys: {list(body.keys())}")
+                
+                # 다양한 필드 이름 확인
+                desc_fields = ['body', 'bodyPreview', 'content', 'description']
+                for field in desc_fields:
+                    if field in body and body[field]:
+                        description = body[field]
+                        print(f"[DEBUG] ✅ body.{field}에서 설명 발견: {description[:100]}...")
+                        break
+                    else:
+                        print(f"[DEBUG] ❌ body.{field} 없음 또는 비어있음")
+            else:
+                print("[DEBUG] ❌ 'body' 키가 없음")
             
             # 직접 속성도 확인
             if not description:
-                description = (self.event_data.get('body') or 
-                             self.event_data.get('bodyPreview') or
-                             self.event_data.get('content') or
-                             self.event_data.get('description'))
+                desc_fields = ['body', 'bodyPreview', 'content', 'description']
+                for field in desc_fields:
+                    if field in self.event_data and self.event_data[field]:
+                        description = self.event_data[field]
+                        print(f"[DEBUG] ✅ 직접 {field}에서 설명 발견: {description[:100]}...")
+                        break
+                    else:
+                        print(f"[DEBUG] ❌ 직접 {field} 없음 또는 비어있음")
+            
+            print(f"[DEBUG] 최종 description: {description[:100] if description else 'None'}...")
             
             if description and description.strip():
                 # 하이퍼링크가 포함된 HTML로 변환
@@ -455,16 +575,26 @@ class SimpleEventDetailDialog(BaseDialog):
                 # QTextBrowser나 QTextEdit인 경우 setHtml 사용
                 if isinstance(self.description_container.content_label, (QTextEdit, QTextBrowser)):
                     self.description_container.content_label.setHtml(html_description)
+                    print(f"[DEBUG] ✅ QTextBrowser에 HTML 설정")
                 else:
                     self.description_container.content_label.setText(description.strip())
+                    print(f"[DEBUG] ✅ QLabel에 텍스트 설정")
                     
                 self.description_container.show()
-                print(f"[DEBUG] 설명 설정: {description[:50]}...")
+                print(f"[DEBUG] ✅ 설명 컨테이너 표시 완료")
             else:
-                print("[DEBUG] 설명 없음 - 숨김")
+                print("[DEBUG] ❌ 설명이 없거나 빈 문자열 - 숨김")
+            
+            print(f"[DEBUG] ========== 설명 정보 로드 완료 ==========")
             
         except Exception as e:
             print(f"[ERROR] 설명 로드 실패: {e}")
+            # 오류 시에도 기본값 시도
+            try:
+                if hasattr(self, 'description_container'):
+                    print(f"[DEBUG] 예외 처리 - 설명 없음으로 숨김")
+            except Exception as e2:
+                print(f"[ERROR] 예외 처리 중에도 오류: {e2}")
             import traceback
             traceback.print_exc()
     
@@ -539,6 +669,13 @@ class SimpleEventDetailDialog(BaseDialog):
                     calendar_found = True
                     print(f"[DEBUG] ✅ organizer 정보 사용: {calendar_name}")
             
+            # 캘린더 정보 표시 로직
+            print(f"[DEBUG] ========== 캘린더 표시 로직 시작 ==========")
+            print(f"[DEBUG] calendar_name: '{calendar_name}', calendar_found: {calendar_found}")
+            
+            final_display_text = None
+            final_color = '#4285F4'  # 기본 색상
+            
             if calendar_name and calendar_name.strip():
                 # 캘린더 이름과 함께 시각적 구분을 위한 색상 바 추가
                 display_text = calendar_name.strip()
@@ -557,34 +694,35 @@ class SimpleEventDetailDialog(BaseDialog):
                                     display_text += get_text("writer_calendar")
                             break
                 
-                self.calendar_container.content_label.setText(display_text)
-                
-                # 캘린더 색상이 있으면 색상 바를 추가하여 시각적 구분
-                if calendar_color:
-                    content_label = self.calendar_container.content_label
-                    content_label.setStyleSheet(f"""
-                        QLabel#event_detail_content {{
-                            border-left: 4px solid {calendar_color};
-                        }}
-                    """)
-                
-                self.calendar_container.show()
-                print(f"[DEBUG] 캘린더 설정: {display_text}, 색상: {calendar_color}")
+                final_display_text = display_text
+                final_color = calendar_color or '#4285F4'
+                print(f"[DEBUG] ✅ 캘린더 이름 있음: '{final_display_text}'")
             else:
-                # 최후의 폴백
-                print(f"[DEBUG] ❌ 모든 방법으로 캘린더 이름을 찾지 못함")
-                calendar_name = get_text("unknown_calendar")
-                calendar_color = self.event_data.get('color', '#4285F4')
+                # 최후의 폴백 - 항상 뭔가는 표시
+                print(f"[DEBUG] ❌ 캘린더 이름 없음 - 폴백 사용")
+                final_display_text = get_text("unknown_calendar")
+                final_color = self.event_data.get('color', '#4285F4')
+            
+            # 항상 캘린더 정보 표시 (폴백 포함)
+            if final_display_text:
+                self.calendar_container.content_label.setText(final_display_text)
                 
-                self.calendar_container.content_label.setText(calendar_name)
+                # 캘린더 색상 바 추가
                 content_label = self.calendar_container.content_label
                 content_label.setStyleSheet(f"""
                     QLabel#event_detail_content {{
-                        border-left: 4px solid {calendar_color};
+                        border-left: 4px solid {final_color};
                     }}
                 """)
+                
                 self.calendar_container.show()
-                print(f"[DEBUG] 최종 폴백 표시: {calendar_name} (색상: {calendar_color})")
+                print(f"[DEBUG] ✅ 캘린더 표시 완료: '{final_display_text}', 색상: {final_color}")
+            else:
+                print(f"[ERROR] ❌ final_display_text가 비어있음 - 강제로 기본값 표시")
+                self.calendar_container.content_label.setText("캘린더")
+                self.calendar_container.show()
+            
+            print(f"[DEBUG] ========== 캘린더 표시 로직 완료 ==========")
             
         except Exception as e:
             print(f"[ERROR] 캘린더 정보 로드 실패: {e}")

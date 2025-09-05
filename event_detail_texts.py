@@ -12,6 +12,7 @@ EVENT_DETAIL_TEXTS = {
     # 섹션 라벨
     "date_label": "날짜",
     "time_label": "시간",
+    "recurrence_label": "반복",
     "description_label": "설명",
     "calendar_label": "캘린더",
     

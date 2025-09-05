@@ -460,7 +460,8 @@ class DataManager(QObject):
         self.calendar_fetcher = None
 
         if load_cache:
-            self._init_cache_db()
+            # 새로운 분리된 데이터베이스 시스템 초기화
+            self._init_separated_db_system()
             self._load_cache_from_db()
             self._init_completed_events_db()
             self._load_completed_event_ids()
@@ -558,14 +559,23 @@ class DataManager(QObject):
             logger.error(msg, exc_info=True)
             self.report_error(f"{msg}\n{e}")
 
-    def _init_cache_db(self):
+    def _init_separated_db_system(self):
+        """새로운 분리된 데이터베이스 시스템 초기화 및 마이그레이션"""
         try:
-            with sqlite3.connect(DB_FILE) as conn:
-                cursor = conn.cursor()
-                cursor.execute("CREATE TABLE IF NOT EXISTS event_cache (year INTEGER NOT NULL, month INTEGER NOT NULL, events_json TEXT NOT NULL, PRIMARY KEY (year, month))")
-                conn.commit()
-        except sqlite3.Error as e:
-            msg = "캐시 데이터베이스를 초기화하는 중 오류가 발생했습니다."
+            from db_manager import get_db_manager
+            db_manager = get_db_manager()
+            
+            # 데이터베이스 초기화 및 마이그레이션 수행
+            # db_manager의 __init__에서 자동으로 _init_databases()와 migrate_existing_data()가 호출됨
+            logger.info("분리된 데이터베이스 시스템이 초기화되었습니다.")
+            
+            # 초기화 후 즉시 캐시 정리 수행
+            deleted_count = db_manager.cleanup_old_cache()
+            if deleted_count > 0:
+                logger.info(f"초기화 시 캐시 정리: {deleted_count}개 엔트리 삭제됨")
+                
+        except Exception as e:
+            msg = "분리된 데이터베이스 시스템 초기화 중 오류가 발생했습니다."
             logger.error(msg, exc_info=True)
             self.report_error(f"{msg}\n{e}")
 
@@ -648,34 +658,72 @@ class DataManager(QObject):
 
     def _load_cache_from_db(self):
         try:
-            with sqlite3.connect(DB_FILE) as conn:
+            # 새로운 분리된 캐시 데이터베이스 사용
+            from db_manager import get_db_manager
+            db_manager = get_db_manager()
+            
+            with db_manager.get_cache_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT year, month, events_json FROM event_cache")
                 for year, month, events_json in cursor.fetchall():
                     self.event_cache[(year, month)] = json.loads(events_json)
-            logger.info(f"DB에서 {len(self.event_cache)}개의 월간 캐시를 로드했습니다.")
+            logger.info(f"캐시 DB에서 {len(self.event_cache)}개의 월간 캐시를 로드했습니다.")
         except sqlite3.Error as e:
-            msg = "데이터베이스에서 캐시를 불러오는 중 오류가 발생했습니다."
+            msg = "캐시 데이터베이스에서 캐시를 불러오는 중 오류가 발생했습니다."
             logger.error(msg, exc_info=True)
             self.report_error(f"{msg}\n{e}")
 
     def _save_month_to_cache_db(self, year, month, events):
         try:
-            with sqlite3.connect(DB_FILE) as conn:
+            # 새로운 분리된 캐시 데이터베이스 사용
+            from db_manager import get_db_manager
+            db_manager = get_db_manager()
+            
+            with db_manager.get_cache_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT OR REPLACE INTO event_cache (year, month, events_json) VALUES (?, ?, ?)", (year, month, json.dumps(events)))
+                cursor.execute("INSERT OR REPLACE INTO event_cache (year, month, events_json, cached_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)", (year, month, json.dumps(events)))
                 conn.commit()
+            
+            # 캐시 저장 후 자동 정리 수행 (백그라운드)
+            self._schedule_cache_cleanup()
+            
         except sqlite3.Error as e:
-            logger.error("DB에 월간 캐시 저장 중 오류 발생", exc_info=True)
+            logger.error("캐시 DB에 월간 캐시 저장 중 오류 발생", exc_info=True)
 
     def _remove_month_from_cache_db(self, year, month):
         try:
-            with sqlite3.connect(DB_FILE) as conn:
+            # 새로운 분리된 캐시 데이터베이스 사용
+            from db_manager import get_db_manager
+            db_manager = get_db_manager()
+            
+            with db_manager.get_cache_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM event_cache WHERE year = ? AND month = ?", (year, month))
                 conn.commit()
         except sqlite3.Error as e:
-            logger.error("DB에서 월간 캐시 삭제 중 오류 발생", exc_info=True)
+            logger.error("캐시 DB에서 월간 캐시 삭제 중 오류 발생", exc_info=True)
+    
+    def _schedule_cache_cleanup(self):
+        """캐시 정리를 백그라운드에서 수행 (논블로킹)"""
+        try:
+            import threading
+            
+            def cleanup_task():
+                try:
+                    from db_manager import get_db_manager
+                    db_manager = get_db_manager()
+                    deleted_count = db_manager.cleanup_old_cache()
+                    if deleted_count > 0:
+                        logger.info(f"자동 캐시 정리: {deleted_count}개 엔트리 삭제됨")
+                except Exception as e:
+                    logger.error(f"백그라운드 캐시 정리 실패: {e}")
+            
+            # 백그라운드 스레드에서 실행 (UI 블로킹 방지)
+            cleanup_thread = threading.Thread(target=cleanup_task, daemon=True, name="CacheCleanup")
+            cleanup_thread.start()
+            
+        except Exception as e:
+            logger.error(f"캐시 정리 스케줄링 실패: {e}")
 
     def _fetch_events_from_providers(self, year, month):
         all_events = []

@@ -21,6 +21,7 @@ def get_data_dir():
 # --- File Paths ---
 _DATA_DIR = get_data_dir()
 DB_FILE = os.path.join(_DATA_DIR, "calendar.db")
+CACHE_DB_FILE = os.path.join(_DATA_DIR, "calendar_cache.db")
 SETTINGS_FILE = os.path.join(_DATA_DIR, "settings.json")
 TOKEN_FILE = os.path.join(_DATA_DIR, "token.json")
 CREDENTIALS_FILE = os.path.join(_DATA_DIR, "credentials.json")
@@ -44,7 +45,7 @@ DEFAULT_LOCAL_CALENDAR_EMOJI = '💻'
 DEFAULT_EVENT_COLOR = '#555555'
 
 # --- Caching ---
-MAX_CACHE_SIZE = 7 # The number of months to keep in the cache (e.g., current month +/- 3 months)
+MAX_CACHE_SIZE = 13 # The number of months to keep in the cache (current month ±6 months = 13 months total)
 
 # --- Notifications ---
 DEFAULT_NOTIFICATIONS_ENABLED = True
