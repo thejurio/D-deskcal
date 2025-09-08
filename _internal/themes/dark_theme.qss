@@ -1,0 +1,553 @@
+QWidget { background-color:transparent;  color: #FFFFFF; border: none; font-family: "Malgun Gothic"; font-size: 10pt;
+}
+    QWidget#main_background {
+        background-color: rgb(30, 30, 30);
+        border-radius: 10px;
+}
+    QWidget#dialog_background { background-color: #3C3C3C; border-radius: 10px; }
+    QDialog { background-color: transparent;
+}
+    QLabel { background-color: transparent; }
+    QPushButton { background-color: #555555; border: 1px solid #777777;
+padding: 5px 10px; border-radius: 5px; min-height: 20px; }
+    QPushButton:hover { background-color: #6E6E6E; border-color: #888888;
+}
+    QPushButton:pressed { background-color: #4D4D4D; border-color: #666666; }
+    QPushButton:checked { background-color: #0078D7; border-color: #005A9E;
+}
+    QPushButton#today_button { background-color: #0078D7; border-color: #005A9E; }
+    QPushButton#today_button:hover { background-color: #0082F0;
+}
+    QPushButton#today_button:pressed { background-color: #006AC5; }
+    QLineEdit, QTextEdit { background-color: #424242;
+border: 1px solid #5A5A5A; border-radius: 4px; padding: 5px; }
+    QLineEdit:focus, QTextEdit:focus { border-color: #0078D7;
+}
+    QComboBox { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px 5px;
+}
+    QComboBox::drop-down { border: none; }
+    QComboBox::down-arrow { image: url(icons/combo_arrow_dark.svg); width: 12px; height: 12px;
+}
+    QComboBox QAbstractItemView { background-color: #424242; border: 1px solid #5A5A5A; selection-background-color: #0078D7;
+}
+
+/* ================== 스크롤바 스타일 (최종 수정) ================== */
+
+QScrollBar {
+    background: transparent;
+    border: none;
+}
+
+QScrollBar:vertical {
+    background: none !important;
+    background-color: transparent !important;
+    border: 0px !important;
+    width: 12px;
+    margin: 0px 0px 0px 0px;
+}
+
+QScrollBar:horizontal {
+    background: none !important;
+    background-color: transparent !important;
+    border: 0px !important;
+    height: 12px;
+    margin: 0px 0px 0px 0px;
+}
+
+/* 스크롤 막대가 움직이는 배경 트랙 */
+QScrollBar::groove:vertical, QScrollBar::groove:horizontal {
+    background: none;
+    border: none;
+}
+
+/* 스크롤 막대 위/아래(또는 좌/우)의 빈 공간 */
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none;
+    border: none;
+}
+
+/* 움직이는 스크롤 막대(핸들) */
+QScrollBar::handle:vertical {
+    background: #5A5A5A;
+    min-height: 20px;
+    border-radius: 6px;
+    margin: 0px 2px 0px 2px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #6E6E6E;
+}
+
+QScrollBar::handle:horizontal {
+    background: #5A5A5A;
+    min-width: 20px;
+    border-radius: 6px;
+    margin: 2px 0px 2px 0px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #6E6E6E;
+}
+
+/* 화살표 및 라인 영역 제거 */
+QScrollBar::add-line, QScrollBar::sub-line {
+    height: 0px;
+    width: 0px;
+    background: none;
+    border: none;
+    subcontrol-origin: margin;
+}
+
+QScrollBar::up-arrow, QScrollBar::down-arrow,
+QScrollBar::left-arrow, QScrollBar::right-arrow {
+    background: none;
+    border: none;
+    width: 0px;
+    height: 0px;
+}
+
+QScrollBar::corner {
+    background: transparent;
+    border: none;
+}
+
+/* ============================================================= */
+
+    QMenu { background-color: #424242; border: 1px solid #5A5A5A; padding: 5px;
+}
+    QMenu::item { padding: 5px 20px; }
+    QMenu::item:selected { background-color: #0078D7;
+}
+    QMenu::separator { height: 1px; background: #5A5A5A; margin: 5px 0;
+}
+    QWidget#popover_background { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 8px;
+}
+    QCheckBox::indicator {
+        width: 16px;
+        height: 16px;
+}
+    QCheckBox::indicator:unchecked {
+        image: url(icons/checkbox_unchecked.svg);
+}
+    QCheckBox::indicator:checked {
+        image: url(icons/checkbox_checked.svg);
+}
+    QDateTimeEdit { background-color: #424242; border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px; }
+QTimeEdit { background-color: #424242;
+border: 1px solid #5A5A5A; border-radius: 4px; padding: 3px; }
+QTimeEdit::up-button {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+border-left: 1px solid #5A5A5A;
+    border-top-right-radius: 3px;
+}
+QTimeEdit::down-button {
+    subcontrol-origin: padding;
+    subcontrol-position: bottom right;
+    width: 20px;
+border-left: 1px solid #5A5A5A;
+    border-bottom-right-radius: 3px;
+}
+QTimeEdit::up-arrow {
+    image: url(icons/up_arrow_dark.svg);
+    width: 10px;
+    height: 10px;
+}
+QTimeEdit::down-arrow {
+    image: url(icons/down_arrow_dark.svg);
+    width: 10px;
+    height: 10px;
+}
+QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {
+    background-color: #6E6E6E;
+}
+QTimeEdit::up-button:pressed, QTimeEdit::down-button:pressed {
+    background-color: #4D4D4D;
+}
+QDateTimeEdit::drop-down { border: none;
+}
+    QCalendarWidget QWidget { alternate-background-color: #424242; }
+    QMessageBox { background-color: #3C3C3C;
+}
+    QMessageBox QLabel { color: #FFFFFF; }
+    DayCellWidget { border: none;
+}
+    QToolTip { background-color: #424242; color: #FFFFFF; border: none; border-radius: 5px; padding: 5px; opacity: 230;
+}
+/* QSpinBox 스타일 추가 */
+QSpinBox {
+    background-color: #424242;
+    border: 1px solid #5A5A5A;
+    border-radius: 4px;
+    padding: 3px;
+padding-right: 18px; /* 화살표 공간 확보 */
+}
+QSpinBox:focus {
+    border-color: #0078D7;
+}
+QSpinBox::up-button {
+    subcontrol-origin: border;
+subcontrol-position: top right;
+    width: 16px;
+    height: 14px;
+    border-left: 1px solid #5A5A5A;
+    border-top-right-radius: 3px;
+}
+QSpinBox::down-button {
+    subcontrol-origin: border;
+subcontrol-position: bottom right;
+    width: 16px;
+    height: 14px;
+    border-left: 1px solid #5A5A5A;
+    border-bottom-right-radius: 3px;
+}
+QSpinBox::up-arrow {
+    image: url(icons/up_arrow_dark.svg);
+width: 10px;
+    height: 10px;
+}
+QSpinBox::down-arrow {
+    image: url(icons/down_arrow_dark.svg);
+    width: 10px;
+    height: 10px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #6E6E6E;
+}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
+    background-color: #4D4D4D;
+}
+/* Calendar Grid Lines */
+#calendar_grid DayCellWidget {
+    border-right: 1px solid #404040;
+    border-bottom: 1px solid #404040;
+}
+/* Today's date highlighting - 이제 paintEvent에서 처리 */
+#calendar_grid DayCellWidget[isToday="true"] {
+    /* background-color는 paintEvent에서 처리되므로 제거 */
+    border-radius: 5px;
+    border: none;
+}
+#calendar_grid {
+    border-left: 1px solid #404040;
+    border-top: 1px solid #404040;
+}
+/* Calendar View Specific Styles */
+MonthViewWidget, WeekViewWidget {
+    qproperty-weekdayColor: #D0D0D0;
+    qproperty-saturdayColor: #8080FF;
+    qproperty-sundayColor: #FF8080;
+    qproperty-otherMonthColor: #777777;
+qproperty-todayForegroundColor: #FFFFFF;
+}
+/* ========================================= */
+/* Event Detail Dialog Styles (Dark Theme)  */
+/* ========================================= */
+/* Event Detail Dialog Container */
+QDialog#event_detail_dialog {
+    background-color: transparent;
+}
+QWidget#event_detail_background {
+    background-color: #3C3C3C;
+    border-radius: 15px;
+    border: 1px solid #555555;
+}
+/* Event Detail Title */
+QLabel#event_detail_title {
+    font-size: 15pt;
+    font-weight: bold;
+    color: #FFFFFF;
+    background-color: transparent;
+    padding: 10px 0px;
+border-bottom: 2px solid #555555;
+    margin-bottom: 15px;
+}
+/* Event Detail Section Labels */
+QLabel#event_detail_label {
+    font-size: 11pt;
+    font-weight: bold;
+color: #B0B0B0;
+    background-color: transparent;
+    margin-bottom: 5px;
+}
+/* Event Detail Content */
+QLabel#event_detail_content {
+    font-size: 10pt;
+    font-weight: normal;
+color: #FFFFFF;
+    background-color: #424242;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #5A5A5A;
+    margin-bottom: 5px;
+    min-height: 20px;
+}
+/* Event Detail Content for QTextEdit/QTextBrowser (description) */
+QTextEdit#event_detail_content, QTextBrowser#event_detail_content {
+    font-size: 10pt;
+    font-weight: normal;
+    color: #FFFFFF;
+background-color: #424242;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #5A5A5A;
+    margin-bottom: 5px;
+    selection-background-color: #0078D7;
+}
+/* Hyperlink colors for dark theme */
+QTextBrowser#event_detail_content a {
+    color: #FF6B6B;
+/* Bright red for dark theme - more visible */
+    text-decoration: underline;
+}
+QTextBrowser#event_detail_content a:hover {
+    color: #FF8A80;
+}
+QTextBrowser#event_detail_content a:visited {
+    color: #FF5722;
+}
+/* Event Detail Content Context Menu */
+QTextEdit#event_detail_content QMenu,
+QTextBrowser#event_detail_content QMenu {
+    background-color: #424242;
+border: 1px solid #5A5A5A;
+    padding: 5px;
+    color: #FFFFFF;
+}
+QTextEdit#event_detail_content QMenu::item,
+QTextBrowser#event_detail_content QMenu::item {
+    padding: 5px 20px;
+    background-color: transparent;
+}
+QTextEdit#event_detail_content QMenu::item:selected,
+QTextBrowser#event_detail_content QMenu::item:selected {
+    background-color: #0078D7;
+}
+/* Event Detail ScrollArea */
+QScrollArea#event_detail_scroll {
+    background-color: transparent;
+border: none;
+}
+QScrollArea#event_detail_scroll QWidget {
+    background-color: transparent;
+}
+/* Event Detail Buttons - 모든 버튼을 동일한 회색 스타일로 통일 */
+QPushButton#event_detail_edit_button,
+QPushButton#event_detail_delete_button,
+QPushButton#event_detail_close_button {
+    background-color: #555555;
+color: #FFFFFF;
+    border: 1px solid #777777;
+    border-radius: 6px;
+    padding: 4px 16px;
+    font-size: 10pt;
+    font-weight: bold;
+    min-height: 18px;
+    max-height: 22px;
+}
+QPushButton#event_detail_edit_button:hover,
+QPushButton#event_detail_delete_button:hover,
+QPushButton#event_detail_close_button:hover {
+    background-color: #6E6E6E;
+    border-color: #888888;
+}
+QPushButton#event_detail_edit_button:pressed,
+QPushButton#event_detail_delete_button:pressed,
+QPushButton#event_detail_close_button:pressed {
+    background-color: #4D4D4D;
+border-color: #666666;
+}
+/* ========================================= */
+/* Update Dialog Styles (Dark Theme)        */
+/* ========================================= */
+/* Update Dialog Container */
+QDialog#update_dialog {
+    background-color: transparent;
+}
+QWidget#update_background {
+    background-color: #3C3C3C;
+    border-radius: 15px;
+    border: 1px solid #555555;
+}
+/* Update Dialog Title */
+QLabel#update_title {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #FFFFFF;
+    background-color: transparent;
+    padding: 10px 0px;
+border-bottom: 2px solid #555555;
+    margin-bottom: 15px;
+}
+/* Update Dialog Content */
+QLabel#update_content {
+    font-size: 11pt;
+    font-weight: normal;
+color: #FFFFFF;
+    background-color: transparent;
+    padding: 8px 0px;
+}
+QLabel#update_version {
+    font-size: 12pt;
+    font-weight: bold;
+    color: #0078D7;
+    background-color: transparent;
+}
+/* Update Progress Bar */
+QProgressBar#update_progress {
+    border: 1px solid #555555;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 11pt;
+font-weight: bold;
+    color: #FFFFFF;
+    background-color: #424242;
+    height: 25px;
+}
+QProgressBar#update_progress::chunk {
+    background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                      stop: 0 #0082F0, stop: 1 #0078D7);
+border-radius: 7px;
+    margin: 1px;
+}
+/* Update Dialog Buttons */
+QPushButton#update_button {
+    background-color: #0078D7;
+    color: #FFFFFF;
+border: 1px solid #005A9E;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 11pt;
+    font-weight: bold;
+    min-height: 35px;
+}
+QPushButton#update_button:hover {
+    background-color: #0082F0;
+    border-color: #006AC5;
+}
+QPushButton#update_button:pressed {
+    background-color: #006AC5;
+    border-color: #005A9E;
+}
+QPushButton#update_cancel_button {
+    background-color: #555555;
+    color: #FFFFFF;
+    border: 1px solid #777777;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 11pt;
+font-weight: bold;
+    min-height: 35px;
+}
+QPushButton#update_cancel_button:hover {
+    background-color: #6E6E6E;
+    border-color: #888888;
+}
+QPushButton#update_cancel_button:pressed {
+    background-color: #4D4D4D;
+border-color: #666666;
+}
+/* Update Details TextEdit */
+QTextEdit#update_details {
+    background-color: #424242;
+    color: #FFFFFF;
+    border: 1px solid #5A5A5A;
+border-radius: 8px;
+    padding: 10px;
+    font-size: 10pt;
+    selection-background-color: #0078D7;
+}
+/* Update Dialog ScrollArea */
+QScrollArea#update_scroll {
+    background-color: transparent;
+border: none;
+}
+QScrollArea#update_scroll QWidget {
+    background-color: transparent;
+}
+/* Update Dialog Specific Labels */
+QLabel#update_status {
+    font-size: 11pt;
+    font-weight: normal;
+    color: #D0D0D0;
+    background-color: transparent;
+padding: 5px 0px;
+}
+QLabel#update_progress_text {
+    font-size: 10pt;
+    font-weight: normal;
+    color: #B0B0B0;
+    background-color: transparent;
+    padding: 5px 0px;
+}
+/* Update Message Labels */
+QLabel#update_message {
+    font-size: 11pt;
+    font-weight: normal;
+    color: #FFFFFF;
+    background-color: transparent;
+    padding: 8px 0px;
+line-height: 1.4;
+}
+QLabel#update_error_message {
+    font-size: 11pt;
+    font-weight: normal;
+    color: #FF6B6B;
+    background-color: transparent;
+    padding: 8px 0px;
+    line-height: 1.4;
+}
+/* Update Dialog Size Adjustments */
+QDialog#update_dialog {
+    min-width: 350px;
+    min-height: 200px;
+}
+/* Update Dialog Layouts */
+QWidget#update_content_widget {
+    background-color: transparent;
+}
+/* Hover Effects for Update Buttons */
+QPushButton#update_button:focus {
+    background-color: #0082F0;
+    border-color: #006AC5;
+    outline: none;
+}
+QPushButton#update_cancel_button:focus {
+    background-color: #6E6E6E;
+    border-color: #888888;
+    outline: none;
+}
+/* ========================================= */
+/* Agenda View Styles (Dark Theme)          */
+/* ========================================= */
+/* Agenda Date Header */
+QLabel#agenda_date_header {
+    font-size: 14pt;
+font-weight: bold;
+    color: #FFFFFF;
+    background-color: transparent;
+    padding: 10px 5px;
+    margin-bottom: 5px;
+}
+/* Agenda Date Header - Today highlighting */
+QLabel#agenda_date_header[isToday="true"] {
+    color: #0078D7;
+    background-color: rgba(0, 120, 215, 51);
+border-radius: 5px;
+    padding: 10px 15px;
+}
+/* Agenda View Event Labels */
+QLabel#agenda_time_label {
+    font-size: 12pt;
+/* 기본 10pt에서 2pt 증가 */
+    font-weight: normal;
+    color: #B0B0B0;
+}
+QLabel#agenda_title_label {
+    font-size: 12pt;
+/* 기본 10pt에서 2pt 증가 */
+    font-weight: normal;
+    color: #FFFFFF;
+}

@@ -12,8 +12,14 @@ class BaseDialog(QDialog):
         self.settings = settings
         self.oldPos = None
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # 안전한 윈도우 플래그 설정
+        try:
+            self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        except Exception as e:
+            print(f"[DEBUG] BaseDialog 윈도우 플래그 설정 중 오류: {e}")
+            # 폴백: 기본 다이얼로그 설정
+            self.setWindowFlags(Qt.WindowType.Dialog)
         
         self.apply_opacity()
 

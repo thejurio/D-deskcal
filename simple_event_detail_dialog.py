@@ -22,11 +22,13 @@ class SimpleEventDetailDialog(BaseDialog):
     event_deleted = pyqtSignal(str)
     
     def __init__(self, event_data, data_manager, main_widget, parent=None):
-        # BaseDialog 초기화 (settings 전달)
-        settings = getattr(main_widget, 'settings', None) if main_widget else None
-        super().__init__(parent=parent, settings=settings)
-        
         print(f"[DEBUG] SimpleEventDetailDialog 초기화 시작")
+        
+        # 안전한 parent 설정 - None으로 초기화하여 Segfault 방지
+        settings = getattr(main_widget, 'settings', None) if main_widget else None
+        
+        # BaseDialog 초기화 시 parent를 None으로 설정하여 안전성 확보
+        super().__init__(parent=None, settings=settings)
         
         self.setWindowTitle(get_text("window_title"))
         self.setModal(True)
@@ -453,25 +455,25 @@ class SimpleEventDetailDialog(BaseDialog):
                 # recurrence 배열에서 RRULE 찾기 (Google Calendar 형식)
                 if 'recurrence' in body and body['recurrence']:
                     recurrence_rule = body['recurrence'][0]  # 첫 번째 규칙 사용
-                    print(f"[DEBUG] ✅ body.recurrence에서 규칙 발견: {recurrence_rule}")
+                    print(f"[DEBUG] OK body.recurrence에서 규칙 발견: {recurrence_rule}")
                 else:
-                    print("[DEBUG] ❌ body.recurrence 없음 또는 비어있음")
+                    print("[DEBUG] WARN body.recurrence 없음 또는 비어있음")
             else:
-                print("[DEBUG] ❌ 'body' 키가 없음")
+                print("[DEBUG] WARN 'body' 키가 없음")
             
             # 직접 recurrence 필드 확인
             if not recurrence_rule and 'recurrence' in self.event_data and self.event_data['recurrence']:
                 recurrence_rule = self.event_data['recurrence'][0]
-                print(f"[DEBUG] ✅ recurrence 필드에서 규칙 발견: {recurrence_rule}")
+                print(f"[DEBUG] OK recurrence 필드에서 규칙 발견: {recurrence_rule}")
             
             # rrule 필드 확인 (로컬 캘린더 등)
             if not recurrence_rule and 'rrule' in self.event_data and self.event_data['rrule']:
                 recurrence_rule = f"RRULE:{self.event_data['rrule']}"
-                print(f"[DEBUG] ✅ rrule 필드에서 규칙 발견: {recurrence_rule}")
+                print(f"[DEBUG] OK rrule 필드에서 규칙 발견: {recurrence_rule}")
             
             # originalId가 있으면 반복 일정의 인스턴스일 가능성
             if not recurrence_rule and 'originalId' in self.event_data:
-                print("[DEBUG] ✅ originalId 발견 - 반복 일정의 인스턴스")
+                print("[DEBUG] OK originalId 발견 - 반복 일정의 인스턴스")
                 recurrence_text = "반복 일정의 인스턴스"
             
             # 반복 규칙이 있으면 파싱해서 사용자 친화적 텍스트 생성
@@ -501,10 +503,10 @@ class SimpleEventDetailDialog(BaseDialog):
                     
                     # RRULE을 사용자 친화적 텍스트로 변환
                     recurrence_text = parser.rrule_to_text(recurrence_rule, start_datetime)
-                    print(f"[DEBUG] ✅ 반복 규칙 텍스트 생성: {recurrence_text}")
+                    print(f"[DEBUG] OK 반복 규칙 텍스트 생성: {recurrence_text}")
                     
                 except Exception as e:
-                    print(f"[DEBUG] ❌ 반복 규칙 파싱 실패: {e}")
+                    print(f"[DEBUG] WARN 반복 규칙 파싱 실패: {e}")
                     recurrence_text = "반복 일정"
             
             print(f"[DEBUG] 최종 recurrence_text: '{recurrence_text}'")
@@ -513,9 +515,9 @@ class SimpleEventDetailDialog(BaseDialog):
             if recurrence_text and recurrence_text.strip() and recurrence_text != "반복 안 함":
                 self.recurrence_container.content_label.setText(recurrence_text)
                 self.recurrence_container.show()
-                print(f"[DEBUG] ✅ 반복 규칙 표시 완료: {recurrence_text}")
+                print(f"[DEBUG] OK 반복 규칙 표시 완료: {recurrence_text}")
             else:
-                print(f"[DEBUG] ❌ 일반 일정이므로 반복 섹션 숨김")
+                print(f"[DEBUG] WARN 일반 일정이므로 반복 섹션 숨김")
             
             print(f"[DEBUG] ========== 반복 규칙 정보 로드 완료 ==========")
             
@@ -524,7 +526,7 @@ class SimpleEventDetailDialog(BaseDialog):
             # 오류 시에는 반복 섹션을 숨김 (일반 일정으로 처리)
             try:
                 if hasattr(self, 'recurrence_container'):
-                    print(f"[DEBUG] ❌ 예외 발생으로 반복 섹션 숨김")
+                    print(f"[DEBUG] WARN 예외 발생으로 반복 섹션 숨김")
             except Exception as e2:
                 print(f"[ERROR] 예외 처리 중에도 오류: {e2}")
             import traceback
@@ -548,12 +550,12 @@ class SimpleEventDetailDialog(BaseDialog):
                 for field in desc_fields:
                     if field in body and body[field]:
                         description = body[field]
-                        print(f"[DEBUG] ✅ body.{field}에서 설명 발견: {description[:100]}...")
+                        print(f"[DEBUG] OK body.{field}에서 설명 발견: {description[:100]}...")
                         break
                     else:
-                        print(f"[DEBUG] ❌ body.{field} 없음 또는 비어있음")
+                        print(f"[DEBUG] WARN body.{field} 없음 또는 비어있음")
             else:
-                print("[DEBUG] ❌ 'body' 키가 없음")
+                print("[DEBUG] WARN 'body' 키가 없음")
             
             # 직접 속성도 확인
             if not description:
@@ -561,10 +563,10 @@ class SimpleEventDetailDialog(BaseDialog):
                 for field in desc_fields:
                     if field in self.event_data and self.event_data[field]:
                         description = self.event_data[field]
-                        print(f"[DEBUG] ✅ 직접 {field}에서 설명 발견: {description[:100]}...")
+                        print(f"[DEBUG] OK 직접 {field}에서 설명 발견: {description[:100]}...")
                         break
                     else:
-                        print(f"[DEBUG] ❌ 직접 {field} 없음 또는 비어있음")
+                        print(f"[DEBUG] WARN 직접 {field} 없음 또는 비어있음")
             
             print(f"[DEBUG] 최종 description: {description[:100] if description else 'None'}...")
             
@@ -575,15 +577,15 @@ class SimpleEventDetailDialog(BaseDialog):
                 # QTextBrowser나 QTextEdit인 경우 setHtml 사용
                 if isinstance(self.description_container.content_label, (QTextEdit, QTextBrowser)):
                     self.description_container.content_label.setHtml(html_description)
-                    print(f"[DEBUG] ✅ QTextBrowser에 HTML 설정")
+                    print(f"[DEBUG] OK QTextBrowser에 HTML 설정")
                 else:
                     self.description_container.content_label.setText(description.strip())
-                    print(f"[DEBUG] ✅ QLabel에 텍스트 설정")
+                    print(f"[DEBUG] OK QLabel에 텍스트 설정")
                     
                 self.description_container.show()
-                print(f"[DEBUG] ✅ 설명 컨테이너 표시 완료")
+                print(f"[DEBUG] OK 설명 컨테이너 표시 완료")
             else:
-                print("[DEBUG] ❌ 설명이 없거나 빈 문자열 - 숨김")
+                print("[DEBUG] WARN 설명이 없거나 빈 문자열 - 숨김")
             
             print(f"[DEBUG] ========== 설명 정보 로드 완료 ==========")
             
@@ -632,12 +634,12 @@ class SimpleEventDetailDialog(BaseDialog):
                             calendar_color = calendar.get('backgroundColor', calendar.get('color', '#4285F4'))
                             calendar_type = calendar.get('kind', calendar.get('type', ''))
                             calendar_found = True
-                            print(f"[DEBUG] ✅ 캘린더 정보 찾음: {calendar_name}")
+                            print(f"[DEBUG] OK 캘린더 정보 찾음: {calendar_name}")
                             break
                 else:
-                    print("[DEBUG] ❌ data_manager에 get_all_calendars 메서드가 없음")
+                    print("[DEBUG] WARN data_manager에 get_all_calendars 메서드가 없음")
             except Exception as e:
-                print(f"[DEBUG] ❌ get_all_calendars 호출 중 오류: {e}")
+                print(f"[DEBUG] WARN get_all_calendars 호출 중 오류: {e}")
             
             # 캘린더 정보를 찾지 못했을 때 폴백 로직
             if not calendar_found and calendar_id:
@@ -652,13 +654,13 @@ class SimpleEventDetailDialog(BaseDialog):
                     calendar_name = special_calendars[calendar_id]
                     calendar_color = self.event_data.get('color', '#4285F4')
                     calendar_found = True
-                    print(f"[DEBUG] ✅ 특별 캘린더 처리: {calendar_name}")
+                    print(f"[DEBUG] OK 특별 캘린더 처리: {calendar_name}")
                 elif calendar_id.endswith('@gmail.com') and not calendar_id.startswith('family') and not '#' in calendar_id:
                     # 개인 구글 캘린더 (이메일 형태)
                     calendar_name = f"{calendar_id.split('@')[0]}"
                     calendar_color = self.event_data.get('color', '#4285F4')
                     calendar_found = True
-                    print(f"[DEBUG] ✅ 개인 캘린더 처리: {calendar_name}")
+                    print(f"[DEBUG] OK 개인 캘린더 처리: {calendar_name}")
             
             # organizer 정보 활용 (최종 폴백)
             if not calendar_found and 'organizer' in self.event_data:
@@ -667,7 +669,7 @@ class SimpleEventDetailDialog(BaseDialog):
                     calendar_name = organizer.get('displayName')
                     calendar_color = self.event_data.get('color', '#4285F4')
                     calendar_found = True
-                    print(f"[DEBUG] ✅ organizer 정보 사용: {calendar_name}")
+                    print(f"[DEBUG] OK organizer 정보 사용: {calendar_name}")
             
             # 캘린더 정보 표시 로직
             print(f"[DEBUG] ========== 캘린더 표시 로직 시작 ==========")
@@ -696,10 +698,10 @@ class SimpleEventDetailDialog(BaseDialog):
                 
                 final_display_text = display_text
                 final_color = calendar_color or '#4285F4'
-                print(f"[DEBUG] ✅ 캘린더 이름 있음: '{final_display_text}'")
+                print(f"[DEBUG] OK 캘린더 이름 있음: '{final_display_text}'")
             else:
                 # 최후의 폴백 - 항상 뭔가는 표시
-                print(f"[DEBUG] ❌ 캘린더 이름 없음 - 폴백 사용")
+                print(f"[DEBUG] WARN 캘린더 이름 없음 - 폴백 사용")
                 final_display_text = get_text("unknown_calendar")
                 final_color = self.event_data.get('color', '#4285F4')
             
@@ -716,9 +718,9 @@ class SimpleEventDetailDialog(BaseDialog):
                 """)
                 
                 self.calendar_container.show()
-                print(f"[DEBUG] ✅ 캘린더 표시 완료: '{final_display_text}', 색상: {final_color}")
+                print(f"[DEBUG] OK 캘린더 표시 완료: '{final_display_text}', 색상: {final_color}")
             else:
-                print(f"[ERROR] ❌ final_display_text가 비어있음 - 강제로 기본값 표시")
+                print(f"[ERROR] WARN final_display_text가 비어있음 - 강제로 기본값 표시")
                 self.calendar_container.content_label.setText("캘린더")
                 self.calendar_container.show()
             

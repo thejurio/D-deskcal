@@ -1,0 +1,115 @@
+2025-09-05 07:29:36,893 - settings_manager - DEBUG - 설정 파일 로드 완료: 21개 설정
+2025-09-05 07:29:36,895 - auth_manager - DEBUG - 저장된 인증 정보를 성공적으로 로드했습니다
+2025-09-05 07:29:36,909 - data_manager - INFO - DB에서 89개의 월간 캐시를 로드했습니다.
+2025-09-05 07:29:36,909 - data_manager - INFO - DB에서 0개의 완료된 이벤트 상태를 로드했습니다.
+2025-09-05 07:29:36,911 - data_manager - INFO - [캐시 DEBUG] 현재월 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리0 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리1 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리1 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리2 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리2 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리3 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리3 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리4 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리4 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리5 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리5 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리6 워커 초기화됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] 거리6 워커 스레드 시작됨
+2025-09-05 07:29:36,912 - data_manager - INFO - [캐시 DEBUG] DistanceBasedCachingManager 초기화 완료 (7개 워커)
+2025-09-05 07:29:36,913 - data_manager - INFO - 자동 동기화 타이머가 설정되었습니다. 주기: 5분
+2025-09-05 07:29:36,913 - data_manager - INFO - [캐시 DEBUG] 현재월 워커 시작
+2025-09-05 07:29:36,913 - auth_manager - DEBUG - 토큰 갱신을 시도합니다
+2025-09-05 07:29:36,914 - data_manager - INFO - [캐시 DEBUG] 거리1 워커 시작
+2025-09-05 07:29:36,914 - data_manager - INFO - [캐시 DEBUG] 거리2 워커 시작
+2025-09-05 07:29:36,914 - data_manager - INFO - [캐시 DEBUG] 거리3 워커 시작
+2025-09-05 07:29:36,914 - data_manager - INFO - [캐시 DEBUG] 거리4 워커 시작
+2025-09-05 07:29:36,914 - data_manager - INFO - [캐시 DEBUG] 거리5 워커 시작
+2025-09-05 07:29:36,914 - data_manager - INFO - [캐시 DEBUG] 거리6 워커 시작
+2025-09-05 07:29:36,916 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2025-09-05 07:29:37,230 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2025-09-05 07:29:37,234 - auth_manager - INFO - 토큰이 성공적으로 갱신되었습니다
+2025-09-05 07:29:37,236 - data_manager - INFO - [캐시 DEBUG] 병렬 캐싱 요청: 2025년 9월 중심
+2025-09-05 07:29:37,237 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 작업 설정: ('month', (2025, 9))
+2025-09-05 07:29:37,237 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 처리: 2025년 9월
+2025-09-05 07:29:37,237 - data_manager - INFO - [캐시 DEBUG] 윈도우 12개월, 미캐시 0개월
+2025-09-05 07:29:37,237 - data_manager - INFO - [캐시 DEBUG] 총 0개 작업이 7개 워커에 분산 할당됨
+2025-09-05 07:29:37,237 - data_manager - INFO - Starting event creation: '[DEBUG] 로컬 일정 생성 문제 디버깅' via provider 'local'
+2025-09-05 07:29:37,237 - data_manager - ERROR - Provider 'local' not found. Available providers: ['GoogleCalendarProvider', 'LocalCalendarProvider']
+2025-09-05 07:29:37,238 - data_manager - INFO - [캐시 DEBUG] 병렬 캐싱 요청: 2025년 9월 중심
+2025-09-05 07:29:37,238 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 작업 설정: ('month', (2025, 9))
+2025-09-05 07:29:37,238 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 처리: 2025년 9월
+2025-09-05 07:29:37,238 - data_manager - INFO - [캐시 DEBUG] 윈도우 12개월, 미캐시 0개월
+2025-09-05 07:29:37,238 - data_manager - INFO - [캐시 DEBUG] 총 0개 작업이 7개 워커에 분산 할당됨
+2025-09-05 07:29:37,314 - data_manager - INFO - [캐시 DEBUG] 현재월 워커 작업 시작: 2025년 9월
+2025-09-05 07:29:37,314 - data_manager - DEBUG - Starting data fetch from providers for 2025-9
+2025-09-05 07:29:37,314 - data_manager - DEBUG - Date range for fetch: 2025-08-31 to 2025-10-11
+2025-09-05 07:29:37,314 - data_manager - DEBUG - Fetching from 2 providers: ['GoogleCalendarProvider', 'LocalCalendarProvider']
+2025-09-05 07:29:37,314 - data_manager - DEBUG - Fetching events from provider: GoogleCalendarProvider
+2025-09-05 07:29:37,320 - googleapiclient.discovery_cache - INFO - file_cache is only supported with oauth2client<4.0.0
+2025-09-05 07:29:37,324 - providers.google_provider - DEBUG - Google Calendar service 생성 완료 (thread: 20076)
+2025-09-05 07:29:37,324 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/users/me/calendarList?alt=json
+2025-09-05 07:29:38,351 - providers.google_provider - INFO - Google Calendar 목록 로드 완료: 4개 캘린더
+2025-09-05 07:29:38,351 - providers.google_provider - INFO - Google Calendar 이벤트 조회 시작: 4개 캘린더, 2025-08-31 ~ 2025-10-11
+2025-09-05 07:29:38,353 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/ko.south_korea%23holiday%40group.v.calendar.google.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:38,663 - providers.google_provider - DEBUG - 캘린더 'ko.south_korea#holiday@group.v.calendar.google.com': 7개 이벤트 조회 완료
+2025-09-05 07:29:38,665 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/thejurio%40gmail.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:39,026 - providers.google_provider - DEBUG - 캘린더 'thejurio@gmail.com': 8개 이벤트 조회 완료
+2025-09-05 07:29:39,028 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/family01556510902891015712%40group.calendar.google.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:39,617 - providers.google_provider - DEBUG - 캘린더 'family01556510902891015712@group.calendar.google.com': 1개 이벤트 조회 완료
+2025-09-05 07:29:39,618 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/4e5or24hlc7n3p5de6nkvhudj0%40group.calendar.google.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:39,903 - providers.google_provider - DEBUG - 캘린더 '4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com': 0개 이벤트 조회 완료
+2025-09-05 07:29:39,903 - providers.google_provider - INFO - Google Calendar 이벤트 조회 완료: 16개 이벤트 (4/4 캘린더 성공)
+2025-09-05 07:29:39,903 - data_manager - INFO - Provider 'GoogleCalendarProvider' returned 16 events
+2025-09-05 07:29:39,903 - data_manager - DEBUG - Fetching events from provider: LocalCalendarProvider
+2025-09-05 07:29:39,903 - providers.local_provider - DEBUG - Local provider: fetching events from 2025-08-31 to 2025-10-11
+2025-09-05 07:29:39,903 - providers.local_provider - DEBUG - Local provider: loading event exceptions from database
+2025-09-05 07:29:39,904 - providers.local_provider - DEBUG - Local provider: adding single event '로ㅠ컬테스트'
+2025-09-05 07:29:39,904 - providers.local_provider - DEBUG - Local provider: setting calendar ID for 1 events
+2025-09-05 07:29:39,904 - providers.local_provider - INFO - Local provider: returning 1 events for date range 2025-08-31 to 2025-10-11
+2025-09-05 07:29:39,904 - data_manager - INFO - Provider 'LocalCalendarProvider' returned 1 events
+2025-09-05 07:29:39,904 - data_manager - INFO - 캐시 병합 완료: 2025-9, 전체=17개 (새이벤트=17, 동기화완료=0, 임시보존=0)
+2025-09-05 07:29:39,910 - data_manager - INFO - [캐시 DEBUG] 현재월 워커 작업 완료: 2025년 9월 (17개 이벤트)
+2025-09-05 07:29:39,910 - data_manager - INFO - [캐시 DEBUG] 거리0 작업 완료: ('month', (2025, 9))
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 병렬 캐싱 요청: 2025년 9월 중심
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 작업 설정: ('month', (2025, 9))
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 처리: 2025년 9월
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 윈도우 12개월, 미캐시 0개월
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 총 0개 작업이 7개 워커에 분산 할당됨
+2025-09-05 07:29:42,239 - data_manager - INFO - 현재 보이는 월(2025년 9월)을 강제로 즉시 동기화합니다...
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 병렬 캐싱 요청: 2025년 9월 중심
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 작업 설정: ('month', (2025, 9))
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 처리: 2025년 9월
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 윈도우 12개월, 미캐시 0개월
+2025-09-05 07:29:42,239 - data_manager - INFO - [캐시 DEBUG] 총 0개 작업이 7개 워커에 분산 할당됨
+2025-09-05 07:29:42,317 - data_manager - INFO - [캐시 DEBUG] 현재월 워커 작업 시작: 2025년 9월
+2025-09-05 07:29:42,317 - data_manager - DEBUG - Starting data fetch from providers for 2025-9
+2025-09-05 07:29:42,317 - data_manager - DEBUG - Date range for fetch: 2025-08-31 to 2025-10-11
+2025-09-05 07:29:42,317 - data_manager - DEBUG - Fetching from 2 providers: ['GoogleCalendarProvider', 'LocalCalendarProvider']
+2025-09-05 07:29:42,317 - data_manager - DEBUG - Fetching events from provider: GoogleCalendarProvider
+2025-09-05 07:29:42,317 - providers.google_provider - INFO - Google Calendar 이벤트 조회 시작: 4개 캘린더, 2025-08-31 ~ 2025-10-11
+2025-09-05 07:29:42,318 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/ko.south_korea%23holiday%40group.v.calendar.google.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:42,613 - providers.google_provider - DEBUG - 캘린더 'ko.south_korea#holiday@group.v.calendar.google.com': 7개 이벤트 조회 완료
+2025-09-05 07:29:42,616 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/thejurio%40gmail.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:42,958 - providers.google_provider - DEBUG - 캘린더 'thejurio@gmail.com': 8개 이벤트 조회 완료
+2025-09-05 07:29:42,960 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/family01556510902891015712%40group.calendar.google.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:43,502 - providers.google_provider - DEBUG - 캘린더 'family01556510902891015712@group.calendar.google.com': 1개 이벤트 조회 완료
+2025-09-05 07:29:43,504 - googleapiclient.discovery - DEBUG - URL being requested: GET https://www.googleapis.com/calendar/v3/calendars/4e5or24hlc7n3p5de6nkvhudj0%40group.calendar.google.com/events?timeMin=2025-08-31T00%3A00%3A00Z&timeMax=2025-10-11T23%3A59%3A59.999999Z&singleEvents=true&orderBy=startTime&alt=json
+2025-09-05 07:29:43,807 - providers.google_provider - DEBUG - 캘린더 '4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com': 0개 이벤트 조회 완료
+2025-09-05 07:29:43,807 - providers.google_provider - INFO - Google Calendar 이벤트 조회 완료: 16개 이벤트 (4/4 캘린더 성공)
+2025-09-05 07:29:43,807 - data_manager - INFO - Provider 'GoogleCalendarProvider' returned 16 events
+2025-09-05 07:29:43,807 - data_manager - DEBUG - Fetching events from provider: LocalCalendarProvider
+2025-09-05 07:29:43,807 - providers.local_provider - DEBUG - Local provider: fetching events from 2025-08-31 to 2025-10-11
+2025-09-05 07:29:43,808 - providers.local_provider - DEBUG - Local provider: loading event exceptions from database
+2025-09-05 07:29:43,808 - providers.local_provider - DEBUG - Local provider: adding single event '로ㅠ컬테스트'
+2025-09-05 07:29:43,808 - providers.local_provider - DEBUG - Local provider: setting calendar ID for 1 events
+2025-09-05 07:29:43,808 - providers.local_provider - INFO - Local provider: returning 1 events for date range 2025-08-31 to 2025-10-11
+2025-09-05 07:29:43,808 - data_manager - INFO - Provider 'LocalCalendarProvider' returned 1 events
+2025-09-05 07:29:43,808 - data_manager - INFO - 캐시 병합 완료: 2025-9, 전체=17개 (새이벤트=17, 동기화완료=0, 임시보존=0)
+2025-09-05 07:29:43,823 - data_manager - INFO - [캐시 DEBUG] 현재월 워커 작업 완료: 2025년 9월 (17개 이벤트)
+2025-09-05 07:29:43,823 - data_manager - INFO - [캐시 DEBUG] 거리0 작업 완료: ('month', (2025, 9))
+2025-09-05 07:29:45,240 - data_manager - INFO - [캐시 DEBUG] 병렬 캐싱 요청: 2025년 9월 중심
+2025-09-05 07:29:45,240 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 작업 설정: ('month', (2025, 9))
+2025-09-05 07:29:45,240 - data_manager - INFO - [캐시 DEBUG] 현재월 최우선 처리: 2025년 9월
+2025-09-05 07:29:45,240 - data_manager - INFO - [캐시 DEBUG] 윈도우 12개월, 미캐시 0개월
+2025-09-05 07:29:45,240 - data_manager - INFO - [캐시 DEBUG] 총 0개 작업이 7개 워커에 분산 할당됨

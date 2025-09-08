@@ -45,6 +45,10 @@ class DistanceBasedTaskQueue:
         self._mutex = QMutex()
         # 각 거리별 워커의 활성 작업 추적
         self._active_tasks = {i: None for i in range(7)}
+        # 최근 완료된 작업 추적 (중복 방지)
+        self._recently_completed = {}
+        # 완료 추적 유지 시간 (초)
+        self._completion_cooldown = 30
 
     def _ensure_mutex_valid(self):
         """mutex가 유효한지 확인하고 필요시 재초기화"""
@@ -53,6 +57,15 @@ class DistanceBasedTaskQueue:
 
     def add_task(self, distance, task_data):
         """거리 기반으로 작업 추가"""
+        # 최근 완료된 작업인지 확인 (쿨다운 체크)
+        import time
+        current_time = time.time()
+        if task_data in self._recently_completed:
+            time_since_completion = current_time - self._recently_completed[task_data]
+            if time_since_completion < self._completion_cooldown:
+                logger.debug(f"[캐시 DEBUG] 작업 쿨다운 중 - 스킵: {task_data} (완료 후 {time_since_completion:.1f}초)")
+                return False
+        
         self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             # 거리 범위 제한 (0-6)
@@ -92,6 +105,14 @@ class DistanceBasedTaskQueue:
             if self._active_tasks.get(distance) == task_data:
                 self._active_tasks[distance] = None
                 logger.info(f"[캐시 DEBUG] 거리{distance} 작업 완료: {task_data}")
+        
+        # 완료 시간 기록 (중복 방지용)
+        import time
+        self._recently_completed[task_data] = time.time()
+        logger.debug(f"[캐시 DEBUG] 작업 완료 기록: {task_data} (30초 쿨다운 적용)")
+        
+        # 오래된 완료 기록 정리
+        self._cleanup_old_completions()
 
     def interrupt_and_add_current_month(self, task_data):
         """현재 월은 모든 작업을 중단하고 최우선 처리"""
@@ -125,6 +146,22 @@ class DistanceBasedTaskQueue:
             if orphaned_count > 0:
                 logger.info(f"[캐시 DEBUG] 고아 작업 {orphaned_count}개 정리됨")
             return orphaned_count
+
+    def _cleanup_old_completions(self):
+        """오래된 완료 기록 정리"""
+        import time
+        current_time = time.time()
+        expired_keys = []
+        
+        for task_data, completion_time in self._recently_completed.items():
+            if current_time - completion_time > self._completion_cooldown:
+                expired_keys.append(task_data)
+        
+        for key in expired_keys:
+            del self._recently_completed[key]
+        
+        if expired_keys:
+            logger.debug(f"[캐시 DEBUG] 만료된 완료 기록 {len(expired_keys)}개 정리됨")
 
     def get_queue_status(self):
         """각 거리별 큐 상태 반환 (디버그용)"""
