@@ -116,6 +116,15 @@ class DistanceBasedTaskQueue:
 
     def interrupt_and_add_current_month(self, task_data):
         """현재 월은 모든 작업을 중단하고 최우선 처리"""
+        # 쿨다운 체크 - 현재월도 중복 요청 방지
+        import time
+        current_time = time.time()
+        if task_data in self._recently_completed:
+            time_since_completion = current_time - self._recently_completed[task_data]
+            if time_since_completion < self._completion_cooldown:
+                logger.debug(f"[캐시 DEBUG] 현재월 작업 쿨다운 중 - 스킵: {task_data} (완료 후 {time_since_completion:.1f}초)")
+                return False
+        
         self._ensure_mutex_valid()
         with QMutexLocker(self._mutex):
             # 현재 처리 중인 작업 중단
@@ -130,6 +139,7 @@ class DistanceBasedTaskQueue:
             self._pending_tasks.add(task_data)
             self._active_tasks[0] = None
             logger.info(f"[캐시 DEBUG] 현재월 최우선 작업 설정: {task_data}")
+            return True
 
     def clear_orphaned_pending(self):
         """큐에는 없지만 pending 상태인 고아 작업들 정리"""
@@ -320,8 +330,10 @@ class DistanceBasedCachingManager(QObject):
             # 현재 월 처리 (skip_current가 False인 경우에만)
             if not skip_current:
                 current_month_task = ('month', (year, month))
-                self._task_queue.interrupt_and_add_current_month(current_month_task)
-                logger.info(f"[캐시 DEBUG] 현재월 최우선 처리: {year}년 {month}월")
+                if self._task_queue.interrupt_and_add_current_month(current_month_task):
+                    logger.info(f"[캐시 DEBUG] 현재월 최우선 처리: {year}년 {month}월")
+                else:
+                    logger.info(f"[캐시 DEBUG] 현재월 쿨다운으로 스킵: {year}년 {month}월")
 
             # 1. 슬라이딩 윈도우 계산 (13개월: ±6개월)
             window_months = self._calculate_sliding_window(year, month, 6)
