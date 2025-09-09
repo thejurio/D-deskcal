@@ -21,7 +21,7 @@ if sys.platform == "win32":
     import windows_startup
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout,
-                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon)
+                             QHBoxLayout, QMenu, QPushButton, QStackedWidget, QSizeGrip, QDialog, QSystemTrayIcon, QLabel)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSize, QEvent
 from PyQt6.QtGui import QAction, QIcon
 
@@ -47,7 +47,7 @@ from event_editor_window import EventEditorWindow
 from search_dialog import SearchDialog
 from notification_manager import NotificationPopup
 from timezone_helper import get_timezone_from_ip
-from custom_dialogs import AIEventInputDialog, CustomMessageBox
+from custom_dialogs import AIEventInputDialog, CustomMessageBox, APIKeyRequiredDialog
 from ai_confirmation_dialog import AIConfirmationDialog
 import gemini_parser
 from resource_path import resource_path, get_theme_path, get_icon_path, load_theme_with_icons
@@ -750,6 +750,12 @@ class MainWidget(QWidget):
         if not self.is_interaction_unlocked():
             logger.debug("AI input dialog blocked due to interaction lock")
             return
+        
+        # API 키 체크 - 다이얼로그 열기 전에 확인
+        gemini_api_key = self.settings.get("gemini_api_key", "").strip()
+        if not gemini_api_key:
+            self.show_api_key_error_with_redirect("Gemini API 키가 설정되지 않았습니다.\n\nAPI 키를 발급받아 [설정 > 계정] 탭에서 등록해주세요.")
+            return
 
         logger.info("Starting AI event input dialog")
         input_dialog = AIEventInputDialog(None, self.settings, pos=self._get_dialog_pos())
@@ -766,7 +772,7 @@ class MainWidget(QWidget):
         api_key = self.settings.get("gemini_api_key")
         if not api_key:
             logger.error("AI event creation failed: Gemini API key not configured")
-            self.show_error_message("Gemini API 키가 설정되지 않았습니다.\n[설정 > 계정] 탭에서 API 키를 먼저 등록해주세요.")
+            self.show_api_key_error_with_redirect("Gemini API 키가 설정되지 않았습니다.\n\nAPI 키를 발급받아 [설정 > 계정] 탭에서 등록해주세요.")
             return
 
         logger.info(f"Starting AI event parsing with text length: {len(text_to_analyze)} characters")
@@ -843,7 +849,13 @@ class MainWidget(QWidget):
         except Exception as e:
             QApplication.restoreOverrideCursor()
             logger.error(f"AI event creation failed with exception: {e}", exc_info=True)
-            self.show_error_message(f"AI 분석 중 오류가 발생했습니다:\n{e}")
+            
+            # Check if error is related to API key issues
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['api_key_invalid', 'api키', 'api 키', 'permission', 'unauthorized', '401', '403']):
+                self.show_api_key_error_with_redirect(f"API 키 관련 오류가 발생했습니다:\n{e}\n\nAPI 키를 다시 확인하거나 새로 발급받아주세요.")
+            else:
+                self.show_error_message(f"AI 분석 중 오류가 발생했습니다:\n{e}")
 
     def open_search_dialog(self):
         # with self.data_manager.user_action_priority():  # DISABLED - mutex fixes removed _activity_lock
@@ -1016,6 +1028,42 @@ class MainWidget(QWidget):
         except Exception as e:
             logger.error(f"Event detail dialog error: {e}", exc_info=True)
             self.show_error_message(f"이벤트 상세정보를 표시하는 중 오류가 발생했습니다: {str(e)}")
+
+    def show_api_key_error_with_redirect(self, message="AI 일정생성을 하기위해 API키가 필요합니다. API키 생성 사이트로 이동하시겠습니까?", title="API 키 필요"):
+        """Show BaseDialog-based error dialog with button to redirect to Gemini API key website"""
+        if not self.is_interaction_unlocked():
+            self.tray_icon.showMessage(
+                title,
+                message,
+                QSystemTrayIcon.MessageIcon.Warning,
+                5000
+            )
+            return True
+        
+        # Create BaseDialog-based API key dialog
+        dialog = APIKeyRequiredDialog(
+            parent=None,
+            settings=self.settings,
+            pos=self._get_dialog_pos(),
+            message=message
+        )
+        
+        # Execute dialog and handle result
+        result = dialog.exec()
+        if result == QDialog.DialogCode.Accepted:
+            # User clicked "확인" - open API key site
+            self.open_gemini_api_site()
+    
+    def open_gemini_api_site(self):
+        """Open Gemini API key issuance website"""
+        import webbrowser
+        gemini_api_url = "https://aistudio.google.com/app/apikey"
+        try:
+            webbrowser.open(gemini_api_url)
+            logger.info(f"Opened Gemini API key site: {gemini_api_url}")
+        except Exception as e:
+            logger.error(f"Failed to open Gemini API site: {e}")
+            self.show_error_message("브라우저를 열 수 없습니다. 직접 https://aistudio.google.com/app/apikey 를 방문해주세요.")
 
     def show_error_message(self, message, ok_only=False, title="오류"):
         if not self.is_interaction_unlocked():

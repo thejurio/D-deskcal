@@ -24,8 +24,8 @@ class BaseDialog(QDialog):
         self.apply_opacity()
 
     def apply_opacity(self):
-        # 모든 다이얼로그는 고정된 불투명도 적용 (메인 프로그램의 투명도 설정과 독립적)
-        self.setWindowOpacity(0.95)
+        # 다이얼로그는 고정된 투명도 적용 (0.9)
+        self.setWindowOpacity(0.9)
     
     def ensure_on_top(self):
         """이 다이얼로그가 다른 다이얼로그들 위에 나타나도록 보장합니다."""
@@ -941,12 +941,8 @@ class EventPopover(BaseDialog):
         super().closeEvent(event)
 
     def apply_popover_opacity(self):
-        if not self.settings: return
-        
-        # 투명도만 적용하고 배경색/테두리는 테마 파일에서 처리
-        main_opacity = self.settings.get("window_opacity", 0.95)
-        popover_opacity = min(1.0, main_opacity + 0.1)
-        self.setWindowOpacity(popover_opacity)
+        # 팝오버는 고정된 투명도 적용 (0.9)
+        self.setWindowOpacity(0.9)
 
     def format_event_time(self, event_data):
         start = event_data.get('start', {})
@@ -1342,6 +1338,51 @@ class APIKeyInputDialog(BaseDialog):
             self.verification_thread.quit()
             self.verification_thread.wait()
         super().closeEvent(event)
+
+class APIKeyRequiredDialog(BaseDialog):
+    """
+    A dialog to inform user that API key is required and offer to open the API key site.
+    """
+    def __init__(self, parent=None, settings=None, pos=None, message="AI 일정생성을 하기위해 API키가 필요합니다. API키 생성 사이트로 이동하시겠습니까?"):
+        super().__init__(parent, settings, pos)
+        self.setWindowTitle("API 키 필요")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+        
+        # 저장된 위치로 창을 이동 (UI 초기화 전에)
+        self.restore_position()
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        background_widget = QWidget()
+        background_widget.setObjectName("dialog_background")
+        main_layout.addWidget(background_widget)
+        
+        content_layout = QVBoxLayout(background_widget)
+        content_layout.setContentsMargins(20, 15, 20, 15)
+        content_layout.setSpacing(15)
+
+        # Message label
+        message_label = QLabel(message)
+        message_label.setWordWrap(True)
+        message_label.setStyleSheet("font-size: 11pt; padding: 10px 0;")
+        content_layout.addWidget(message_label)
+
+        # Button layout
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        
+        # 확인 button - opens API key site
+        self.confirm_button = QPushButton("확인")
+        self.confirm_button.clicked.connect(self.accept)
+        button_layout.addWidget(self.confirm_button)
+        
+        # 취소 button
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+        
+        content_layout.addLayout(button_layout)
 
 class RecurringDeleteDialog(BaseDialog):
     """

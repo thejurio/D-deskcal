@@ -17,7 +17,7 @@ EVENT_DETAIL_TEXTS = {
     "calendar_label": "캘린더",
     
     # 버튼 텍스트
-    "edit_button": "편집",
+    "edit_button": "수정",
     "delete_button": "삭제",
     "close_button": "닫기",
     

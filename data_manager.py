@@ -3,6 +3,7 @@ import datetime
 import json
 import time
 import sqlite3
+import threading
 import uuid
 import logging
 import calendar
@@ -42,7 +43,8 @@ class DistanceBasedTaskQueue:
         # 거리별 큐: 0(현재월), 1~6(거리별)
         self._queues = {i: deque() for i in range(7)}
         self._pending_tasks = set()
-        # # self._mutex = QMutex()  # DISABLED - dangerous pattern  # DISABLED - dangerous runtime recreation
+        # Python threading.Lock으로 QMutex 대체 (안전한 스레드 동기화)
+        self._lock = threading.Lock()
         # 각 거리별 워커의 활성 작업 추적
         self._active_tasks = {i: None for i in range(7)}
         # 최근 완료된 작업 추적 (중복 방지)
@@ -57,18 +59,16 @@ class DistanceBasedTaskQueue:
 
     def add_task(self, distance, task_data):
         """거리 기반으로 작업 추가"""
-        # 최근 완료된 작업인지 확인 (쿨다운 체크)
-        import time
-        current_time = time.time()
-        if task_data in self._recently_completed:
-            time_since_completion = current_time - self._recently_completed[task_data]
-            if time_since_completion < self._completion_cooldown:
-                logger.debug(f"[캐시 DEBUG] 작업 쿨다운 중 - 스킵: {task_data} (완료 후 {time_since_completion:.1f}초)")
-                return False
-        
-        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
-        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
-        if True:
+        with self._lock:
+            # 최근 완료된 작업인지 확인 (쿨다운 체크)
+            import time
+            current_time = time.time()
+            if task_data in self._recently_completed:
+                time_since_completion = current_time - self._recently_completed[task_data]
+                if time_since_completion < self._completion_cooldown:
+                    logger.debug(f"[캐시 DEBUG] 작업 쿨다운 중 - 스킵: {task_data} (완료 후 {time_since_completion:.1f}초)")
+                    return False
+            
             # 거리 범위 제한 (0-6)
             distance = min(max(distance, 0), 6)
             
@@ -90,9 +90,7 @@ class DistanceBasedTaskQueue:
 
     def get_next_task_for_distance(self, distance):
         """특정 거리의 워커가 다음 작업 가져오기"""
-        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
-        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
-        if True:
+        with self._lock:
             if distance in self._queues and self._queues[distance]:
                 task_data = self._queues[distance].popleft()
                 self._pending_tasks.discard(task_data)
@@ -102,20 +100,18 @@ class DistanceBasedTaskQueue:
 
     def mark_task_completed(self, distance, task_data):
         """작업 완료 처리"""
-        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
-        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
-        if True:
+        with self._lock:
             if self._active_tasks.get(distance) == task_data:
                 self._active_tasks[distance] = None
                 logger.info(f"[캐시 DEBUG] 거리{distance} 작업 완료: {task_data}")
-        
-        # 완료 시간 기록 (중복 방지용)
-        import time
-        self._recently_completed[task_data] = time.time()
-        logger.debug(f"[캐시 DEBUG] 작업 완료 기록: {task_data} (30초 쿨다운 적용)")
-        
-        # 오래된 완료 기록 정리
-        self._cleanup_old_completions()
+            
+            # 완료 시간 기록 (중복 방지용)
+            import time
+            self._recently_completed[task_data] = time.time()
+            logger.debug(f"[캐시 DEBUG] 작업 완료 기록: {task_data} (30초 쿨다운 적용)")
+            
+            # 오래된 완료 기록 정리
+            self._cleanup_old_completions()
 
     def interrupt_and_add_current_month(self, task_data):
         """현재 월은 모든 작업을 중단하고 최우선 처리"""

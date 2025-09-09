@@ -726,10 +726,45 @@ class SimpleEventDetailDialog(BaseDialog):
             
             print(f"[DEBUG] ========== 캘린더 표시 로직 완료 ==========")
             
+            # 읽기 전용 캘린더 확인 및 편집 버튼 비활성화
+            self._check_and_disable_edit_for_readonly_calendar(all_calendars, calendar_id)
+            
         except Exception as e:
             print(f"[ERROR] 캘린더 정보 로드 실패: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _check_and_disable_edit_for_readonly_calendar(self, all_calendars, calendar_id):
+        """읽기 전용 캘린더인지 확인하고 편집 버튼 비활성화"""
+        try:
+            is_readonly = False
+            
+            # 캘린더 목록에서 accessRole이 'reader'인지 확인
+            for calendar in all_calendars:
+                if calendar.get('id') == calendar_id:
+                    access_role = calendar.get('accessRole')
+                    print(f"[DEBUG] 캘린더 {calendar_id}의 accessRole: {access_role}")
+                    
+                    if access_role == 'reader':
+                        is_readonly = True
+                        print(f"[DEBUG] 읽기 전용 캘린더 감지: {calendar_id}")
+                    break
+            
+            # 읽기 전용 캘린더인 경우 편집 버튼 비활성화
+            if is_readonly:
+                self.edit_btn.setEnabled(False)
+                self.edit_btn.setToolTip("읽기 전용 캘린더는 편집할 수 없습니다")
+                print(f"[DEBUG] 편집 버튼 비활성화 완료 (읽기 전용 캘린더)")
+            else:
+                # 편집 가능한 캘린더인 경우 버튼 활성화 (기본값)
+                self.edit_btn.setEnabled(True)
+                self.edit_btn.setToolTip("")
+                print(f"[DEBUG] 편집 버튼 활성화 (편집 가능 캘린더)")
+                
+        except Exception as e:
+            print(f"[ERROR] 읽기 전용 캘린더 확인 중 오류: {e}")
+            # 오류 시 기본적으로 편집 허용
+            self.edit_btn.setEnabled(True)
     
     def _edit_event(self):
         """일정 편집 - 메인위젯의 편집 시스템 사용"""
