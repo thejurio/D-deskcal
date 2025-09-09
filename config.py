@@ -2,6 +2,15 @@
 import os
 import sys
 
+def get_app_dir():
+    """Get the application directory (where executable and resources are located)."""
+    if hasattr(sys, '_MEIPASS'):
+        # Running as PyInstaller EXE - use the temporary directory where files are extracted
+        return sys._MEIPASS
+    else:
+        # Running in development mode - use current directory
+        return os.path.dirname(os.path.abspath(__file__))
+
 def get_data_dir():
     """Get the appropriate data directory for user files."""
     if hasattr(sys, '_MEIPASS'):
@@ -20,11 +29,12 @@ def get_data_dir():
 
 # --- File Paths ---
 _DATA_DIR = get_data_dir()
+_APP_DIR = get_app_dir()
 DB_FILE = os.path.join(_DATA_DIR, "calendar.db")
 CACHE_DB_FILE = os.path.join(_DATA_DIR, "calendar_cache.db")
 SETTINGS_FILE = os.path.join(_DATA_DIR, "settings.json")
 TOKEN_FILE = os.path.join(_DATA_DIR, "token.json")
-CREDENTIALS_FILE = os.path.join(_DATA_DIR, "credentials.json")
+CREDENTIALS_FILE = os.path.join(_APP_DIR, "credentials.json")  # 앱 디렉토리에서 찾기
 ERROR_LOG_FILE = os.path.join(_DATA_DIR, "error.log")
 
 # --- Identifiers ---

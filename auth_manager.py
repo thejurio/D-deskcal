@@ -1,4 +1,7 @@
 import os
+import sys
+import webbrowser
+import subprocess
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -14,16 +17,86 @@ SCOPES = [
 ]
 # --- ---
 
+def open_browser_fallback(url):
+    """Windows에서 기본 브라우저 열기 - 다중 fallback 방식"""
+    try:
+        # 방법 1: os.startfile() - Windows 전용 최우선
+        os.startfile(url)
+        print("os.startfile()로 브라우저 열기 성공")
+        return True
+    except Exception as e1:
+        print(f"os.startfile() 실패: {e1}")
+        try:
+            # 방법 2: cmd start 명령어
+            subprocess.run(['cmd', '/c', 'start', '', url], check=False, shell=True)
+            print("cmd start로 브라우저 열기 성공")
+            return True
+        except Exception as e2:
+            print(f"cmd start 실패: {e2}")
+            try:
+                # 방법 3: webbrowser.open()
+                webbrowser.open(url)
+                print("webbrowser.open()으로 브라우저 열기 성공")
+                return True
+            except Exception as e3:
+                print(f"webbrowser.open() 실패: {e3}")
+                print(f"브라우저 열기 실패. 수동으로 브라우저에서 다음 주소를 열어주세요: {url}")
+                return False
+
 class LoginWorker(QObject):
     """백그라운드 스레드에서 동기적인 로그인 작업을 처리하는 작업자"""
     finished = pyqtSignal(object) # object는 Credentials 객체 또는 None
 
     def run(self):
         """로그인 절차를 실행하고 결과를 finished 신호로 보냅니다."""
+        print("로그인 절차 시작...")
+        print(f"credentials 파일 경로: {CREDENTIALS_FILE}")
+        
+        # credentials.json 파일 존재 확인
+        if os.path.exists(CREDENTIALS_FILE):
+            print("credentials.json 파일 발견됨")
+            try:
+                with open(CREDENTIALS_FILE, 'r') as f:
+                    content = f.read()
+                    print(f"credentials.json 크기: {len(content)} bytes")
+            except Exception as e:
+                print(f"credentials.json 읽기 실패: {e}")
+        else:
+            print("credentials.json 파일을 찾을 수 없음!")
+            print(f"현재 작업 디렉토리: {os.getcwd()}")
+            if hasattr(sys, '_MEIPASS'):
+                print(f"_MEIPASS: {sys._MEIPASS}")
+            self.finished.emit(None)
+            return
+
         try:
+            # PyInstaller 환경 감지
+            is_pyinstaller = hasattr(sys, '_MEIPASS')
+            if is_pyinstaller:
+                print("PyInstaller 환경에서 로그인 시작...")
+            else:
+                print("개발 환경에서 로그인 시작...")
+            
+            print("OAuth flow 생성 완료, 로컬 서버 시작 중...")
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            # 브라우저 자동 열기를 명시적으로 활성화
-            creds = flow.run_local_server(port=0, open_browser=True)
+            
+            # run_local_server를 사용하되 브라우저 열기만 커스터마이징
+            if is_pyinstaller:
+                print("PyInstaller 환경: 사용자 정의 브라우저 열기 사용")
+                # run_local_server에서 원래 webbrowser.open을 대체
+                original_webbrowser_open = webbrowser.open
+                webbrowser.open = open_browser_fallback
+                try:
+                    creds = flow.run_local_server(port=0, open_browser=True)
+                finally:
+                    # webbrowser.open 복원
+                    webbrowser.open = original_webbrowser_open
+            else:
+                # 개발 환경에서는 기본 브라우저 열기 사용
+                print("개발 환경: 기본 브라우저 열기 사용")
+                creds = flow.run_local_server(port=0, open_browser=True)
+            
+            print("로그인 성공!")
             self.finished.emit(creds)
         except Exception as e:
             print(f"로그인 절차 중 오류 발생: {e}")
