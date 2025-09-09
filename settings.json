@@ -38,36 +38,52 @@
     "ai_add_event_hotkey": "Ctrl + K",
     "dialog_positions": {
         "EventEditorWindow": {
-            "x": 725,
-            "y": 209
+            "x": 726,
+            "y": 208
         },
         "RecurrenceRuleDialog": {
-            "x": 752,
-            "y": 277
+            "x": 751,
+            "y": 272
         },
         "CustomMessageBox": {
-            "x": 1291,
-            "y": 377
+            "x": 1262,
+            "y": 229
         },
         "NewDateSelectionDialog": {
             "x": 790,
             "y": 316
         },
         "RecurringDeleteDialog": {
-            "x": 1366,
-            "y": 332
+            "x": 1465,
+            "y": 225
         },
         "SimpleEventDetailDialog": {
-            "x": 1138,
-            "y": 4
+            "x": 1272,
+            "y": 86
         },
         "WeekSelectionDialog": {
             "x": 1331,
             "y": 292
         },
         "SettingsWindow": {
-            "x": 649,
-            "y": 166
+            "x": 644,
+            "y": 168
+        },
+        "NoUpdateDialog": {
+            "x": 760,
+            "y": 338
+        },
+        "AIEventInputDialog": {
+            "x": 725,
+            "y": 326
+        },
+        "SearchDialog": {
+            "x": 1364,
+            "y": 96
+        },
+        "HotkeyInputDialog": {
+            "x": 760,
+            "y": 348
         }
     }
 }

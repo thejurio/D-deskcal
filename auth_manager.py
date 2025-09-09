@@ -22,10 +22,13 @@ class LoginWorker(QObject):
         """로그인 절차를 실행하고 결과를 finished 신호로 보냅니다."""
         try:
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
+            # 브라우저 자동 열기를 명시적으로 활성화
+            creds = flow.run_local_server(port=0, open_browser=True)
             self.finished.emit(creds)
         except Exception as e:
             print(f"로그인 절차 중 오류 발생: {e}")
+            import traceback
+            traceback.print_exc()  # 상세한 오류 정보 출력
             self.finished.emit(None)
 
 
@@ -92,6 +95,7 @@ class AuthManager(QObject):
             self._credentials = creds
             self.auth_state_changed.emit()
             self.login_finished.emit(True)
+            print("로그인 성공! 이벤트 데이터 새로고침을 요청합니다...")
         else:
             self.login_finished.emit(False)
 

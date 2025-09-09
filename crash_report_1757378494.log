@@ -1,0 +1,17 @@
+
+================== CRASH DETECTED ==================
+Time: 2025-09-09 09:41:34
+Runtime: 37.56 seconds
+Exception Type: AttributeError
+Exception Value: 'DistanceBasedCachingManager' object has no attribute '_activity_lock'
+
+Traceback:
+Traceback (most recent call last):
+  File "c:\dcwidget\views\month_view.py", line 293, in show_popover
+    self.data_manager.caching_manager.pause_sync()
+  File "c:\dcwidget\data_manager.py", line 431, in pause_sync
+    self._activity_lock.lock()
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DistanceBasedCachingManager' object has no attribute '_activity_lock'
+
+================== END CRASH INFO ==================

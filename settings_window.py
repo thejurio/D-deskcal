@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QLabel, QPushButton,
                              QCheckBox, QScrollArea, QWidget, QHBoxLayout,
                              QColorDialog, QComboBox, QSlider, QListWidget, QStackedWidget, QListWidgetItem, QFormLayout, QTimeEdit, QLineEdit, QGroupBox)
 from PyQt6.QtGui import QColor, QPixmap, QIcon, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTime, QTimer
 
 from custom_dialogs import BaseDialog, HotkeyInputDialog, CustomMessageBox, APIKeyInputDialog, SingleKeyInputDialog
 from resource_path import get_version
@@ -22,6 +22,7 @@ CUSTOM_COLOR_TEXT = "사용자 지정..."
 class SettingsWindow(BaseDialog):
     transparency_changed = pyqtSignal(float)
     theme_changed = pyqtSignal(str)
+    refresh_requested = pyqtSignal()
 
     def __init__(self, data_manager, settings, parent=None, pos=None):
         super().__init__(parent=parent, settings=settings, pos=pos)
@@ -90,7 +91,11 @@ class SettingsWindow(BaseDialog):
         
         self.nav_list.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav_list.setCurrentRow(0)
-        self.data_manager.calendar_list_changed.connect(self.rebuild_ui)
+        
+        # 신호 연결: 실시간 업데이트를 위해
+        self.data_manager.calendar_list_changed.connect(self.populate_calendar_list)
+        self.data_manager.auth_manager.auth_state_changed.connect(self.update_account_status)
+        
         self.rebuild_ui()
         self.set_stylesheet()
 
@@ -590,10 +595,22 @@ class SettingsWindow(BaseDialog):
             self.account_status_label.setText("연결되지 않음"); self.account_button.setText("로그인")
 
     def handle_account_button_click(self):
-        if self.data_manager.auth_manager.is_logged_in(): self.data_manager.auth_manager.logout()
-        else: self.data_manager.auth_manager.login()
+        if self.data_manager.auth_manager.is_logged_in(): 
+            self.data_manager.auth_manager.logout()
+            # 로그아웃 후 Google 캘린더만 제거하고 로컬 캘린더는 유지
+            if self.data_manager.calendar_list_cache:
+                from config import GOOGLE_CALENDAR_PROVIDER_NAME
+                self.data_manager.calendar_list_cache = [
+                    cal for cal in self.data_manager.calendar_list_cache 
+                    if cal.get('provider') != GOOGLE_CALENDAR_PROVIDER_NAME
+                ]
+            self.update_account_status()
+            self.populate_calendar_list()
+        else: 
+            self.data_manager.auth_manager.login()
 
     def populate_calendar_list(self):
+        print("[DEBUG] populate_calendar_list 메서드 호출됨!")
         while self.calendar_list_layout.count():
             child = self.calendar_list_layout.takeAt(0)
             if child.widget(): child.widget().deleteLater()
@@ -601,7 +618,12 @@ class SettingsWindow(BaseDialog):
         selected_calendars = self.temp_settings.get("selected_calendars", [])
         try:
             calendar_list = self.data_manager.get_all_calendars()
-            if not calendar_list: self.calendar_list_layout.addWidget(QLabel("표시할 캘린더가 없습니다.\nGoogle 계정에 로그인하여 캘린더를 불러오세요.")); return
+            if not calendar_list: 
+                no_cal_label = QLabel("표시할 캘린더가 없습니다.\nGoogle 계정에 로그인하면 자동으로 캘린더 목록을 불러옵니다.")
+                no_cal_label.setWordWrap(True)
+                no_cal_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.calendar_list_layout.addWidget(no_cal_label)
+                return
             if not selected_calendars and calendar_list:
                 primary_cal = next((cal for cal in calendar_list if cal.get('primary')), calendar_list[0])
                 selected_calendars = [primary_cal['id']]
@@ -672,6 +694,10 @@ class SettingsWindow(BaseDialog):
             self.temp_settings["all_day_notification_time"] = self.all_day_notification_time.time().toString("HH:mm")
         
         self.original_settings.clear(); self.original_settings.update(self.temp_settings)
+        
+        # 설정 저장 후 1초 후 새로고침 신호 전송
+        QTimer.singleShot(1000, self.refresh_requested.emit)
+        
         self.done(1)
         
     def get_changed_fields(self):

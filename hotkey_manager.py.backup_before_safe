@@ -1,0 +1,31 @@
+# hotkey_manager.py - TEMPORARY DISABLED FOR DEBUG
+from PyQt6.QtCore import QObject, pyqtSignal
+import logging
+
+logger = logging.getLogger(__name__)
+
+class HotkeyManager(QObject):
+    """Temporarily disabled hotkey manager for crash debugging"""
+    hotkey_triggered = pyqtSignal(str)
+
+    def __init__(self, settings):
+        super().__init__()
+        self.settings = settings
+        logger.info("HotkeyManager initialized (DISABLED FOR DEBUG)")
+
+    def register_hotkey(self, action_name, hotkey_str):
+        logger.debug(f"[DEBUG] Hotkey registration disabled: {action_name} = {hotkey_str}")
+        return True
+
+    def start_listener(self):
+        logger.info("[DEBUG] Hotkey listener disabled for crash debugging")
+
+    def stop_listener(self):
+        logger.debug("[DEBUG] Hotkey stop (already disabled)")
+
+    def cleanup(self):
+        logger.debug("[DEBUG] Hotkey cleanup (already disabled)")
+
+    def register_and_start(self):
+        logger.info("[DEBUG] Hotkey register_and_start disabled for crash debugging")
+        return True

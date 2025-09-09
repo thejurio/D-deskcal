@@ -1,6 +1,7 @@
 import datetime
 import threading
 import logging
+import json
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -9,6 +10,22 @@ logger = logging.getLogger(__name__)
 
 from providers.base_provider import BaseCalendarProvider
 from config import (GOOGLE_CALENDAR_PROVIDER_NAME)
+
+def _convert_datetime_objects(obj):
+    """
+    재귀적으로 datetime 객체를 ISO 문자열로 변환
+    Google API가 내부적으로 JSON 직렬화 시 datetime 객체를 처리하지 못하는 문제 해결
+    """
+    if isinstance(obj, dict):
+        return {key: _convert_datetime_objects(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_datetime_objects(item) for item in obj]
+    elif isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    elif isinstance(obj, datetime.time):
+        return obj.isoformat()
+    else:
+        return obj
 
 class GoogleCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, auth_manager):
@@ -154,10 +171,13 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 else: print(error_message)
                 return None
 
+            # datetime 객체를 ISO 문자열로 변환 (Google API JSON 직렬화 오류 방지)
+            cleaned_event_body = _convert_datetime_objects(event_body)
+            
             updated_event = service.events().update(
                 calendarId=calendar_id, 
                 eventId=event_id, 
-                body=event_body
+                body=cleaned_event_body
             ).execute()
             
             updated_event['calendarId'] = calendar_id
@@ -343,6 +363,9 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         
         for field in google_specific_fields:
             cleaned_event.pop(field, None)
+        
+        # datetime 객체를 ISO 문자열로 변환 (Google API JSON 직렬화 오류 방지)
+        cleaned_event = _convert_datetime_objects(cleaned_event)
         
         print(f"[CLEAN] Google Calendar용 이벤트 정리 완료: {cleaned_event.get('summary', 'No Title')}")
         

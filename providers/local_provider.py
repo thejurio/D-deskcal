@@ -3,6 +3,7 @@
 import sqlite3
 import json
 import datetime
+import logging
 from dateutil.rrule import rrulestr
 from datetime import timezone
 
@@ -10,6 +11,25 @@ from .base_provider import BaseCalendarProvider
 from config import (LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_LOCAL_CALENDAR_COLOR)
 from db_manager import get_db_manager
+
+logger = logging.getLogger(__name__)
+
+def safe_json_dumps(obj):
+    """Safely convert objects to JSON, handling datetime objects"""
+    def json_serializer(obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        elif isinstance(obj, datetime.time):
+            return obj.isoformat()
+        elif hasattr(obj, 'zone') and hasattr(obj.zone, 'zone'):  # Handle timezone info
+            return str(obj)
+        raise TypeError(f"Object {obj} of type {type(obj)} is not JSON serializable")
+    
+    try:
+        return json.dumps(obj, default=json_serializer, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"JSON 직렬화 실패: {e}, object: {type(obj)}")
+        return json.dumps({"error": "serialization_failed", "type": str(type(obj))})
 
 class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, db_connection=None):
@@ -114,7 +134,7 @@ class LocalCalendarProvider(BaseCalendarProvider):
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("INSERT OR REPLACE INTO local_events (id, start_date, end_date, rrule, event_json) VALUES (?, ?, ?, ?, ?)",
-                               (event_id, start_date, end_date, rrule_str, json.dumps(body)))
+                               (event_id, start_date, end_date, rrule_str, safe_json_dumps(body)))
                 conn.commit()
             return body
         except (sqlite3.Error, KeyError) as e:

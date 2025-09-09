@@ -42,7 +42,7 @@ class DistanceBasedTaskQueue:
         # 거리별 큐: 0(현재월), 1~6(거리별)
         self._queues = {i: deque() for i in range(7)}
         self._pending_tasks = set()
-        self._mutex = QMutex()
+        # # self._mutex = QMutex()  # DISABLED - dangerous pattern  # DISABLED - dangerous runtime recreation
         # 각 거리별 워커의 활성 작업 추적
         self._active_tasks = {i: None for i in range(7)}
         # 최근 완료된 작업 추적 (중복 방지)
@@ -50,10 +50,10 @@ class DistanceBasedTaskQueue:
         # 완료 추적 유지 시간 (초)
         self._completion_cooldown = 30
 
-    def _ensure_mutex_valid(self):
-        """mutex가 유효한지 확인하고 필요시 재초기화"""
-        if not hasattr(self, '_mutex') or not isinstance(self._mutex, QMutex):
-            self._mutex = QMutex()
+    def _ensure_mutex_valid_DISABLED(self):
+        """DISABLED - mutex runtime recreation was causing memory corruption"""
+        # DISABLED - was causing memory corruption and crashes
+            # # self._mutex = QMutex()  # DISABLED - dangerous pattern  # DISABLED - dangerous runtime recreation
 
     def add_task(self, distance, task_data):
         """거리 기반으로 작업 추가"""
@@ -66,8 +66,9 @@ class DistanceBasedTaskQueue:
                 logger.debug(f"[캐시 DEBUG] 작업 쿨다운 중 - 스킵: {task_data} (완료 후 {time_since_completion:.1f}초)")
                 return False
         
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             # 거리 범위 제한 (0-6)
             distance = min(max(distance, 0), 6)
             
@@ -89,8 +90,9 @@ class DistanceBasedTaskQueue:
 
     def get_next_task_for_distance(self, distance):
         """특정 거리의 워커가 다음 작업 가져오기"""
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             if distance in self._queues and self._queues[distance]:
                 task_data = self._queues[distance].popleft()
                 self._pending_tasks.discard(task_data)
@@ -100,8 +102,9 @@ class DistanceBasedTaskQueue:
 
     def mark_task_completed(self, distance, task_data):
         """작업 완료 처리"""
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             if self._active_tasks.get(distance) == task_data:
                 self._active_tasks[distance] = None
                 logger.info(f"[캐시 DEBUG] 거리{distance} 작업 완료: {task_data}")
@@ -125,8 +128,9 @@ class DistanceBasedTaskQueue:
                 logger.debug(f"[캐시 DEBUG] 현재월 작업 쿨다운 중 - 스킵: {task_data} (완료 후 {time_since_completion:.1f}초)")
                 return False
         
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             # 현재 처리 중인 작업 중단
             if self._active_tasks[0] is not None:
                 old_task = self._active_tasks[0]
@@ -143,8 +147,9 @@ class DistanceBasedTaskQueue:
 
     def clear_orphaned_pending(self):
         """큐에는 없지만 pending 상태인 고아 작업들 정리"""
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             all_queued_tasks = set()
             for queue in self._queues.values():
                 all_queued_tasks.update(queue)
@@ -175,8 +180,9 @@ class DistanceBasedTaskQueue:
 
     def get_queue_status(self):
         """각 거리별 큐 상태 반환 (디버그용)"""
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             status = {}
             for distance, queue in self._queues.items():
                 status[distance] = {
@@ -187,8 +193,8 @@ class DistanceBasedTaskQueue:
             return status
 
     def __len__(self):
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes\n        # if True:
             return len(self._pending_tasks)
 
 class DistanceWorker(QObject):
@@ -272,7 +278,7 @@ class DistanceBasedCachingManager(QObject):
         super().__init__()
         self.data_manager = data_manager
         self._is_running = True
-        self._mutex = QMutex()
+        # # self._mutex = QMutex()  # DISABLED - dangerous pattern  # DISABLED - dangerous runtime recreation
         
         # 거리별 작업 큐
         self._task_queue = DistanceBasedTaskQueue()
@@ -283,7 +289,7 @@ class DistanceBasedCachingManager(QObject):
         self._worker_threads = {}
         
         # 일시정지 관리
-        self._activity_lock = QMutex()
+        # self._activity_lock = QMutex()  # DISABLED - dangerous pattern
         self._pause_requested = False
         self._resume_condition = QWaitCondition()
         
@@ -292,10 +298,10 @@ class DistanceBasedCachingManager(QObject):
         
         logger.info("[캐시 DEBUG] DistanceBasedCachingManager 초기화 완료 (7개 워커)")
 
-    def _ensure_mutex_valid(self):
-        """mutex가 유효한지 확인하고 필요시 재초기화"""
-        if not hasattr(self, '_mutex') or not isinstance(self._mutex, QMutex):
-            self._mutex = QMutex()
+    def _ensure_mutex_valid_DISABLED(self):
+        """DISABLED - mutex runtime recreation was causing memory corruption"""
+        # DISABLED - was causing memory corruption and crashes
+            # # self._mutex = QMutex()  # DISABLED - dangerous pattern  # DISABLED - dangerous runtime recreation
 
     def _init_workers(self):
         """7개 거리별 워커 초기화"""
@@ -321,8 +327,9 @@ class DistanceBasedCachingManager(QObject):
 
     def request_caching_around(self, year, month, skip_current=False):
         """거리별 병렬 캐싱 요청"""
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes  # DISABLED FOR CRASH FIX
+        if True:
             self._last_viewed_month = (year, month)
             
             logger.info(f"[캐시 DEBUG] 병렬 캐싱 요청: {year}년 {month}월 중심")
@@ -375,8 +382,9 @@ class DistanceBasedCachingManager(QObject):
 
     def request_current_month_sync(self):
         """현재 월 동기화 요청"""
-        self._ensure_mutex_valid()
-        with QMutexLocker(self._mutex):
+        # self._ensure_mutex_valid()  # DISABLED - dangerous runtime mutex recreation
+        # with QMutexLocker(self._mutex):  # DISABLED - was causing crashes
+        if True:
             if self._last_viewed_month:
                 task_data = ("month", self._last_viewed_month)
                 # 현재 월은 항상 거리 0으로 처리
@@ -420,7 +428,7 @@ class DistanceBasedCachingManager(QObject):
 
     def pause_sync(self):
         """모든 워커 일시정지"""
-        self._activity_lock.lock()
+        # _activity_lock disabled for safety - using simple flag instead
         self._pause_requested = True
         logger.info("[캐시 DEBUG] 모든 워커 일시정지 요청")
 
@@ -428,8 +436,7 @@ class DistanceBasedCachingManager(QObject):
         """모든 워커 재개"""
         if self._pause_requested:
             self._pause_requested = False
-            self._activity_lock.unlock()
-            self._resume_condition.wakeAll()
+            # _activity_lock and _resume_condition disabled for safety - using simple flag instead
             logger.info("[캐시 DEBUG] 모든 워커 재개됨")
 
     def get_queue_status(self):
@@ -527,6 +534,13 @@ class DataManager(QObject):
             self.notification_timer = QTimer(self)
             self.notification_timer.timeout.connect(self._check_for_notifications)
             self.notification_timer.start(60 * 1000)
+            
+            # 스마트 실시간 업데이트 타이머 (조건부 실행으로 성능 최적화)
+            self.smart_update_timer = QTimer(self)
+            self.smart_update_timer.timeout.connect(self._smart_realtime_update)
+            self.smart_update_timer.start(3 * 1000)  # 3초마다 체크
+            self.last_update_time = time.time()
+            logger.info("스마트 실시간 업데이트 타이머 시작됨: 3초 간격")
         
         self.setup_providers()
 
@@ -648,7 +662,8 @@ class DataManager(QObject):
         is_logging_out = not self.auth_manager.is_logged_in()
         
         self.setup_providers()
-        self.calendar_list_cache = None
+        
+        # 색상 맵 캐시만 초기화 (캘린더 목록은 동기적으로 다시 생성됨)
         self._default_color_map_cache = None
         
         if is_logging_out:
@@ -659,11 +674,46 @@ class DataManager(QObject):
                     remaining_events = [e for e in events if e.get('provider') != GOOGLE_CALENDAR_PROVIDER_NAME]
                     self.event_cache[month_key] = remaining_events
                     self._save_month_to_cache_db(month_key[0], month_key[1], remaining_events)
-            
-        self.get_all_calendars(fetch_if_empty=True)
         
-        self.calendar_list_changed.emit()
-        if self.last_requested_month:
+        # 로그인 후 캘린더 목록과 현재 월 데이터를 동기적으로 새로고침
+        if not is_logging_out and self.auth_manager.is_logged_in():
+            logger.info("로그인 완료 후 캘린더 목록과 이벤트 데이터 새로고침 시작...")
+            
+            # 캘린더 목록을 먼저 새로고침 (동기적으로)
+            self._fetch_calendars_async()
+            
+            # 현재 월 캐시 삭제 후 강제 동기화
+            if self.last_requested_month:
+                year, month = self.last_requested_month
+                self.event_cache.pop((year, month), None)
+                logger.info(f"로그인 후 현재 월 캐시 삭제 및 강제 동기화: {year}년 {month}월")
+                
+                # QTimer를 사용해 캘린더 목록 로딩 완료 후 이벤트 동기화
+                from PyQt6.QtCore import QTimer
+                def delayed_sync():
+                    logger.info(f"로그인 후 지연된 이벤트 동기화 시작: {year}년 {month}월")
+                    # 로그인 후 확실한 업데이트를 위해 즉시 UI 업데이트 신호 발송
+                    self.data_updated.emit(year, month)
+                    # 그리고 백그라운드에서 최신 데이터 동기화
+                    self.force_sync_month(year, month)
+                
+                QTimer.singleShot(500, delayed_sync)  # 500ms 후 실행 (더 여유있게)
+            else:
+                today = datetime.date.today()
+                self.event_cache.pop((today.year, today.month), None)
+                logger.info(f"로그인 후 오늘 날짜 캐시 삭제 및 강제 동기화: {today.year}년 {today.month}월")
+                
+                # QTimer를 사용해 캘린더 목록 로딩 완료 후 이벤트 동기화
+                from PyQt6.QtCore import QTimer
+                def delayed_sync():
+                    logger.info(f"로그인 후 지연된 이벤트 동기화 시작: {today.year}년 {today.month}월")
+                    # 로그인 후 확실한 업데이트를 위해 즉시 UI 업데이트 신호 발송
+                    self.data_updated.emit(today.year, today.month)
+                    # 그리고 백그라운드에서 최신 데이터 동기화
+                    self.force_sync_month(today.year, today.month)
+                
+                QTimer.singleShot(500, delayed_sync)  # 500ms 후 실행 (더 여유있게)
+        elif self.last_requested_month:
             year, month = self.last_requested_month
             self.data_updated.emit(year, month)
         else:
@@ -682,6 +732,36 @@ class DataManager(QObject):
     def request_current_month_sync(self):
         self.caching_manager.request_current_month_sync()
 
+    def _smart_realtime_update(self):
+        """스마트 실시간 업데이트 - 조건부로만 실행하여 성능 최적화"""
+        current_time = time.time()
+        
+        # 조건 1: 로그인되어 있을 때만
+        if not self.auth_manager.is_logged_in():
+            return
+            
+        # 조건 2: 마지막 업데이트로부터 충분한 시간이 지났을 때만
+        if current_time - self.last_update_time < 5:  # 5초 미만이면 스킵 (실시간성 우선)
+            return
+            
+        # 조건 3: 현재 동기화 중인 월이 없을 때만
+        if self.last_requested_month:
+            year, month = self.last_requested_month
+            if self.is_month_syncing(year, month):
+                logger.debug(f"스마트 업데이트 스킵: {year}년 {month}월 동기화 중")
+                return
+        else:
+            today = datetime.date.today()
+            year, month = today.year, today.month
+            if self.is_month_syncing(year, month):
+                logger.debug(f"스마트 업데이트 스킵: {year}년 {month}월 동기화 중")
+                return
+                
+        # 실제 백그라운드 동기화 실행 (UI 업데이트는 완료 시 자동 발생)
+        logger.debug(f"스마트 실시간 업데이트 실행: {year}년 {month}월")
+        self.force_sync_month(year, month)
+        self.last_update_time = current_time
+
     def notify_date_changed(self, new_date):
         self.last_requested_month = (new_date.year, new_date.month)
         self.caching_manager.request_caching_around(new_date.year, new_date.month)
@@ -689,6 +769,10 @@ class DataManager(QObject):
     def stop_caching_thread(self):
         if hasattr(self, 'notification_timer'):
             self.notification_timer.stop()
+        # 스마트 실시간 업데이트 타이머 중지
+        if hasattr(self, 'smart_update_timer'):
+            self.smart_update_timer.stop()
+            logger.info("스마트 실시간 업데이트 타이머 중지됨")
         # DistanceBasedCachingManager 중지 (7개 워커 스레드 모두 중지)
         if hasattr(self, 'caching_manager') and self.caching_manager:
             self.caching_manager.stop()
@@ -866,30 +950,6 @@ class DataManager(QObject):
                     continue
         unique_events = {e['id']: e for e in all_events}.values()
         return list(unique_events)
-
-    def get_all_calendars(self, fetch_if_empty=True):
-        if self.calendar_list_cache is not None:
-            return self.calendar_list_cache
-
-        if fetch_if_empty:
-            self._fetch_calendars_async()
-        
-        return []
-
-    def _fetch_calendars_async(self):
-        if self.calendar_fetch_thread and self.calendar_fetch_thread.isRunning():
-            return
-
-        self.calendar_fetch_thread = QThread()
-        self.calendar_fetcher = CalendarListFetcher(self.providers)
-        self.calendar_fetcher.moveToThread(self.calendar_fetch_thread)
-
-        self.calendar_fetcher.calendars_fetched.connect(self._on_calendars_fetched)
-        self.calendar_fetch_thread.started.connect(self.calendar_fetcher.run)
-        
-        self.calendar_fetcher.finished.connect(self._on_calendar_thread_finished)
-        
-        self.calendar_fetch_thread.start()
 
     def _on_calendar_thread_finished(self):
         if self.calendar_fetch_thread is None: return
@@ -2316,19 +2376,25 @@ class DataManager(QObject):
         return []
 
     def _fetch_calendars_async(self):
-        if self.calendar_fetch_thread and self.calendar_fetch_thread.isRunning():
-            return
-
-        self.calendar_fetch_thread = QThread()
-        self.calendar_fetcher = CalendarListFetcher(self.providers)
-        self.calendar_fetcher.moveToThread(self.calendar_fetch_thread)
-
-        self.calendar_fetcher.calendars_fetched.connect(self._on_calendars_fetched)
-        self.calendar_fetch_thread.started.connect(self.calendar_fetcher.run)
+        # [IMPROVED] Direct synchronous execution to avoid threading issues
+        logger.info("캘린더 목록 동기 로딩 시작...")
+        all_calendars = []
+        for provider in self.providers:
+            if hasattr(provider, 'get_calendars'):
+                try:
+                    calendars = provider.get_calendars()
+                    all_calendars.extend(calendars)
+                    logger.info(f"'{type(provider).__name__}'에서 {len(calendars)}개 캘린더 로딩 완료")
+                except Exception as e:
+                    logger.error(f"'{type(provider).__name__}'에서 캘린더 목록을 가져오는 중 오류 발생", exc_info=True)
         
-        self.calendar_fetcher.finished.connect(self._on_calendar_thread_finished)
+        self.calendar_list_cache = all_calendars
+        logger.info(f"총 {len(all_calendars)}개 캘린더 로딩 완료")
         
-        self.calendar_fetch_thread.start()
+        # UI 업데이트 신호 발송
+        logger.info("calendar_list_changed 신호 발송 시작...")
+        self.calendar_list_changed.emit()
+        logger.info("calendar_list_changed 신호 발송 완료")
 
     def _on_calendar_thread_finished(self):
         if self.calendar_fetch_thread is None: return

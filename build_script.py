@@ -17,6 +17,66 @@ def get_version():
     except FileNotFoundError:
         return "1.0.0"
 
+def parse_version(version_str):
+    """Parse version string to tuple (major, minor, patch, build)"""
+    parts = version_str.split('.')
+    while len(parts) < 4:
+        parts.append('0')
+    return tuple(int(p) for p in parts[:4])
+
+def create_version_info(version):
+    """Create version_info.txt file with current version"""
+    version_tuple = parse_version(version)
+    version_with_build = f"{version}.0" if version.count('.') == 2 else version
+    
+    version_info_content = f'''# UTF-8
+#
+# For more details about fixed file info 'ffi' see:
+# http://msdn.microsoft.com/en-us/library/ms646997.aspx
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # filevers and prodvers should be always a tuple with four items: (1, 2, 3, 4)
+    # Set not needed items to zero 0.
+    filevers={version_tuple},
+    prodvers={version_tuple},
+    # Contains a bitmask that specifies the valid bits 'flags'r
+    mask=0x3f,
+    # Contains a bitmask that specifies the Boolean attributes of the file.
+    flags=0x0,
+    # The operating system for which this file was designed.
+    # 0x4 - NT and there is no need to change it.
+    OS=0x4,
+    # The general type of file.
+    # 0x1 - the file is an application.
+    fileType=0x1,
+    # The function of the file.
+    # 0x0 - the function is not defined for this fileType
+    subtype=0x0,
+    # Creation date and time stamp.
+    date=(0, 0)
+    ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'DeskCal Team'),
+        StringStruct(u'FileDescription', u'DeskCal - Desktop Calendar Widget'),
+        StringStruct(u'FileVersion', u'{version_with_build}'),
+        StringStruct(u'InternalName', u'D-deskcal'),
+        StringStruct(u'LegalCopyright', u'Copyright (c) 2024 DeskCal Team'),
+        StringStruct(u'OriginalFilename', u'D-deskcal.exe'),
+        StringStruct(u'ProductName', u'DeskCal'),
+        StringStruct(u'ProductVersion', u'{version_with_build}')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)'''
+    
+    with open('version_info.txt', 'w', encoding='utf-8') as f:
+        f.write(version_info_content)
+    print(f"Created version_info.txt with version {version_with_build}")
+
 def clean_build():
     """Clean previous build artifacts"""
     dirs_to_clean = ['build', 'dist']
@@ -28,6 +88,7 @@ def clean_build():
 def create_spec_file():
     """Create PyInstaller spec file with proper configuration"""
     version = get_version()
+    create_version_info(version)  # Create version info file
     
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 
@@ -93,14 +154,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='icons/tray_icon.ico',  # Application icon
-    version_info={{
-        'version': (1, 0, 0, 0),
-        'file_description': 'D-deskcal - Desktop Calendar Widget',
-        'product_name': 'D-deskcal',
-        'product_version': '{version}',
-        'company_name': 'thejurio',
-        'copyright': '© 2024 thejurio',
-    }}
+    version='version_info.txt',  # Use version info file
 )
 
 coll = COLLECT(

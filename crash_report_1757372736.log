@@ -1,0 +1,15 @@
+
+================== CRASH DETECTED ==================
+Time: 2025-09-09 08:05:36
+Runtime: 15.52 seconds
+Exception Type: AttributeError
+Exception Value: 'DataManager' object has no attribute 'get_monthly_events'
+
+Traceback:
+Traceback (most recent call last):
+  File "C:\dcwidget\data_manager.py", line 683, in on_auth_state_changed
+    events = self.get_monthly_events(year, month, force_refresh=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DataManager' object has no attribute 'get_monthly_events'
+
+================== END CRASH INFO ==================

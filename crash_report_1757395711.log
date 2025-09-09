@@ -1,0 +1,15 @@
+
+================== CRASH DETECTED ==================
+Time: 2025-09-09 14:28:31
+Runtime: 40.64 seconds
+Exception Type: AttributeError
+Exception Value: 'HotkeyManager' object has no attribute 'stop_listener'
+
+Traceback:
+Traceback (most recent call last):
+  File "c:\dcwidget\ui_main.py", line 585, in quit_application
+    self.hotkey_manager.stop_listener()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'HotkeyManager' object has no attribute 'stop_listener'
+
+================== END CRASH INFO ==================

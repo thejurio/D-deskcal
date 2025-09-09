@@ -7,6 +7,9 @@ import time
 import psutil
 import socket
 
+# Crash detection system
+from crash_detector import crash_detector
+
 # 로깅 설정 초기화
 from logger_config import setup_logger
 setup_logger()
@@ -501,7 +504,7 @@ class MainWidget(QWidget):
         self.data_manager.event_completion_changed.connect(self.month_view.refresh)
         self.data_manager.event_completion_changed.connect(self.week_view.refresh)
         self.data_manager.event_completion_changed.connect(self.agenda_view.refresh)
-
+        
         self.stacked_widget.addWidget(self.month_view)
         self.stacked_widget.addWidget(self.week_view)
         self.stacked_widget.addWidget(self.agenda_view)
@@ -684,7 +687,8 @@ class MainWidget(QWidget):
         if self.active_dialog is not None:
             self.active_dialog.activateWindow()
             return
-        with self.data_manager.user_action_priority():
+        # with self.data_manager.user_action_priority():  # DISABLED - mutex fixes removed _activity_lock
+        if True:
             original_settings_snapshot = copy.deepcopy(self.settings)
 
             settings_dialog = SettingsWindow(self.data_manager, self.settings, None, pos=self._get_dialog_pos())
@@ -692,6 +696,7 @@ class MainWidget(QWidget):
 
             settings_dialog.transparency_changed.connect(self.on_opacity_preview_changed)
             settings_dialog.theme_changed.connect(self.on_theme_preview_changed)
+            settings_dialog.refresh_requested.connect(lambda: self.data_manager.force_sync_month(self.current_date.year, self.current_date.month))
 
             result = settings_dialog.exec()
             self.active_dialog = None
@@ -841,7 +846,8 @@ class MainWidget(QWidget):
             self.show_error_message(f"AI 분석 중 오류가 발생했습니다:\n{e}")
 
     def open_search_dialog(self):
-        with self.data_manager.user_action_priority():
+        # with self.data_manager.user_action_priority():  # DISABLED - mutex fixes removed _activity_lock
+        if True:
             dialog = SearchDialog(self.data_manager, self, self.settings, pos=self._get_dialog_pos())
             dialog.event_selected.connect(self.go_to_event)
             dialog.exec()
@@ -1001,7 +1007,7 @@ class MainWidget(QWidget):
                 event_data=event_data,
                 data_manager=self.data_manager,
                 main_widget=self,
-                parent=self
+                parent=None  # Fix segfault by using None parent
             )
             
             # 다이얼로그 표시 (편집은 다이얼로그 내부에서 자체적으로 처리)
@@ -1155,11 +1161,15 @@ class MainWidget(QWidget):
     
 
 if __name__ == '__main__':
+    # Install crash detection system
+    crash_detector.install_handlers()
+    
     # Single instance check
     single_instance = SingleInstanceApp()
     
     if single_instance.is_already_running():
         print("DCWidget is already running. Exiting...")
+        crash_detector.shutdown()
         sys.exit(0)
     
     logging.basicConfig(
@@ -1189,8 +1199,15 @@ if __name__ == '__main__':
     widget.show()
     widget.start()
     
+    # Setup heartbeat timer for crash detection
+    from PyQt6.QtCore import QTimer
+    heartbeat_timer = QTimer()
+    heartbeat_timer.timeout.connect(crash_detector.heartbeat)
+    heartbeat_timer.start(5000)  # Every 5 seconds
+    
     # Cleanup single instance lock on exit
     import atexit
     atexit.register(single_instance.cleanup)
+    atexit.register(crash_detector.shutdown)
     
     sys.exit(app.exec())
