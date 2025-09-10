@@ -168,7 +168,11 @@ class MainWidget(QWidget):
                 self.unlock_interactions()
             return
 
-        lock_key = self.settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY).lower()
+        # 설정창에서 설정한 잠금해제 키 사용 (unlock_key), 없으면 기본값 사용
+        lock_key = self.settings.get("unlock_key", "").strip()
+        if not lock_key:
+            lock_key = self.settings.get("lock_mode_key", DEFAULT_LOCK_MODE_KEY)
+        lock_key = lock_key.lower()
         is_pressed = keyboard.is_pressed(lock_key)
 
         if is_pressed and not self.lock_key_is_pressed:
@@ -178,6 +182,18 @@ class MainWidget(QWidget):
             self.lock_key_is_pressed = False
             if QApplication.instance().mouseButtons() == Qt.MouseButton.NoButton:
                 self.lock_interactions()
+
+    def reload_hotkeys(self):
+        """설정 변경 후 핫키를 다시 로드합니다"""
+        try:
+            logger.info("설정 변경으로 인한 핫키 매니저 새로고침 중...")
+            self.hotkey_manager.stop()
+            self.hotkey_manager = HotkeyManager(self.settings)
+            self.hotkey_manager.hotkey_triggered.connect(self.handle_hotkey)
+            self.hotkey_manager.register_and_start()
+            logger.info("핫키 매니저 새로고침 완료")
+        except Exception as e:
+            logger.error(f"핫키 매니저 새로고침 실패: {e}")
 
     def handle_hotkey(self, action_name):
         if action_name == "ai_add_event":
@@ -696,7 +712,10 @@ class MainWidget(QWidget):
 
             settings_dialog.transparency_changed.connect(self.on_opacity_preview_changed)
             settings_dialog.theme_changed.connect(self.on_theme_preview_changed)
-            settings_dialog.refresh_requested.connect(lambda: self.data_manager.force_sync_month(self.current_date.year, self.current_date.month))
+            settings_dialog.refresh_requested.connect(lambda: [
+                self.data_manager.force_sync_month(self.current_date.year, self.current_date.month),
+                self.reload_hotkeys()
+            ])
 
             result = settings_dialog.exec()
             self.active_dialog = None
