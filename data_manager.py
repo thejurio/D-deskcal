@@ -23,6 +23,23 @@ from config import (DB_FILE, MAX_CACHE_SIZE, DEFAULT_SYNC_INTERVAL,
 
 logger = logging.getLogger(__name__)
 
+def safe_json_dumps(obj):
+    """Safely convert objects to JSON, handling datetime objects"""
+    def json_serializer(obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        elif isinstance(obj, datetime.time):
+            return obj.isoformat()
+        elif hasattr(obj, 'zone') and hasattr(obj.zone, 'zone'):  # Handle timezone info
+            return str(obj)
+        raise TypeError(f"Object {obj} of type {type(obj)} is not JSON serializable")
+    
+    try:
+        return json.dumps(obj, default=json_serializer, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"JSON 직렬화 실패: {e}, object: {type(obj)}")
+        return json.dumps({"error": "serialization_failed", "type": str(type(obj))})
+
 def get_month_view_dates(year, month, start_day_of_week):
     """월간 뷰에 표시될 모든 날짜(이전/현재/다음 달 포함)의 시작일과 종료일을 반환합니다."""
     first_day_of_month = datetime.date(year, month, 1)
@@ -810,7 +827,7 @@ class DataManager(QObject):
             
             with db_manager.get_cache_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT OR REPLACE INTO event_cache (year, month, events_json, cached_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)", (year, month, json.dumps(events)))
+                cursor.execute("INSERT OR REPLACE INTO event_cache (year, month, events_json, cached_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)", (year, month, safe_json_dumps(events)))
                 conn.commit()
             
             # 캐시 저장 후 자동 정리 수행 (백그라운드)
