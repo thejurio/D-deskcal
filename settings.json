@@ -1,10 +1,16 @@
 {
     "user_timezone": "Asia/Seoul",
     "selected_calendars": [
+        "thejurio@g.jbedu.kr",
         "ko.south_korea#holiday@group.v.calendar.google.com",
-        "thejurio@gmail.com",
-        "family01556510902891015712@group.calendar.google.com",
-        "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com",
+        "c_be9b8415154ab44d0c2c76c580d73951d89e8c1cd76c044f9b4e3b287c056f02@group.calendar.google.com",
+        "c_7458e64baade9ddd9f0e356881b734e3d4ecada1eaa4acb5a30bceee2a43731b@group.calendar.google.com",
+        "c_4d71e116c57daca8ee99818748d5e94f768fb87685e5c271346ad95d332a128a@group.calendar.google.com",
+        "c_d6b77747af224af450c948ba9fcce33e5ccb7d103a05a873840655242cdbb61f@group.calendar.google.com",
+        "c_25f0958f9973f17e1d113ffdc6523f1510107b5e9f36ae94c4e79afdde2fbb45@group.calendar.google.com",
+        "c_7fa347abd70c2d4d96120b36feb4b78c12335b201a6136178197773e52c11d87@group.calendar.google.com",
+        "c_4abe852381cef73433fd28776b0f806967846647a55e10ee20c02e03fbf73a74@group.calendar.google.com",
+        "c_f5d9b51118010fb0ab7e95d0868e468df8c6ebba93f724e245df498b78125a8c@group.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
@@ -12,13 +18,22 @@
         "thejurio@gmail.com": "#44546A",
         "ko.south_korea#holiday@group.v.calendar.google.com": "#D24726",
         "4e5or24hlc7n3p5de6nkvhudj0@group.calendar.google.com": "#E36C09",
-        "local_calendar": "#70AD47"
+        "local_calendar": "#70AD47",
+        "thejurio@g.jbedu.kr": "#9fe1e7",
+        "c_be9b8415154ab44d0c2c76c580d73951d89e8c1cd76c044f9b4e3b287c056f02@group.calendar.google.com": "#9fc6e7",
+        "c_7458e64baade9ddd9f0e356881b734e3d4ecada1eaa4acb5a30bceee2a43731b@group.calendar.google.com": "#cca6ac",
+        "c_4d71e116c57daca8ee99818748d5e94f768fb87685e5c271346ad95d332a128a@group.calendar.google.com": "#4986e7",
+        "c_d6b77747af224af450c948ba9fcce33e5ccb7d103a05a873840655242cdbb61f@group.calendar.google.com": "#c2c2c2",
+        "c_25f0958f9973f17e1d113ffdc6523f1510107b5e9f36ae94c4e79afdde2fbb45@group.calendar.google.com": "#c2c2c2",
+        "c_7fa347abd70c2d4d96120b36feb4b78c12335b201a6136178197773e52c11d87@group.calendar.google.com": "#cca6ac",
+        "c_4abe852381cef73433fd28776b0f806967846647a55e10ee20c02e03fbf73a74@group.calendar.google.com": "#ffad46",
+        "c_f5d9b51118010fb0ab7e95d0868e468df8c6ebba93f724e245df498b78125a8c@group.calendar.google.com": "#b99aff"
     },
     "sync_interval_minutes": 5,
     "start_day_of_week": 6,
     "hide_weekends": false,
-    "window_opacity": 1.0,
-    "theme": "light",
+    "window_opacity": 0.82,
+    "theme": "dark",
     "lock_mode_enabled": false,
     "start_on_boot": false,
     "notifications_enabled": true,
@@ -27,27 +42,27 @@
     "all_day_notification_enabled": true,
     "all_day_notification_time": "09:00",
     "geometry": [
-        1280,
+        858,
         0,
-        639,
-        772
+        1061,
+        1003
     ],
-    "gemini_api_key": "AIzaSyBNGWOIvVTTYP4GLroRNN9gFMduWiZhsFs",
+    "gemini_api_key": "",
     "last_selected_calendar_id": "local_calendar",
     "unlock_key": "control",
-    "ai_add_event_hotkey": "Ctrl + K",
+    "ai_add_event_hotkey": "Ctrl + G",
     "dialog_positions": {
         "EventEditorWindow": {
-            "x": 726,
-            "y": 208
+            "x": 725,
+            "y": 209
         },
         "RecurrenceRuleDialog": {
             "x": 751,
             "y": 272
         },
         "CustomMessageBox": {
-            "x": 1262,
-            "y": 229
+            "x": 750,
+            "y": 368
         },
         "NewDateSelectionDialog": {
             "x": 790,
@@ -58,23 +73,23 @@
             "y": 225
         },
         "SimpleEventDetailDialog": {
-            "x": 1272,
-            "y": 86
+            "x": 1392,
+            "y": 129
         },
         "WeekSelectionDialog": {
             "x": 1331,
             "y": 292
         },
         "SettingsWindow": {
-            "x": 644,
-            "y": 168
+            "x": 1203,
+            "y": 141
         },
         "NoUpdateDialog": {
             "x": 760,
             "y": 338
         },
         "AIEventInputDialog": {
-            "x": 725,
+            "x": 727,
             "y": 326
         },
         "SearchDialog": {
@@ -82,8 +97,20 @@
             "y": 96
         },
         "HotkeyInputDialog": {
-            "x": 760,
-            "y": 348
+            "x": 1319,
+            "y": 321
+        },
+        "MoreEventsDialog": {
+            "x": 800,
+            "y": 401
+        },
+        "APIKeyInputDialog": {
+            "x": 1295,
+            "y": 336
+        },
+        "APIKeyRequiredDialog": {
+            "x": 1270,
+            "y": 92
         }
     }
 }

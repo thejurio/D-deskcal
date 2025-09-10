@@ -1,0 +1,14 @@
+
+================== SIGNAL DETECTED ==================
+Time: 2025-09-09 19:17:48
+Runtime: 336.65 seconds
+Signal: 2
+Frame: <frame at 0x0000016EA6600DC0, file 'c:\\dcwidget\\ui_main.py', line 161, code check_lock_status>
+
+Stack trace:
+  File "c:\dcwidget\ui_main.py", line 1261, in <module>
+    sys.exit(app.exec())
+  File "c:\dcwidget\ui_main.py", line 161, in check_lock_status
+    def check_lock_status(self):
+
+================== END SIGNAL INFO ==================

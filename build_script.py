@@ -19,10 +19,13 @@ def get_version():
 
 def parse_version(version_str):
     """Parse version string to tuple (major, minor, patch, build)"""
-    parts = version_str.split('.')
+    import re
+    # Remove any non-numeric suffixes (like 'b', 'a', 'rc')
+    clean_version = re.sub(r'[a-zA-Z]+', '', version_str)
+    parts = clean_version.split('.')
     while len(parts) < 4:
         parts.append('0')
-    return tuple(int(p) for p in parts[:4])
+    return tuple(int(p) if p else 0 for p in parts[:4])
 
 def create_version_info(version):
     """Create version_info.txt file with current version"""
@@ -140,6 +143,23 @@ a = Analysis(
         # SSL certificate support
         'certifi',
         'ssl',
+        # Keyboard library Windows dependencies
+        'win32api',
+        'win32con',
+        'win32gui',
+        'win32process',
+        'winsound',
+        'ctypes',
+        'ctypes.wintypes',
+        '_ctypes',
+        'time',
+        'collections',
+        'queue',
+        'json',
+        'string',
+        'functools',
+        'itertools',
+        'enum',
     ],
     hookspath=[],
     hooksconfig={{}},

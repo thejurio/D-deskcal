@@ -592,9 +592,17 @@ class SettingsWindow(BaseDialog):
     def update_account_status(self):
         if self.data_manager.auth_manager.is_logged_in():
             user_info = self.data_manager.auth_manager.get_user_info()
-            self.account_status_label.setText(user_info.get('email', "정보 확인 불가")); self.account_button.setText("로그아웃")
+            if user_info:
+                self.account_status_label.setText(user_info.get('email', "정보 확인 불가"))
+                self.account_button.setText("로그아웃")
+            else:
+                # 토큰이 만료되어 사용자 정보를 가져올 수 없는 경우, 자동 로그아웃
+                self.data_manager.auth_manager.logout()
+                self.account_status_label.setText("연결되지 않음")
+                self.account_button.setText("로그인")
         else:
-            self.account_status_label.setText("연결되지 않음"); self.account_button.setText("로그인")
+            self.account_status_label.setText("연결되지 않음")
+            self.account_button.setText("로그인")
 
     def handle_account_button_click(self):
         if self.data_manager.auth_manager.is_logged_in(): 

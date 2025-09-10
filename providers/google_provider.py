@@ -56,7 +56,12 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 if not service: return [] # 인증 정보가 없으면 조용히 실패
                 self._calendar_list_cache = service.calendarList().list().execute().get("items", [])
             except HttpError as e:
-                error_message = f"Google 캘린더 목록을 가져오는 중 오류가 발생했습니다: {e}"
+                # OAuth 토큰 만료/취소 오류를 사용자 친화적인 메시지로 변환
+                if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                    error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+                else:
+                    error_message = f"Google 캘린더 목록을 가져오는 중 오류가 발생했습니다: {e}"
+                
                 if data_manager:
                     data_manager.report_error(error_message)
                 else:
@@ -79,8 +84,14 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                     data_manager.report_error("Google 캘린더 목록을 가져오는 데 실패했습니다. 인터넷 연결 또는 계정 권한을 확인해주세요.")
                 return []
         except Exception as e:
+            # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+            if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+            else:
+                error_message = f"Google 캘린더 목록 조회 중 예상치 못한 오류가 발생했습니다: {e}"
+            
             if data_manager:
-                data_manager.report_error(f"Google 캘린더 목록 조회 중 예상치 못한 오류가 발생했습니다: {e}")
+                data_manager.report_error(error_message)
             return []
 
         calendar_ids = [cal['id'] for cal in calendar_list]
@@ -109,7 +120,12 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                     print(error_message)
                 continue
             except Exception as e:
-                error_message = f"'{cal_id}' 캘린더 처리 중 예상치 못한 오류: {e}"
+                # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+                if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                    error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+                else:
+                    error_message = f"'{cal_id}' 캘린더 처리 중 예상치 못한 오류: {e}"
+                
                 if data_manager:
                     data_manager.report_error(error_message)
                 else:
@@ -148,7 +164,12 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             logger.info(f"Event '{created_event.get('summary')}' added to Google Calendar")
             return created_event
         except HttpError as e:
-            error_message = f"Google Calendar 이벤트 추가 중 오류 발생: {e}"
+            # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+            if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+            else:
+                error_message = f"Google Calendar 이벤트 추가 중 오류 발생: {e}"
+            
             if data_manager: data_manager.report_error(error_message)
             else: print(error_message)
             return None
@@ -185,7 +206,12 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             print(f"Google Calendar의 '{updated_event.get('summary')}' 일정이 수정되었습니다.")
             return updated_event
         except HttpError as e:
-            error_message = f"Google Calendar 이벤트 수정 중 오류 발생: {e}"
+            # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+            if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+            else:
+                error_message = f"Google Calendar 이벤트 수정 중 오류 발생: {e}"
+            
             if data_manager: data_manager.report_error(error_message)
             else: print(error_message)
             return None
@@ -266,7 +292,13 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             print(f"DEBUG: HttpError in delete_event: {e}")
             print(f"DEBUG: Error reason: {e.reason if hasattr(e, 'reason') else 'No reason'}")
             print(f"DEBUG: Error status: {e.status_code if hasattr(e, 'status_code') else 'No status'}")
-            error_message = f"Google Calendar 이벤트 삭제 중 오류 발생: {e}"
+            
+            # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+            if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+            else:
+                error_message = f"Google Calendar 이벤트 삭제 중 오류 발생: {e}"
+                
             if data_manager: 
                 data_manager.report_error(error_message)
             else: 
@@ -276,7 +308,13 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             print(f"DEBUG: General Exception in delete_event: {e}")
             import traceback
             traceback.print_exc()
-            error_message = f"이벤트 삭제 중 예상치 못한 오류: {e}"
+            
+            # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+            if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+            else:
+                error_message = f"이벤트 삭제 중 예상치 못한 오류: {e}"
+                
             if data_manager: 
                 data_manager.report_error(error_message)
             else: 

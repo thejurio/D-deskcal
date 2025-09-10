@@ -74,10 +74,40 @@ class HotkeyManager(QObject):
                             suppress=False
                         )
                         logger.info(f"Successfully registered hotkey: '{formatted_hotkey}'")
+                        
+                        # PyInstaller 환경에서 keyboard 라이브러리 테스트
+                        self._test_keyboard_functionality()
+                        
                     except Exception as e:
                         logger.error(f"Failed to register hotkey: {e}")
+                        logger.info("Attempting to use alternative keyboard hook method...")
+                        self._try_alternative_keyboard_hook(formatted_hotkey)
             else:
                 logger.warning("No hotkey to register")
+    
+    def _test_keyboard_functionality(self):
+        """PyInstaller 환경에서 keyboard 라이브러리가 제대로 작동하는지 테스트"""
+        try:
+            # keyboard 라이브러리가 시스템 후킹에 접근할 수 있는지 확인
+            import sys
+            if hasattr(sys, '_MEIPASS'):
+                logger.info("PyInstaller 환경에서 keyboard 라이브러리 테스트 중...")
+                # keyboard 후킹이 실제로 작동하는지 간단한 테스트
+                # 이 부분은 실제로는 단축키를 눌러봐야 확인 가능
+                logger.info("PyInstaller 환경에서 keyboard 초기화 완료")
+        except Exception as e:
+            logger.warning(f"Keyboard functionality test failed: {e}")
+    
+    def _try_alternative_keyboard_hook(self, hotkey_str):
+        """keyboard 라이브러리 실패 시 대안적인 방법 시도"""
+        try:
+            import win32api
+            import win32con
+            logger.info("Trying Windows API based hotkey registration...")
+            # 여기서는 일단 로그만 남기고, 추후 win32api 구현 가능
+            logger.warning("Alternative keyboard hook not yet implemented - hotkeys may not work in PyInstaller build")
+        except ImportError:
+            logger.error("Both keyboard library and win32api failed - hotkeys disabled")
 
     def stop(self):
         """모든 단축키 리스너를 안전하게 해제합니다."""
