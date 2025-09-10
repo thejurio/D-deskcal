@@ -3,13 +3,53 @@
 import sqlite3
 import json
 import datetime
+import logging
 from dateutil.rrule import rrulestr
 from datetime import timezone
+from zoneinfo import ZoneInfo
+
+logger = logging.getLogger(__name__)
+
+def safe_json_dumps(obj):
+    """Safely convert objects to JSON, handling datetime objects"""
+    def json_serializer(obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        elif isinstance(obj, datetime.time):
+            return obj.isoformat()
+        elif isinstance(obj, ZoneInfo):
+            return str(obj)
+        raise TypeError(f"Object {obj} of type {type(obj)} is not JSON serializable")
+    
+    try:
+        return json.dumps(obj, default=json_serializer, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"JSON 직렬화 실패: {e}, object: {type(obj)}")
+        return json.dumps({"error": "serialization_failed", "type": str(type(obj))})
 
 from .base_provider import BaseCalendarProvider
 from config import (LOCAL_CALENDAR_ID, LOCAL_CALENDAR_PROVIDER_NAME,
                     DEFAULT_LOCAL_CALENDAR_COLOR)
 from db_manager import get_db_manager
+
+logger = logging.getLogger(__name__)
+
+def safe_json_dumps(obj):
+    """Safely convert objects to JSON, handling datetime objects"""
+    def json_serializer(obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        elif isinstance(obj, datetime.time):
+            return obj.isoformat()
+        elif hasattr(obj, 'zone') and hasattr(obj.zone, 'zone'):  # Handle timezone info
+            return str(obj)
+        raise TypeError(f"Object {obj} of type {type(obj)} is not JSON serializable")
+    
+    try:
+        return json.dumps(obj, default=json_serializer, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"JSON 직렬화 실패: {e}, object: {type(obj)}")
+        return json.dumps({"error": "serialization_failed", "type": str(type(obj))})
 
 class LocalCalendarProvider(BaseCalendarProvider):
     def __init__(self, settings, db_connection=None):
@@ -101,30 +141,161 @@ class LocalCalendarProvider(BaseCalendarProvider):
             return []
 
     def add_event(self, event_data, data_manager=None):
+        """로컬 캘린더에 이벤트 추가"""
         try:
             body = event_data.get('body')
-            if not body: return None
+            if not body: 
+                logger.error("add_event: body가 없습니다")
+                return None
+            
             event_id = body.get('id')
-            start_date = body.get('start', {}).get('date') or body.get('start', {}).get('dateTime', '')[:10]
-            end_date = body.get('end', {}).get('date') or body.get('end', {}).get('dateTime', '')[:10]
-            rrule_str = body.get('recurrence', [None])[0].replace('RRULE:', '') if 'recurrence' in body and body['recurrence'] else None
-            if not all([event_id, start_date, end_date]): return None
+            start_info = body.get('start', {})
+            end_info = body.get('end', {})
+            
+            # 시작/종료 날짜 추출
+            start_date = start_info.get('date')
+            if not start_date and 'dateTime' in start_info:
+                start_date = start_info.get('dateTime', '')[:10]
+                
+            end_date = end_info.get('date')
+            if not end_date and 'dateTime' in end_info:
+                end_date = end_info.get('dateTime', '')[:10]
+            
+            # RRULE 추출
+            rrule_str = None
+            if 'recurrence' in body and body['recurrence']:
+                rrule_str = body['recurrence'][0].replace('RRULE:', '')
+            
+            # 필수 필드 검증
+            if not all([event_id, start_date, end_date]):
+                logger.error(f"add_event: 필수 필드 누락 - event_id={event_id}, start_date={start_date}, end_date={end_date}")
+                return None
+            
+            logger.info(f"로컬 이벤트 추가 시작: id={event_id}, start={start_date}, end={end_date}")
+            
+            # 프로바이더 정보 설정
             body['provider'] = LOCAL_CALENDAR_PROVIDER_NAME
             body['calendarId'] = LOCAL_CALENDAR_ID
+            
+            # 데이터베이스에 저장
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                
+                # 안전한 JSON 직렬화
+                event_json = safe_json_dumps(body)
+                logger.debug(f"JSON 직렬화 완료: {len(event_json)} bytes")
+                
                 cursor.execute("INSERT OR REPLACE INTO local_events (id, start_date, end_date, rrule, event_json) VALUES (?, ?, ?, ?, ?)",
-                               (event_id, start_date, end_date, rrule_str, json.dumps(body)))
+<<<<<<< HEAD
+                               (event_id, start_date, end_date, rrule_str, event_json))
+=======
+                               (event_id, start_date, end_date, rrule_str, safe_json_dumps(body)))
+>>>>>>> fix-v1.1.4
                 conn.commit()
+                
+            logger.info(f"로컬 이벤트 추가 성공: id={event_id}")
             return body
-        except (sqlite3.Error, KeyError) as e:
-            error_message = f"로컬 이벤트 추가 중 오류가 발생했습니다: {e}"
+            
+        except sqlite3.Error as e:
+            error_message = f"로컬 이벤트 데이터베이스 저장 오류: {e}"
+            logger.error(error_message, exc_info=True)
             if data_manager: data_manager.report_error(error_message)
-            else: print(error_message)
+            return None
+        except KeyError as e:
+            error_message = f"로컬 이벤트 필드 오류: {e}"
+            logger.error(error_message, exc_info=True)
+            if data_manager: data_manager.report_error(error_message)
+            return None
+        except Exception as e:
+            error_message = f"로컬 이벤트 추가 중 예상치 못한 오류: {e}"
+            logger.error(error_message, exc_info=True)
+            if data_manager: data_manager.report_error(error_message)
             return None
 
     def update_event(self, event_data, data_manager=None):
-        return self.add_event(event_data, data_manager)
+        """로컬 캘린더 이벤트 업데이트"""
+        try:
+            body = event_data.get('body')
+            if not body: 
+                logger.error("update_event: body가 없습니다")
+                return None
+            
+            event_id = body.get('id')
+            if not event_id:
+                logger.error("update_event: event_id가 없습니다")
+                return None
+                
+            start_info = body.get('start', {})
+            end_info = body.get('end', {})
+            
+            # 시작/종료 날짜 추출
+            start_date = start_info.get('date')
+            if not start_date and 'dateTime' in start_info:
+                start_date = start_info.get('dateTime', '')[:10]
+                
+            end_date = end_info.get('date')
+            if not end_date and 'dateTime' in end_info:
+                end_date = end_info.get('dateTime', '')[:10]
+            
+            # RRULE 추출
+            rrule_str = None
+            if 'recurrence' in body and body['recurrence']:
+                rrule_str = body['recurrence'][0].replace('RRULE:', '')
+            
+            # 필수 필드 검증
+            if not all([event_id, start_date, end_date]):
+                logger.error(f"update_event: 필수 필드 누락 - event_id={event_id}, start_date={start_date}, end_date={end_date}")
+                return None
+            
+            logger.info(f"로컬 이벤트 업데이트 시작: id={event_id}, start={start_date}, end={end_date}")
+            
+            # 프로바이더 정보 설정
+            body['provider'] = LOCAL_CALENDAR_PROVIDER_NAME
+            body['calendarId'] = LOCAL_CALENDAR_ID
+            
+            # 데이터베이스에 업데이트 (INSERT OR REPLACE 사용)
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 기존 이벤트가 있는지 확인
+                cursor.execute("SELECT id FROM local_events WHERE id = ?", (event_id,))
+                existing = cursor.fetchone()
+                
+                if not existing:
+                    logger.warning(f"업데이트할 이벤트가 존재하지 않음: id={event_id}")
+                    return None
+                
+                # 안전한 JSON 직렬화
+                event_json = safe_json_dumps(body)
+                logger.debug(f"JSON 직렬화 완료: {len(event_json)} bytes")
+                
+                cursor.execute("UPDATE local_events SET start_date=?, end_date=?, rrule=?, event_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                               (start_date, end_date, rrule_str, event_json, event_id))
+                
+                if cursor.rowcount == 0:
+                    logger.error(f"이벤트 업데이트 실패: id={event_id}")
+                    return None
+                
+                conn.commit()
+                
+            logger.info(f"로컬 이벤트 업데이트 성공: id={event_id}")
+            return body
+            
+        except sqlite3.Error as e:
+            error_message = f"로컬 이벤트 업데이트 데이터베이스 오류: {e}"
+            logger.error(error_message, exc_info=True)
+            if data_manager: data_manager.report_error(error_message)
+            return None
+        except KeyError as e:
+            error_message = f"로컬 이벤트 업데이트 필드 오류: {e}"
+            logger.error(error_message, exc_info=True)
+            if data_manager: data_manager.report_error(error_message)
+            return None
+        except Exception as e:
+            error_message = f"로컬 이벤트 업데이트 중 예상치 못한 오류: {e}"
+            logger.error(error_message, exc_info=True)
+            if data_manager: data_manager.report_error(error_message)
+            return None
 
     def delete_event(self, event_data, data_manager=None, deletion_mode='all'):
         try:

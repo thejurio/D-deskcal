@@ -111,6 +111,18 @@
         "APIKeyRequiredDialog": {
             "x": 1270,
             "y": 92
+        },
+        "UpdateAvailableDialog": {
+            "x": 1128,
+            "y": 161
+        },
+        "UpdateProgressDialog": {
+            "x": 1153,
+            "y": 311
+        },
+        "UpdateCompleteDialog": {
+            "x": 1178,
+            "y": 336
         }
     }
 }

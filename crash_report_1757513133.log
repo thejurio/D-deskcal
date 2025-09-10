@@ -1,0 +1,15 @@
+
+================== CRASH DETECTED ==================
+Time: 2025-09-10 23:05:33
+Runtime: 8.69 seconds
+Exception Type: NameError
+Exception Value: name 'QDialog' is not defined
+
+Traceback:
+Traceback (most recent call last):
+  File "c:\dcwidget\auto_update_integration.py", line 127, in _on_update_available
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        ^^^^^^^
+NameError: name 'QDialog' is not defined. Did you mean: 'dialog'?
+
+================== END CRASH INFO ==================

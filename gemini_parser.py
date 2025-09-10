@@ -37,7 +37,8 @@ def parse_events_with_gemini(api_key, text_to_analyze):
             - 각 객체는 'title', 'startDate', 'startTime', 'endDate', 'endTime', 'location', 'description' 필드를 가져야 해.
             - 만약 텍스트가 '접수 기간', '신청 기간', '제출 기한' 등 명확한 시작일과 종료일이 있는 '기간'을 나타내면, 'isDeadline': true 필드를 추가해줘.
             - location 필드가 없으면 빈 문자열로 설정해줘.
-            - description 필드에는 원본 텍스트와 추출된 주요 정보를 요약해서 넣어주되, 원본텍스트에 URL이 있는경우는 삭제하지말고 꼭 포함시켜줘.
+            - description 필드에는 원본 텍스트와 추출된 날짜, 시간 제외한 주요 정보를 요약해서 넣어줘.
+            - 원본 텍스트에 URL이 있는경우는 삭제하지말고 꼭 포함시켜줘.
             - 만약 일정 정보를 하나도 찾을 수 없다면, 빈 배열 '[]'을 반환해줘.
             --- 텍스트 원본 ---
             {text_to_analyze}

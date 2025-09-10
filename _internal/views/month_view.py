@@ -765,10 +765,10 @@ class MonthViewWidget(BaseViewWidget):
         
         # _render_boxes가 없으면 None 반환
         if not hasattr(self, '_render_boxes') or not self._render_boxes:
-            print(f"[DEBUG] get_event_at: _render_boxes is empty or not exists, count={len(getattr(self, '_render_boxes', []))}")
+            # print(f"[DEBUG] get_event_at: _render_boxes is empty or not exists, count={len(getattr(self, '_render_boxes', []))}")
             return None
             
-        print(f"[DEBUG] get_event_at: pos={pos}, render_boxes count={len(self._render_boxes)}")
+        # print(f"[DEBUG] get_event_at: pos={pos}, render_boxes count={len(self._render_boxes)}")
         
         # 역순으로 검사 (위쪽 레이어부터)
         for i, item in enumerate(reversed(self._render_boxes)):
@@ -776,10 +776,10 @@ class MonthViewWidget(BaseViewWidget):
             
             # 기본 히트 테스트
             if rect.contains(pos):
-                print(f"[DEBUG] get_event_at: found event at index {len(self._render_boxes)-1-i}: {item['event'].get('summary')}")
+                # print(f"[DEBUG] get_event_at: found event at index {len(self._render_boxes)-1-i}: {item['event'].get('summary')}")
                 return item['event']
         
-        print(f"[DEBUG] get_event_at: no exact hit, trying with margin")
+        # print(f"[DEBUG] get_event_at: no exact hit, trying with margin")
         
         # 정확한 히트가 없으면 약간의 마진을 두고 재검사
         margin = 3.0  # 3픽셀 마진 (터치 친화적)
@@ -787,10 +787,10 @@ class MonthViewWidget(BaseViewWidget):
             rect = item['rect']
             expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
             if expanded_rect.contains(pos):
-                print(f"[DEBUG] get_event_at: found event with margin at index {len(self._render_boxes)-1-i}: {item['event'].get('summary')}")
+                # print(f"[DEBUG] get_event_at: found event with margin at index {len(self._render_boxes)-1-i}: {item['event'].get('summary')}")
                 return item['event']
         
-        print(f"[DEBUG] get_event_at: no event found at position")
+        # print(f"[DEBUG] get_event_at: no event found at position")
         return None
     
     def get_events_in_area(self, rect_area):
@@ -921,11 +921,11 @@ class MonthViewWidget(BaseViewWidget):
         if not self.main_widget.is_interaction_unlocked():
             return
         
-        print(f"[DEBUG] MonthView contextMenuEvent: pos={event.pos()}")
+        # print(f"[DEBUG] MonthView contextMenuEvent: pos={event.pos()}")
         
         # 우선 렌더박스에서 이벤트 찾기
         target_event = self.get_event_at(event.pos())
-        print(f"[DEBUG] MonthView contextMenuEvent: get_event_at result={target_event.get('summary') if target_event else 'None'}")
+        # print(f"[DEBUG] MonthView contextMenuEvent: get_event_at result={target_event.get('summary') if target_event else 'None'}")
         
         # 렌더박스에서 찾지 못했으면 위젯 트리에서 EventLabelWidget 찾기 (백업)
         if not target_event:
@@ -933,7 +933,7 @@ class MonthViewWidget(BaseViewWidget):
             while target_widget and target_widget != self:
                 if hasattr(target_widget, 'event_data'):
                     target_event = target_widget.event_data
-                    print(f"[DEBUG] MonthView contextMenuEvent: found via widget tree={target_event.get('summary')}")
+                    # print(f"[DEBUG] MonthView contextMenuEvent: found via widget tree={target_event.get('summary')}")
                     break
                 target_widget = target_widget.parent()
 
@@ -946,7 +946,7 @@ class MonthViewWidget(BaseViewWidget):
                 break
             target_widget = target_widget.parent()
 
-        print(f"[DEBUG] MonthView contextMenuEvent: final target_event={target_event.get('summary') if target_event else 'None'}, date_info={date_info}")
+        # print(f"[DEBUG] MonthView contextMenuEvent: final target_event={target_event.get('summary') if target_event else 'None'}, date_info={date_info}")
         
         # BaseView 공용 컨텍스트 메뉴
         self.show_context_menu(event.globalPos(), target_event, date_info)
@@ -1019,7 +1019,7 @@ class MonthViewWidget(BaseViewWidget):
             rect = item['rect']
             expanded_rect = rect.adjusted(-margin, -margin, margin, margin)
             if expanded_rect.contains(pos):
-                print(f"[DEBUG] _get_event_at_with_margin: Found with margin {margin}: {item['event'].get('summary')}")
+                # print(f"[DEBUG] _get_event_at_with_margin: Found with margin {margin}: {item['event'].get('summary')}")
                 return item['event']
         
         return None

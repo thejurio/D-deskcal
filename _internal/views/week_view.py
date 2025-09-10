@@ -57,8 +57,7 @@ class HeaderCanvas(QWidget):
         hide_weekends = settings.get("hide_weekends", False)
         
         painter.save()
-        header_bg_color = QColor("#2A2A2A") if is_dark else QColor("#F0F0F0")
-        painter.fillRect(self.rect(), header_bg_color)
+        # 헤더 배경 제거 - 완전히 투명
         
         colors = {
             "weekday": self.parent_view.weekdayColor,
@@ -116,7 +115,8 @@ class AllDayCanvas(QWidget):
         self.parent_view = parent_view
         self.setMouseTracking(True)
         self.event_positions = []
-        self.hidden_events = []  # 더보기로 숨겨진 이벤트들
+        self.hidden_events = []  # 더보기로 숨겨진 이벤트들 (호환성 유지용)
+        self.hidden_events_by_day = {}  # 날짜별 숨겨진 이벤트들
         self.column_x_coords = []
         self.event_rects = []
         self.more_button_rects = []  # 더보기 버튼 클릭 영역
@@ -139,11 +139,17 @@ class AllDayCanvas(QWidget):
         self.parent_view.handle_hover_leave(self)
     
     def set_data(self, positions, num_lanes, column_x_coords):
+        # 날짜별 숨겨진 이벤트 추적을 위한 초기화
+        self.hidden_events_by_day = {}
+        num_columns = len(column_x_coords) - 1 if column_x_coords else 7
+        for col in range(num_columns):
+            self.hidden_events_by_day[col] = []
+        
         # 더보기 기능 적용: 최대 레인 수 제한
         if num_lanes > MAX_ALL_DAY_LANES:
             # 표시할 이벤트와 숨길 이벤트 분리
             visible_positions = []
-            self.hidden_events = []
+            self.hidden_events = []  # 호환성 유지용
             
             # 레인별로 분류
             lanes = [[] for _ in range(num_lanes)]
@@ -154,20 +160,30 @@ class AllDayCanvas(QWidget):
             for lane_idx in range(min(MAX_ALL_DAY_LANES, num_lanes)):
                 visible_positions.extend(lanes[lane_idx])
             
-            # 나머지는 숨김
+            # 나머지는 숨김 - 이벤트가 어느 날짜에 해당하는지 추적
             for lane_idx in range(MAX_ALL_DAY_LANES, num_lanes):
-                self.hidden_events.extend([pos['event'] for pos in lanes[lane_idx]])
+                for pos in lanes[lane_idx]:
+                    event = pos['event']
+                    self.hidden_events.append(event)  # 호환성 유지용
+                    
+                    # 이벤트가 걸쳐있는 모든 날짜에 추가
+                    start_col = pos.get('start_col', 0)
+                    span = pos.get('span', 1)
+                    for col in range(start_col, min(start_col + span, num_columns)):
+                        if col in self.hidden_events_by_day:
+                            self.hidden_events_by_day[col].append(event)
             
             self.event_positions = visible_positions
             display_lanes = MAX_ALL_DAY_LANES
         else:
             self.event_positions = positions
-            self.hidden_events = []
+            self.hidden_events = []  # 호환성 유지용
             display_lanes = num_lanes
             
         self.column_x_coords = column_x_coords
         # 더보기 표시를 위해 추가 공간 확보 (더보기 버튼용 한 레인 추가)
-        extra_lane = 1 if self.hidden_events else 0
+        has_any_hidden = any(len(events) > 0 for events in self.hidden_events_by_day.values())
+        extra_lane = 1 if has_any_hidden else 0
         height = (display_lanes + extra_lane) * ALL_DAY_LANE_HEIGHT + 5 if display_lanes > 0 or extra_lane > 0 else 0
         self.setFixedHeight(height)
         self.setVisible(height > 0)
@@ -216,10 +232,10 @@ class AllDayCanvas(QWidget):
             is_completed = self.parent_view.data_manager.is_event_completed(event_data.get('id'))
             draw_event(painter, rect, event_data, time_text="", summary_text=summary, is_completed=is_completed)
         
-        # 더보기 버튼 그리기
-        if self.hidden_events:
-            self.more_button_rects.clear()
-            for col in range(len(self.column_x_coords) - 1):
+        # 더보기 버튼 그리기 - 해당 날짜에 숨겨진 이벤트가 있는 경우만
+        self.more_button_rects.clear()
+        for col in range(len(self.column_x_coords) - 1):
+            if col in self.hidden_events_by_day and len(self.hidden_events_by_day[col]) > 0:
                 start_x = self.column_x_coords[col]
                 end_x = self.column_x_coords[col + 1]
                 
@@ -236,9 +252,10 @@ class AllDayCanvas(QWidget):
                 painter.setPen(QPen(QColor(150, 150, 150), 1))
                 painter.drawRoundedRect(rect, 3, 3)
                 
-                # 더보기 텍스트
+                # 더보기 텍스트 - 해당 날짜의 숨겨진 이벤트 개수 표시
                 painter.setPen(QPen(QColor(255, 255, 255), 1))
-                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"+{len(self.hidden_events)}")
+                hidden_count = len(self.hidden_events_by_day[col])
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, f"+{hidden_count}")
 
 
     def mouseDoubleClickEvent(self, event):
@@ -247,11 +264,12 @@ class AllDayCanvas(QWidget):
         
         # 더보기 버튼 클릭 확인
         more_col = self.get_more_button_at(event.pos())
-        if more_col is not None and self.hidden_events:
+        if more_col is not None and more_col in self.hidden_events_by_day and self.hidden_events_by_day[more_col]:
             # 해당 컬럼의 날짜 계산
             start_of_week = self.parent_view._get_start_of_week()
             date_obj = start_of_week + datetime.timedelta(days=more_col)
-            self.parent_view.show_more_events_popup(date_obj, self.hidden_events)
+            # 해당 날짜의 숨겨진 이벤트만 표시
+            self.parent_view.show_more_events_popup(date_obj, self.hidden_events_by_day[more_col])
             return
             
         clicked_event = self.get_event_at(event.pos())

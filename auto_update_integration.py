@@ -8,7 +8,7 @@ import sys
 import logging
 from pathlib import Path
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
-from PyQt6.QtWidgets import QMessageBox, QProgressDialog, QApplication
+from PyQt6.QtWidgets import QMessageBox, QProgressDialog, QApplication, QDialog
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ class AutoUpdateDialog(QObject):
                 parent=self.parent,
                 settings=self.settings
             )
-            if dialog.exec() == dialog.Accepted:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
                 self._start_update_download(release_data)
         else:
             # 릴리스 노트를 간략하게 정리
@@ -185,72 +185,90 @@ class AutoUpdateDialog(QObject):
         """업데이트 다운로드 시작"""
         logger.info(f"Starting update download: {release_data.get('tag_name', 'Unknown')}")
         
-        if CUSTOM_DIALOGS_AVAILABLE:
-            self.progress_dialog = UpdateProgressDialog(
-                parent=self.parent,
-                settings=self.settings
-            )
-            self.progress_dialog.show()
-        else:
-            self.progress_dialog = QProgressDialog(
-                "업데이트를 다운로드하고 있습니다...",
-                "취소",
-                0, 100,
-                self.parent
-            )
-            self.progress_dialog.setWindowTitle("업데이트 다운로드")
-            self.progress_dialog.setModal(True)
-            self.progress_dialog.show()
+        # 항상 기본 PyQt6 다이얼로그 사용 (더 안정적)
+        self.progress_dialog = QProgressDialog(
+            "다운로드 중입니다... 0%",
+            "취소",
+            0, 100,  # 0-100: 다운로드 진행률
+            self.parent
+        )
+        # 제목표시줄 제거
+        self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() & ~self.progress_dialog.windowFlags())
+        from PyQt6.QtCore import Qt
+        self.progress_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.progress_dialog.setModal(True)
+        self.progress_dialog.show()
         
-        # 다운로드 시작
+        # 다운로드 시작 (별도 스레드에서 실행하여 UI 블록 방지)
         logger.info("Starting download and installation process...")
-        self.update_manager.download_and_install_update(release_data)
+        
+        # QTimer를 사용하여 메인 스레드 블록 방지
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, lambda: self.update_manager.download_and_install_update(release_data))
     
     def _on_download_progress(self, progress):
-        """다운로드 진행률 업데이트"""
+        """다운로드 진행률 업데이트 (0-100%)"""
         logger.debug(f"Download progress: {progress}%")
-        if self.progress_dialog:
-            if CUSTOM_DIALOGS_AVAILABLE and hasattr(self.progress_dialog, 'update_progress'):
-                self.progress_dialog.update_progress(progress, get_update_text("download_progress", percent=progress))
-            else:
-                self.progress_dialog.setValue(progress)
+        if self.progress_dialog and hasattr(self.progress_dialog, 'setValue'):
+            # 다운로드 단계: 0-100 범위 사용
+            self.progress_dialog.setValue(progress)
+            self.progress_dialog.setLabelText(f"다운로드 중입니다... {progress}%")
+        else:
+            logger.info(f"다운로드 진행률: {progress}%")
     
     def _on_download_complete(self, file_path):
-        """다운로드 완료"""
+        """다운로드 완료, 설치 시작"""
         logger.info(f"Download completed: {file_path}")
         if self.progress_dialog:
-            if CUSTOM_DIALOGS_AVAILABLE and hasattr(self.progress_dialog, 'update_progress'):
-                self.progress_dialog.update_progress(100, get_update_text("installing_message"))
-                self.progress_dialog.set_cancel_enabled(False)  # 설치 중에는 취소 불가
-            else:
-                self.progress_dialog.setLabelText("업데이트를 설치하고 있습니다...")
+            # 설치 중 메시지 표시 (진행률 없음)
+            if hasattr(self.progress_dialog, 'setLabelText'):
+                self.progress_dialog.setLabelText("설치 중입니다...")
+                logger.info("Progress dialog updated to show 설치 중입니다...")
+            if hasattr(self.progress_dialog, 'setCancelButton'):
                 self.progress_dialog.setCancelButton(None)  # 설치 중에는 취소 불가
+        else:
+            logger.warning("Progress dialog is None in _on_download_complete")
+    
     
     def _on_installation_complete(self):
         """설치 완료"""
+        logger.info("Installation completed - closing progress dialog")
         if self.progress_dialog:
-            self.progress_dialog.close()
+            # 설치 완료 메시지를 잠시 보여준 후 닫기
+            self.progress_dialog.setLabelText("설치 완료!")
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(1500, self.progress_dialog.close)  # 1.5초 후 닫기
+        else:
+            logger.warning("Progress dialog is None in _on_installation_complete")
+        
+        user_confirmed = False
         
         if CUSTOM_DIALOGS_AVAILABLE:
             dialog = UpdateCompleteDialog(
                 parent=self.parent,
                 settings=self.settings
             )
-            dialog.exec()
+            result = dialog.exec()
+            user_confirmed = (result == QDialog.DialogCode.Accepted)
         else:
             msg = QMessageBox(self.parent)
             msg.setWindowTitle("업데이트 완료")
             msg.setIcon(QMessageBox.Icon.Information)
             msg.setText("업데이트가 완료되었습니다.")
             msg.setInformativeText("업데이트 스크립트가 실행되었습니다.\n프로그램이 자동으로 종료되고 새 버전으로 재시작됩니다.")
-            msg.addButton("확인", QMessageBox.ButtonRole.AcceptRole)
+            ok_button = msg.addButton("확인", QMessageBox.ButtonRole.AcceptRole)
             msg.exec()
+            user_confirmed = (msg.clickedButton() == ok_button)
         
-        logger.info("Update installation completed - shutting down program...")
-        
-        # 프로그램 종료 (업데이트 스크립트가 재시작함)
-        import sys
-        sys.exit(0)
+        # 사용자가 확인한 경우에만 프로그램 종료
+        if user_confirmed:
+            logger.info("User confirmed update completion - shutting down program...")
+            
+            # 프로그램 종료 (업데이트 스크립트가 재시작함)
+            import sys
+            sys.exit(0)
+        else:
+            logger.info("User cancelled update completion dialog")
     
     def _on_download_error(self, error_message):
         """다운로드 실패"""
