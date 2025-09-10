@@ -22,6 +22,8 @@ CUSTOM_COLOR_TEXT = "사용자 지정..."
 class SettingsWindow(BaseDialog):
     transparency_changed = pyqtSignal(float)
     theme_changed = pyqtSignal(str)
+    start_day_changed = pyqtSignal(int)
+    hide_weekends_changed = pyqtSignal(bool)
     refresh_requested = pyqtSignal()
 
     def __init__(self, data_manager, settings, parent=None, pos=None):
@@ -303,12 +305,12 @@ class SettingsWindow(BaseDialog):
         self.start_day_combo.addItem("일요일", 6)
         self.start_day_combo.addItem("월요일", 0)
         self.start_day_combo.setCurrentIndex(self.start_day_combo.findData(self.temp_settings.get("start_day_of_week", 6)))
-        self.start_day_combo.currentIndexChanged.connect(lambda: self._mark_as_changed("start_day_of_week"))
+        self.start_day_combo.currentIndexChanged.connect(self.on_start_day_changed)
         display_layout.addRow("한 주의 시작:", self.start_day_combo)
         
         self.hide_weekends_checkbox = QCheckBox("주말(토, 일) 숨기기")
         self.hide_weekends_checkbox.setChecked(self.temp_settings.get("hide_weekends", False))
-        self.hide_weekends_checkbox.stateChanged.connect(lambda: self._mark_as_changed("hide_weekends"))
+        self.hide_weekends_checkbox.stateChanged.connect(self.on_hide_weekends_changed)
         display_layout.addRow("", self.hide_weekends_checkbox)
         
         layout.addWidget(display_group)
@@ -648,6 +650,20 @@ class SettingsWindow(BaseDialog):
     def on_theme_changed(self, text):
         self._mark_as_changed("theme"); selected_theme_name = self.theme_combo.currentData()
         self.temp_settings["theme"] = selected_theme_name; self.theme_changed.emit(selected_theme_name); self.set_stylesheet()
+
+    def on_start_day_changed(self):
+        """시작요일 변경 시 실시간 미리보기"""
+        self._mark_as_changed("start_day_of_week")
+        start_day = self.start_day_combo.currentData()
+        self.temp_settings["start_day_of_week"] = start_day
+        self.start_day_changed.emit(start_day)
+
+    def on_hide_weekends_changed(self):
+        """주말표시 변경 시 실시간 미리보기"""
+        self._mark_as_changed("hide_weekends")
+        hide_weekends = self.hide_weekends_checkbox.isChecked()
+        self.temp_settings["hide_weekends"] = hide_weekends
+        self.hide_weekends_changed.emit(hide_weekends)
 
     def create_color_icon(self, color_hex):
         pixmap = QPixmap(16, 16); pixmap.fill(QColor(color_hex)); return QIcon(pixmap)

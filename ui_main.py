@@ -712,6 +712,8 @@ class MainWidget(QWidget):
 
             settings_dialog.transparency_changed.connect(self.on_opacity_preview_changed)
             settings_dialog.theme_changed.connect(self.on_theme_preview_changed)
+            settings_dialog.start_day_changed.connect(self.on_start_day_preview_changed)
+            settings_dialog.hide_weekends_changed.connect(self.on_hide_weekends_preview_changed)
             settings_dialog.refresh_requested.connect(lambda: [
                 self.data_manager.force_sync_month(self.current_date.year, self.current_date.month),
                 self.reload_hotkeys()
@@ -736,8 +738,7 @@ class MainWidget(QWidget):
                 if "start_on_boot" in changed_fields:
                     self.sync_startup_setting()
 
-                if "ai_add_event_hotkey" in changed_fields:
-                    self.hotkey_manager.register_and_start()
+                # 핫키 변경사항은 reload_hotkeys()에서 일괄 처리됨
 
                 if "auto_update_enabled" in changed_fields:
                     self.handle_auto_update_setting_changed()
@@ -918,6 +919,32 @@ class MainWidget(QWidget):
         
         # 전체 테마 적용
         self.apply_theme(theme_name)
+
+    def on_start_day_preview_changed(self, start_day):
+        """설정창에서 시작요일 미리보기 변경 처리"""
+        current_widget = self.stacked_widget.currentWidget()
+        if hasattr(current_widget, 'apply_preview_settings'):
+            # 뷰에 미리보기 설정 적용
+            current_widget.apply_preview_settings({'start_day_of_week': start_day})
+        else:
+            # 임시 설정 변경 방식 (fallback)
+            original_start_day = self.settings.get("start_day_of_week", 6)
+            self.settings["start_day_of_week"] = start_day
+            self.refresh_current_view()
+            self.settings["start_day_of_week"] = original_start_day
+
+    def on_hide_weekends_preview_changed(self, hide_weekends):
+        """설정창에서 주말표시 미리보기 변경 처리"""
+        current_widget = self.stacked_widget.currentWidget()
+        if hasattr(current_widget, 'apply_preview_settings'):
+            # 뷰에 미리보기 설정 적용
+            current_widget.apply_preview_settings({'hide_weekends': hide_weekends})
+        else:
+            # 임시 설정 변경 방식 (fallback)
+            original_hide_weekends = self.settings.get("hide_weekends", False)
+            self.settings["hide_weekends"] = hide_weekends
+            self.refresh_current_view()
+            self.settings["hide_weekends"] = original_hide_weekends
 
     def apply_theme(self, theme_name):
         try:
