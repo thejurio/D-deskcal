@@ -183,23 +183,28 @@ class DatabaseManager:
             logger.error(f"Migration failed: {e}")
             raise
     
-    def cleanup_old_cache(self):
-        """Clean up cache entries outside the sliding window, but protect current month"""
-        current_date = datetime.date.today()
-        current_year, current_month = current_date.year, current_date.month
+    def cleanup_old_cache(self, center_year=None, center_month=None):
+        """Clean up cache entries to maintain maximum 13 months, but protect today's month"""
+        # 오늘 날짜는 항상 보호 (영구 보존)
+        today = datetime.date.today()
+        today_year, today_month = today.year, today.month
         
-        # Use the same sliding window calculation as the actual caching logic
-        # MAX_CACHE_SIZE = 13 months (current month ±6 months)
-        radius = 6  # ±6 months around current month
+        # 캐시 정리 기준: 사용자가 보는 월 (동적) 또는 오늘 날짜 (기본값)
+        if center_year is None or center_month is None:
+            center_year, center_month = today_year, today_month
         
-        # Calculate sliding window using the same logic as _calculate_sliding_window
-        window_months = []
-        center_date = datetime.date(current_year, current_month, 1)
+        # 📦 새로운 정책: 최대 13개월 보존 (캐시 윈도우와 별개)
+        # 캐시 윈도우: 3개월 (±1개월) | 최대 보존: 13개월 (±6개월)
+        max_keep_radius = 6  # ±6개월 = 총 13개월 보존
         
-        for i in range(-radius, radius + 1):
+        # Calculate maximum keep window (13개월 범위)
+        keep_months = []
+        center_date = datetime.date(center_year, center_month, 1)
+        
+        for i in range(-max_keep_radius, max_keep_radius + 1):
             # Calculate target month
-            target_year = current_year
-            target_month = current_month + i
+            target_year = center_year
+            target_month = center_month + i
             
             # Handle year overflow/underflow
             while target_month <= 0:
@@ -209,12 +214,12 @@ class DatabaseManager:
                 target_month -= 12
                 target_year += 1
                 
-            window_months.append((target_year, target_month))
+            keep_months.append((target_year, target_month))
         
-        # Get the start and end boundaries
-        window_months.sort()
-        start_year, start_month = window_months[0]
-        end_year, end_month = window_months[-1]
+        # Get the start and end boundaries for keep window
+        keep_months.sort()
+        keep_start_year, keep_start_month = keep_months[0]
+        keep_end_year, keep_end_month = keep_months[-1]
         
         with self.get_cache_connection() as conn:
             cursor = conn.cursor()
@@ -230,18 +235,22 @@ class DatabaseManager:
                 cache_months = [f"{year}-{month:02d}" for year, month in all_cache_entries]
                 logger.info(f"Current cache months: {cache_months}")
             
-            # Delete cache entries outside the sliding window
+            # Delete cache entries outside the 13-month keep window
             # BUT always protect the current month (even if it's outside the normal window)
-            window_months_set = set(window_months)
+            keep_months_set = set(keep_months)
             
             # Get all current cache entries
             cursor.execute("SELECT year, month FROM event_cache")
             all_cache_entries = cursor.fetchall()
             
-            # Find entries to delete (outside window but protect current month)
+            # Find entries to delete (outside 13-month keep window but protect today's month)
             entries_to_delete = []
             for year, month in all_cache_entries:
-                if (year, month) not in window_months_set and (year, month) != (current_year, current_month):
+                # 보호 조건: 1) 13개월 보존 범위 안에 있거나 2) 오늘 날짜가 포함된 달
+                is_in_keep_window = (year, month) in keep_months_set
+                is_today_month = (year, month) == (today_year, today_month)
+                
+                if not is_in_keep_window and not is_today_month:
                     entries_to_delete.append((year, month))
             
             # Delete entries outside the window
@@ -256,9 +265,9 @@ class DatabaseManager:
             cursor.execute("SELECT COUNT(*) FROM event_cache")
             after_count = cursor.fetchone()[0]
             
-            window_range = f"[{start_year}-{start_month:02d} to {end_year}-{end_month:02d}]"
-            logger.info(f"Cache cleanup: sliding window ±6 months = 13 months total {window_range}")
-            logger.info(f"Current month protected: {current_year}-{current_month:02d}")
+            keep_range = f"[{keep_start_year}-{keep_start_month:02d} to {keep_end_year}-{keep_end_month:02d}]"
+            logger.info(f"Cache cleanup: maximum keep ±6 months = 13 months total {keep_range}")
+            logger.info(f"Cache center: {center_year}-{center_month:02d}, Today protected: {today_year}-{today_month:02d}")
             logger.info(f"Cache cleanup result: {before_count} → {after_count} entries ({deleted_count} deleted)")
             
             if entries_to_delete:

@@ -595,17 +595,62 @@ class MainWidget(QWidget):
             print(f"Push to desktop bottom error: {e}")
 
     def quit_application(self):
-        self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
-        save_settings_safe(self.settings)
-        self.data_manager.stop_caching_thread()
-        self.hotkey_manager.stop()
-        self.tray_icon.hide()
-        QApplication.instance().quit()
+        """🛑 애플리케이션 완전 종료"""
+        print("🛑 [UI] DCWidget 종료 시작...")
+        
+        try:
+            # 1. 설정 저장
+            self.settings["geometry"] = [self.x(), self.y(), self.width(), self.height()]
+            save_settings_safe(self.settings)
+            print("💾 설정 저장 완료")
+            
+            # 2. 데이터 매니저 완전 종료 (모든 스레드 정리)
+            if hasattr(self, 'data_manager'):
+                self.data_manager.stop_caching_thread()
+                print("🔄 데이터 매니저 종료 완료")
+            
+            # 3. 핫키 매니저 중지
+            if hasattr(self, 'hotkey_manager'):
+                self.hotkey_manager.stop()
+                print("⌨️ 핫키 매니저 중지 완료")
+            
+            # 4. 트레이 아이콘 숨기기
+            if hasattr(self, 'tray_icon'):
+                self.tray_icon.hide()
+                print("🔔 트레이 아이콘 숨김 완료")
+            
+            # 5. 소켓 정리 (중복 실행 방지용)
+            try:
+                import __main__
+                if hasattr(__main__, 'single_instance'):
+                    __main__.single_instance.cleanup()
+                    print("🔒 소켓 락 정리 완료")
+            except Exception as e:
+                print(f"⚠️ 소켓 정리 중 오류: {e}")
+            
+            # 6. Qt 애플리케이션 종료
+            app = QApplication.instance()
+            if app:
+                app.quit()
+                print("✅ Qt 애플리케이션 종료 완료")
+            
+            print("🎉 [UI] DCWidget 종료 프로세스 완료!")
+            
+        except Exception as e:
+            print(f"❌ [UI] 종료 중 오류: {e}")
+            # 강제 종료
+            QApplication.instance().quit()
 
     def set_current_date(self, new_date, is_initial=False):
         self.current_date = new_date
         self.month_view.current_date = new_date
         self.week_view.current_date = new_date
+
+        # data_manager에 현재 보고 있는 월 업데이트 및 캐시 윈도우 변화 확인
+        if hasattr(self, 'data_manager') and self.data_manager:
+            self.data_manager.current_view_month = (new_date.year, new_date.month)
+            if not is_initial:  # 초기 설정이 아닐 때만 캐시 정리 확인
+                self.data_manager._schedule_cache_cleanup(new_date.year, new_date.month)
 
         # data_manager.get_events()가 notify_date_changed를 호출하므로, 여기서 직접 호출할 필요 없음
         self.refresh_current_view()
