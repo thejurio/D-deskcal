@@ -169,17 +169,18 @@ class UpdateDownloader(QObject):
         try:
             print(f"인스톨러 실행: {installer_path}")
             
-            # 현재 애플리케이션 종료 안내
             from PyQt6.QtWidgets import QMessageBox
             from PyQt6.QtCore import QTimer
             
-            # 인스톨러를 사일런트 모드로 실행하고 현재 앱 종료
-            subprocess.Popen([
-                str(installer_path), 
-                '/SILENT',  # 사일런트 설치
-                '/CLOSEAPPLICATIONS',  # 실행 중인 앱 종료
-                '/RESTARTAPPLICATIONS'  # 설치 후 앱 재시작
-            ])
+            # 사용자에게 알림 후 인스톨러 실행
+            msg = QMessageBox()
+            msg.setWindowTitle("업데이트 설치")
+            msg.setText("업데이트가 다운로드되었습니다.\n\n인스톨러가 실행됩니다. 설치를 진행해주세요.\n설치 완료 후 D-DeskCal이 자동으로 시작됩니다.")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.exec()
+            
+            # 일반 모드로 인스톨러 실행 (사용자가 직접 조작)
+            subprocess.Popen([str(installer_path)])
             
             # 잠시 후 현재 앱 종료
             QTimer.singleShot(2000, sys.exit)
