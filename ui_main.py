@@ -380,7 +380,7 @@ class MainWidget(QWidget):
             self.lock_button.setToolTip("잠금 모드 비활성화됨 (클릭하여 활성화)")
 
     def initUI(self):
-        self.setWindowTitle('Glassy Calendar')
+        self.setWindowTitle('D-DeskCal')
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
@@ -537,7 +537,7 @@ class MainWidget(QWidget):
 
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(QIcon(get_icon_path("tray_icon.svg")), self)
-        self.tray_icon.setToolTip("Glassy Calendar")
+        self.tray_icon.setToolTip("D-DeskCal")
 
         tray_menu = QMenu()
 
@@ -1204,7 +1204,7 @@ class MainWidget(QWidget):
         event.ignore()
         self.hide()
         self.tray_icon.showMessage(
-            "Glassy Calendar",
+            "D-DeskCal",
             "캘린더가 백그라운드에서 실행 중입니다.",
             QSystemTrayIcon.MessageIcon.Information,
             2000
