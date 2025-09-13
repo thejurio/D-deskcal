@@ -7,7 +7,7 @@ BaseDialog를 상속하여 다른 다이얼로그와 통일된 UI 제공
 
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QWidget, QProgressBar, QTextEdit, QScrollArea)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from custom_dialogs import BaseDialog
 from update_dialog_texts import get_update_text
 
@@ -29,6 +29,9 @@ class UpdateAvailableDialog(BaseDialog):
         self.setWindowTitle(get_update_text("available_title"))
         self.setModal(True)
         self.setFixedSize(500, 600)
+        
+        # 업데이트 다이얼로그는 높은 우선순위로 표시
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
         self.init_ui()
         self.load_release_data()
@@ -159,6 +162,9 @@ class UpdateProgressDialog(BaseDialog):
         self.setModal(True)
         self.setFixedSize(450, 300)
         
+        # 진행률 다이얼로그는 더 높은 우선순위로 표시 (업데이트 확인 창보다 나중에 뜨므로)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
         self.can_cancel = True
         self.init_ui()
     
@@ -247,6 +253,20 @@ class UpdateProgressDialog(BaseDialog):
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.setText(get_update_text("please_wait"))
     
+    def show_installation_phase(self):
+        """설치 단계로 전환하고 Z-order 재조정"""
+        self.set_installing_mode()
+        # 설치 단계에서는 더 높은 우선순위로 표시
+        self.raise_()
+        self.activateWindow()
+    
+    def show(self):
+        """창 표시시 적절한 Z-order 설정"""
+        super().show()
+        # 진행률 다이얼로그는 다른 창들 위에 표시
+        QTimer.singleShot(50, self.raise_)
+        QTimer.singleShot(100, self.activateWindow)
+    
     def on_cancel(self):
         """취소 버튼 클릭"""
         if self.can_cancel:
@@ -263,6 +283,9 @@ class UpdateCompleteDialog(BaseDialog):
         self.setWindowTitle(get_update_text("complete_title"))
         self.setModal(True)
         self.setFixedSize(400, 250)
+        
+        # 완료 다이얼로그는 최고 우선순위로 표시 (가장 나중에 뜨므로)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
         self.init_ui()
     
@@ -319,6 +342,13 @@ class UpdateCompleteDialog(BaseDialog):
         button_layout.addWidget(self.ok_btn)
         
         content_layout.addLayout(button_layout)
+    
+    def show(self):
+        """창 표시시 최고 우선순위로 설정"""
+        super().show()
+        # 완료 다이얼로그는 가장 나중에 뜨므로 최고 우선순위
+        QTimer.singleShot(50, self.raise_)
+        QTimer.singleShot(100, self.activateWindow)
 
 
 class UpdateErrorDialog(BaseDialog):
@@ -341,6 +371,9 @@ class UpdateErrorDialog(BaseDialog):
         self.setWindowTitle(title)
         self.setModal(True)
         self.setFixedSize(450, 300)
+        
+        # 에러 다이얼로그도 최고 우선순위로 표시 (가장 나중에 뜨므로)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
         self.init_ui()
     
@@ -406,6 +439,13 @@ class UpdateErrorDialog(BaseDialog):
         button_layout.addWidget(self.ok_btn)
         
         content_layout.addLayout(button_layout)
+    
+    def show(self):
+        """창 표시시 최고 우선순위로 설정"""
+        super().show()
+        # 에러 다이얼로그는 가장 나중에 뜨므로 최고 우선순위
+        QTimer.singleShot(50, self.raise_)
+        QTimer.singleShot(100, self.activateWindow)
 
 
 class NoUpdateDialog(BaseDialog):
@@ -419,6 +459,9 @@ class NoUpdateDialog(BaseDialog):
         self.setWindowTitle(get_update_text("no_update_title"))
         self.setModal(True)
         self.setFixedSize(350, 200)
+        
+        # 업데이트 없음 다이얼로그도 최고 우선순위로 표시
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
         self.init_ui()
     
@@ -468,3 +511,10 @@ class NoUpdateDialog(BaseDialog):
         button_layout.addWidget(self.ok_btn)
         
         content_layout.addLayout(button_layout)
+    
+    def show(self):
+        """창 표시시 적절한 Z-order 설정"""
+        super().show()
+        # 업데이트 없음 다이얼로그는 높은 우선순위로 표시
+        QTimer.singleShot(50, self.raise_)
+        QTimer.singleShot(100, self.activateWindow)

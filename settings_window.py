@@ -38,6 +38,15 @@ class SettingsWindow(BaseDialog):
         self.setModal(True)
         self.setMinimumSize(530, 620)
         
+        # 창의 Z-order 조정: 다른 프로그램보다는 아래, 현재 프로그램보다는 위
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+        if parent:
+            # 부모가 있으면 부모 위에 표시하되 다른 앱보다는 아래
+            self.setWindowFlags(self.windowFlags() | Qt.WindowType.Dialog)
+        else:
+            # 부모가 없으면 일반 창으로 표시
+            self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        
         # 저장된 위치로 창을 이동 (UI 초기화 전에)
         self.restore_position()
         
@@ -754,3 +763,32 @@ class SettingsWindow(BaseDialog):
         """잠금 해제 키 표시 업데이트"""
         key = self.temp_settings.get("unlock_key", "")
         self.unlock_key_display.setText(key.upper() if key else "설정되지 않음")
+    
+    def show(self):
+        """창 표시시 Z-order 조정"""
+        super().show()
+        # 창이 표시된 후 적절한 Z-order로 조정
+        self.lower()  # 다른 프로그램 창들보다 아래로
+        if self.parent():
+            # 부모 창이 있으면 부모 위에만 표시
+            self.raise_()
+            self.parent().raise_()  # 부모를 먼저 올림
+            self.raise_()  # 그 다음 자신을 올림
+    
+    def activateWindow(self):
+        """창 활성화시 Z-order 유지"""
+        super().activateWindow()
+        # 활성화될 때도 적절한 위치 유지
+        if self.parent():
+            self.raise_()
+        
+    def focusInEvent(self, event):
+        """포커스 받을 때 Z-order 조정"""
+        super().focusInEvent(event)
+        # 포커스 받을 때 다른 앱보다는 아래, 부모보다는 위로
+        if self.parent():
+            self.raise_()
+        else:
+            # 부모가 없으면 약간 낮은 우선순위로
+            self.lower()
+            self.raise_()

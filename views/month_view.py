@@ -241,8 +241,19 @@ class MonthViewWidget(BaseViewWidget):
         """리사이즈 시 실시간으로 이벤트 위치 재계산"""
         super().resizeEvent(event)
         if hasattr(self, 'date_to_cell_map') and self.date_to_cell_map:
-            # 리사이즈가 완료된 후 이벤트 다시 그리기
-            self.schedule_draw_events()
+            # 레이아웃이 완전히 업데이트된 후 이벤트 다시 그리기
+            QTimer.singleShot(100, self._delayed_resize_redraw)
+    
+    def _delayed_resize_redraw(self):
+        """리사이즈 후 지연된 재그리기 - 셀 크기가 정확히 계산된 후 실행"""
+        if hasattr(self, 'date_to_cell_map') and self.date_to_cell_map:
+            # 모든 셀의 geometry가 제대로 계산되었는지 확인
+            all_cells_ready = all(cell.height() > 1 for cell in self.date_to_cell_map.values())
+            if all_cells_ready:
+                self.schedule_draw_events()
+            else:
+                # 아직 준비되지 않았으면 다시 대기
+                QTimer.singleShot(50, self._delayed_resize_redraw)
 
     # ---------------------------
     # UI 구성
@@ -493,8 +504,19 @@ class MonthViewWidget(BaseViewWidget):
         for i in range(self.calendar_grid.columnCount()):
             self.calendar_grid.setColumnStretch(i, 1)
 
-        # 렌더 예약
-        self.schedule_draw_events()
+        # 렌더 예약 - 레이아웃이 완전히 설정된 후 실행
+        QTimer.singleShot(50, self._delayed_initial_draw)
+    
+    def _delayed_initial_draw(self):
+        """초기 그리기 - 레이아웃이 완전히 설정된 후 실행"""
+        if hasattr(self, 'date_to_cell_map') and self.date_to_cell_map:
+            # 모든 셀의 geometry가 제대로 계산되었는지 확인
+            all_cells_ready = all(cell.height() > 1 for cell in self.date_to_cell_map.values())
+            if all_cells_ready:
+                self.schedule_draw_events()
+            else:
+                # 아직 준비되지 않았으면 다시 대기
+                QTimer.singleShot(50, self._delayed_initial_draw)
 
     def schedule_draw_events(self):
         # 무한 루프 방지: 이미 스케줄되어 있거나 진행 중이면 무시
@@ -550,7 +572,20 @@ class MonthViewWidget(BaseViewWidget):
         for d, cell in self.date_to_cell_map.items():
             y_offset = cell.day_label.height() + cell.layout().spacing()
             y_offset_by_date[d] = y_offset
+            
+            # 셀 높이가 올바르게 계산되지 않았을 경우 강제 업데이트
+            if cell.height() <= 1:
+                cell.updateGeometry()
+                self.update()
+                QTimer.singleShot(50, lambda: self._draw_events_internal() if not self._drawing_in_progress else None)
+                self._drawing_in_progress = False
+                self._is_rendering = False
+                return
+            
             available = max(0, (cell.height() - y_offset) // (self._event_height + self._lane_spacing))
+            # 최소 1개 라인은 보장 (높이가 부족하더라도)
+            if available == 0 and cell.height() > y_offset + self._event_height // 2:
+                available = 1
             max_slots_by_date[d] = available
 
         # 날짜별 실제 점유 레인 및 세그먼트 목록

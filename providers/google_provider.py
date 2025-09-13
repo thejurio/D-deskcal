@@ -2,6 +2,7 @@ import datetime
 import threading
 import logging
 import json
+import time
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -35,6 +36,24 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         self._services_lock = threading.Lock()
         self._services_by_thread = {}
         self._calendar_list_cache = None
+        
+        # API 호출 빈도 제한 (할당량 초과 방지)
+        self._last_api_call_time = 0
+        self._min_api_interval = 0.5  # 500ms 최소 간격 (quota 초과 방지)
+        self._api_call_lock = threading.Lock()
+
+    def _throttle_api_call(self):
+        """API 호출 간격 제한 (할당량 초과 방지)"""
+        with self._api_call_lock:
+            current_time = time.time()
+            time_since_last_call = current_time - self._last_api_call_time
+            
+            if time_since_last_call < self._min_api_interval:
+                sleep_time = self._min_api_interval - time_since_last_call
+                logger.debug(f"[API 제한] {sleep_time:.3f}초 대기 중...")
+                time.sleep(sleep_time)
+            
+            self._last_api_call_time = time.time()
 
     def _get_service_for_current_thread(self):
         """현재 스레드에 맞는 독립적인 service 객체를 가져오거나 생성합니다."""
@@ -54,6 +73,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             try:
                 service = self._get_service_for_current_thread()
                 if not service: return [] # 인증 정보가 없으면 조용히 실패
+                self._throttle_api_call()  # API 호출 빈도 제한
                 self._calendar_list_cache = service.calendarList().list().execute().get("items", [])
             except HttpError as e:
                 # OAuth 토큰 만료/취소 오류를 사용자 친화적인 메시지로 변환
@@ -99,38 +119,96 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         time_min = datetime.datetime.combine(start_date, datetime.time.min).isoformat() + 'Z'
         time_max = datetime.datetime.combine(end_date, datetime.time.max).isoformat() + 'Z'
 
-        for cal_id in calendar_ids:
-            try:
-                events_result = service.events().list(
+        # 🚀 배치 처리로 개선: 모든 캘린더 요청을 한 번에 처리 (현대화된 API 사용)
+        try:
+            self._throttle_api_call()  # 배치 전체에 대해 한 번만 제한
+            
+            # 현대화된 배치 요청 생성 (deprecated BatchHttpRequest() 대신 사용)
+            batch = service.new_batch_http_request()
+            batch_results = {}
+            
+            def batch_callback(request_id, response, exception):
+                """배치 요청 결과 콜백"""
+                cal_id = request_id
+                if exception:
+                    error_message = f"'{cal_id}' 캘린더의 이벤트를 가져오는 중 오류가 발생했습니다: {exception}"
+                    if data_manager:
+                        data_manager.report_error(error_message)
+                    else:
+                        logger.error(error_message)
+                    batch_results[cal_id] = []
+                else:
+                    events = response.get("items", [])
+                    # 각 이벤트에 메타데이터 추가
+                    for event in events:
+                        event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME
+                        event['calendarId'] = cal_id
+                    batch_results[cal_id] = events
+            
+            # 각 캘린더별로 배치에 요청 추가
+            for cal_id in calendar_ids:
+                request = service.events().list(
                     calendarId=cal_id, timeMin=time_min, timeMax=time_max,
                     singleEvents=True, orderBy="startTime"
-                ).execute()
-                events = events_result.get("items", [])
-                
-                for event in events:
-                    event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME
-                    event['calendarId'] = cal_id
-                
-                all_events.extend(events)
-            except HttpError as e:
-                error_message = f"'{cal_id}' 캘린더의 이벤트를 가져오는 중 오류가 발생했습니다.\n\n- 원인: {e.reason}\n- 상태 코드: {e.status_code}"
-                if data_manager:
-                    data_manager.report_error(error_message)
-                else:
-                    print(error_message)
-                continue
-            except Exception as e:
-                # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
-                if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
-                    error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
-                else:
-                    error_message = f"'{cal_id}' 캘린더 처리 중 예상치 못한 오류: {e}"
-                
-                if data_manager:
-                    data_manager.report_error(error_message)
-                else:
-                    print(error_message)
-                continue
+                )
+                batch.add(request, callback=batch_callback, request_id=cal_id)
+            
+            # 배치 실행 (한 번의 HTTP 요청으로 모든 캘린더 조회)
+            logger.debug(f"[배치 API] {len(calendar_ids)}개 캘린더 동시 조회 시작")
+            batch.execute()
+            
+            # 결과 병합
+            for cal_id in calendar_ids:
+                if cal_id in batch_results:
+                    all_events.extend(batch_results[cal_id])
+            
+            logger.debug(f"[배치 API] 완료: {len(all_events)}개 이벤트 조회됨")
+            
+        except Exception as e:
+            # 배치 실패시 기존 방식으로 fallback
+            logger.warning(f"[배치 API] 실패, 순차 처리로 전환: {e}")
+            
+            for cal_id in calendar_ids:
+                try:
+                    self._throttle_api_call()  # API 호출 빈도 제한
+                    events_result = service.events().list(
+                        calendarId=cal_id, timeMin=time_min, timeMax=time_max,
+                        singleEvents=True, orderBy="startTime"
+                    ).execute()
+                    events = events_result.get("items", [])
+                    
+                    for event in events:
+                        event['provider'] = GOOGLE_CALENDAR_PROVIDER_NAME
+                        event['calendarId'] = cal_id
+                    
+                    all_events.extend(events)
+                except HttpError as e:
+                    # HTTP 429 (Too Many Requests) quota 초과 처리
+                    if e.resp.status == 429:
+                        wait_time = 60  # 1분 대기
+                        logger.warning(f"[API 할당량] 초과 감지, {wait_time}초 대기 중...")
+                        time.sleep(wait_time)
+                        # 재시도 없이 넘어감 (다음 번에 다시 시도됨)
+                        continue
+                    
+                    error_message = f"'{cal_id}' 캘린더의 이벤트를 가져오는 중 오류가 발생했습니다.\n\n- 원인: {e.reason}\n- 상태 코드: {e.status_code}"
+                    if data_manager:
+                        data_manager.report_error(error_message)
+                    else:
+                        print(error_message)
+                    continue
+                except Exception as e:
+                    # OAuth 토큰 관련 오류를 사용자 친화적인 메시지로 변환
+                    if "invalid_grant" in str(e).lower() or "expired" in str(e).lower() or "revoked" in str(e).lower():
+                        error_message = "Google 계정 로그인이 만료되었습니다. 설정에서 다시 로그인해주세요."
+                    else:
+                        error_message = f"'{cal_id}' 캘린더 처리 중 예상치 못한 오류: {e}"
+                    
+                    if data_manager:
+                        data_manager.report_error(error_message)
+                    else:
+                        print(error_message)
+                    continue
                 
         return all_events
 
@@ -154,6 +232,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             # Google Calendar용 이벤트 정리 (409 중복 오류 방지)
             cleaned_event_body = self._clean_event_for_google_insert(event_body)
             
+            self._throttle_api_call()  # API 호출 빈도 제한
             created_event = service.events().insert(
                 calendarId=calendar_id, 
                 body=cleaned_event_body
@@ -195,6 +274,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             # datetime 객체를 ISO 문자열로 변환 (Google API JSON 직렬화 오류 방지)
             cleaned_event_body = _convert_datetime_objects(event_body)
             
+            self._throttle_api_call()  # API 호출 빈도 제한
             updated_event = service.events().update(
                 calendarId=calendar_id, 
                 eventId=event_id, 
@@ -245,11 +325,13 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             # --- NEW LOGIC ---
             if deletion_mode == 'all':
                 # Delete the master event, which deletes all instances.
+                self._throttle_api_call()  # API 호출 빈도 제한
                 service.events().delete(calendarId=calendar_id, eventId=master_id).execute()
                 print(f"Google Calendar에서 모든 반복 일정 '{master_id}'이(가) 삭제되었습니다.")
 
             elif deletion_mode == 'instance':
                 # Delete just this single instance. The API creates an exception.
+                self._throttle_api_call()  # API 호출 빈도 제한
                 service.events().delete(calendarId=calendar_id, eventId=instance_id).execute()
                 print(f"Google Calendar에서 일정 인스턴스 '{instance_id}'이(가) 삭제되었습니다.")
 
@@ -258,6 +340,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 # recurrence rule to end before this instance starts.
                 
                 # 1. Get the master event
+                self._throttle_api_call()  # API 호출 빈도 제한
                 master_event = service.events().get(calendarId=calendar_id, eventId=master_id).execute()
                 
                 # 2. Get the instance start time and calculate the day before
@@ -283,6 +366,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 master_event['recurrence'] = new_rules
                 
                 # 5. Update the event
+                self._throttle_api_call()  # API 호출 빈도 제한
                 service.events().update(calendarId=calendar_id, eventId=master_id, body=master_event).execute()
                 print(f"Google Calendar에서 ID '{master_id}'의 향후 일정이 모두 삭제되었습니다.")
             
@@ -350,6 +434,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         for calendar in calendar_list:
             cal_id = calendar['id']
             try:
+                self._throttle_api_call()  # API 호출 빈도 제한
                 events_result = service.events().list(
                     calendarId=cal_id,
                     q=query,

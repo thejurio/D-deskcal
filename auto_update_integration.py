@@ -185,18 +185,8 @@ class AutoUpdateDialog(QObject):
         """업데이트 다운로드 시작"""
         logger.info(f"Starting update download: {release_data.get('tag_name', 'Unknown')}")
         
-        # 항상 기본 PyQt6 다이얼로그 사용 (더 안정적)
-        self.progress_dialog = QProgressDialog(
-            "다운로드 중입니다... 0%",
-            "취소",
-            0, 100,  # 0-100: 다운로드 진행률
-            self.parent
-        )
-        # 제목표시줄 제거
-        self.progress_dialog.setWindowFlags(self.progress_dialog.windowFlags() & ~self.progress_dialog.windowFlags())
-        from PyQt6.QtCore import Qt
-        self.progress_dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
-        self.progress_dialog.setModal(True)
+        # 테마가 적용된 커스텀 프로그레스 다이얼로그 사용
+        self.progress_dialog = UpdateProgressDialog(self.parent)
         self.progress_dialog.show()
         
         # 다운로드 시작 (별도 스레드에서 실행하여 UI 블록 방지)
@@ -209,10 +199,9 @@ class AutoUpdateDialog(QObject):
     def _on_download_progress(self, progress):
         """다운로드 진행률 업데이트 (0-100%)"""
         logger.debug(f"Download progress: {progress}%")
-        if self.progress_dialog and hasattr(self.progress_dialog, 'setValue'):
+        if self.progress_dialog and hasattr(self.progress_dialog, 'set_progress'):
             # 다운로드 단계: 0-100 범위 사용
-            self.progress_dialog.setValue(progress)
-            self.progress_dialog.setLabelText(f"다운로드 중입니다... {progress}%")
+            self.progress_dialog.set_progress(progress)
         else:
             logger.info(f"다운로드 진행률: {progress}%")
     
@@ -220,12 +209,10 @@ class AutoUpdateDialog(QObject):
         """다운로드 완료, 설치 시작"""
         logger.info(f"Download completed: {file_path}")
         if self.progress_dialog:
-            # 설치 중 메시지 표시 (진행률 없음)
-            if hasattr(self.progress_dialog, 'setLabelText'):
-                self.progress_dialog.setLabelText("설치 중입니다...")
-                logger.info("Progress dialog updated to show 설치 중입니다...")
-            if hasattr(self.progress_dialog, 'setCancelButton'):
-                self.progress_dialog.setCancelButton(None)  # 설치 중에는 취소 불가
+            # 설치 단계로 전환
+            if hasattr(self.progress_dialog, 'show_installation_phase'):
+                self.progress_dialog.show_installation_phase()
+                logger.info("Progress dialog updated to show installation phase")
         else:
             logger.warning("Progress dialog is None in _on_download_complete")
     
@@ -235,7 +222,8 @@ class AutoUpdateDialog(QObject):
         logger.info("Installation completed - closing progress dialog")
         if self.progress_dialog:
             # 설치 완료 메시지를 잠시 보여준 후 닫기
-            self.progress_dialog.setLabelText("설치 완료!")
+            if hasattr(self.progress_dialog, 'set_progress'):
+                self.progress_dialog.set_progress(100)  # 완료 표시
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(1500, self.progress_dialog.close)  # 1.5초 후 닫기
         else:
