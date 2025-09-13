@@ -81,24 +81,34 @@ class UpdateDownloader(QObject):
         super().__init__()
         self.download_url = None
         self.temp_dir = None
+        self.installer_filename = None
         
     def download_update(self, release_data):
         """GitHub 릴리스에서 업데이트 파일을 다운로드합니다."""
         try:
-            # 설치 파일 찾기 (.zip 파일)
+            # 설치 파일 찾기 (.exe 인스톨러 파일)
             assets = release_data.get('assets', [])
             installer_asset = None
             
+            # .exe 인스톨러 파일 우선 찾기
             for asset in assets:
-                if asset['name'].endswith('-installer.zip'):
+                if asset['name'].endswith('-installer.exe'):
                     installer_asset = asset
                     break
             
+            # .exe가 없으면 .zip 파일 찾기 (하위 호환성)
             if not installer_asset:
-                self.download_error.emit("설치 파일을 찾을 수 없습니다.")
+                for asset in assets:
+                    if asset['name'].endswith('-installer.zip'):
+                        installer_asset = asset
+                        break
+            
+            if not installer_asset:
+                self.download_error.emit("설치 파일(.exe 또는 .zip)을 찾을 수 없습니다.")
                 return
             
             self.download_url = installer_asset['browser_download_url']
+            self.installer_filename = installer_asset['name']  # 실제 파일명 저장
             
             # 임시 디렉토리 생성
             self.temp_dir = tempfile.mkdtemp(prefix='D-deskcal-update-')
@@ -118,7 +128,8 @@ class UpdateDownloader(QObject):
             total_size = int(response.headers.get('content-length', 0))
             downloaded_size = 0
             
-            file_path = Path(self.temp_dir) / "update.zip"
+            # 실제 파일명 사용 (예: D-deskcal-v1.1.7-installer.exe)
+            file_path = Path(self.temp_dir) / self.installer_filename
             
             with open(file_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -138,11 +149,52 @@ class UpdateDownloader(QObject):
     def install_update(self, downloaded_file):
         """다운로드된 업데이트를 설치합니다."""
         try:
-            # ZIP 파일 압축 해제
+            downloaded_path = Path(downloaded_file)
+            
+            # .exe 인스톨러인지 .zip 파일인지 확인
+            if downloaded_path.suffix.lower() == '.exe':
+                # .exe 인스톨러 실행
+                self._run_installer(downloaded_file)
+            else:
+                # 기존 ZIP 파일 처리 (하위 호환성)
+                self._install_from_zip(downloaded_file)
+            
+            self.installation_complete.emit()
+            
+        except Exception as e:
+            self.installation_error.emit(f"설치 중 오류 발생: {e}")
+    
+    def _run_installer(self, installer_path):
+        """인스톨러(.exe) 파일을 실행합니다."""
+        try:
+            print(f"인스톨러 실행: {installer_path}")
+            
+            # 현재 애플리케이션 종료 안내
+            from PyQt6.QtWidgets import QMessageBox
+            from PyQt6.QtCore import QTimer
+            
+            # 인스톨러를 사일런트 모드로 실행하고 현재 앱 종료
+            subprocess.Popen([
+                str(installer_path), 
+                '/SILENT',  # 사일런트 설치
+                '/CLOSEAPPLICATIONS',  # 실행 중인 앱 종료
+                '/RESTARTAPPLICATIONS'  # 설치 후 앱 재시작
+            ])
+            
+            # 잠시 후 현재 앱 종료
+            QTimer.singleShot(2000, sys.exit)
+            
+        except Exception as e:
+            raise Exception(f"인스톨러 실행 실패: {e}")
+    
+    def _install_from_zip(self, zip_file):
+        """ZIP 파일에서 업데이트를 설치합니다. (하위 호환성)"""
+        try:
+            # 기존 ZIP 압축 해제 로직
             extract_dir = Path(self.temp_dir) / "extracted"
             extract_dir.mkdir(exist_ok=True)
             
-            with zipfile.ZipFile(downloaded_file, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_file, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
             
             # 현재 실행 파일의 경로
@@ -163,10 +215,8 @@ class UpdateDownloader(QObject):
             # 업데이트 스크립트 생성 및 실행
             self._create_update_script(extract_dir, current_exe_dir)
             
-            self.installation_complete.emit()
-            
         except Exception as e:
-            self.installation_error.emit(f"설치 중 오류 발생: {e}")
+            raise Exception(f"ZIP 파일 설치 실패: {e}")
     
     def _create_update_script(self, source_dir, target_dir):
         """업데이트 설치를 위한 배치 스크립트를 생성합니다."""

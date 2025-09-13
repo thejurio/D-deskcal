@@ -3,16 +3,15 @@
 AppName=D-deskcal
 AppVersion=1.1.7
 AppPublisher=D-deskcal Development Team
-AppPublisherURL=https://github.com/your-repo/dcwidget
-AppSupportURL=https://github.com/your-repo/dcwidget/issues
-AppUpdatesURL=https://github.com/your-repo/dcwidget/releases
+AppPublisherURL=https://github.com/thejurio/D-deskcal
+AppSupportURL=https://github.com/thejurio/D-deskcal/issues
+AppUpdatesURL=https://github.com/thejurio/D-deskcal/releases
 DefaultDirName={autopf}\D-deskcal
 DefaultGroupName=D-deskcal
 AllowNoIcons=yes
-LicenseFile=LICENSE
 OutputDir=release
 OutputBaseFilename=D-deskcal-v1.1.7-installer
-SetupIconFile=assets\icon.ico
+SetupIconFile=icons\tray_icon.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -43,10 +42,8 @@ Name: "startupicon"; Description: "시스템 시작 시 자동 실행"; GroupDes
 Source: "dist\D-deskcal\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; 설정 파일 (덮어쓰지 않음)
 Source: "settings.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
-; 라이센스 파일
-Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 ; 아이콘 파일
-Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "icons\*"; DestDir: "{app}\icons"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\D-deskcal"; Filename: "{app}\D-deskcal.exe"
@@ -83,6 +80,8 @@ begin
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
