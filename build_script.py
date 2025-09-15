@@ -305,8 +305,38 @@ def build_application():
     print("Building D-deskcal...")
     
     try:
-        # Run PyInstaller with spec file only - all collection is handled in spec
-        cmd = [sys.executable, '-m', 'PyInstaller', '--clean', 'D-deskcal.spec']
+        # Use command line with --collect-all for maximum dependency collection
+        cmd = [
+            sys.executable, '-m', 'PyInstaller', 
+            '--clean',
+            '--onedir',
+            '--windowed',
+            '--icon=icons/tray_icon.ico',
+            '--version-file=version_info.txt',
+            '--name=D-deskcal',
+            '--collect-all=PyQt6',
+            '--collect-all=google',
+            '--collect-all=googleapiclient',
+            '--collect-all=google_auth_oauthlib',
+            '--collect-all=keyboard',
+            '--collect-all=plyer',
+            '--collect-all=win10toast',
+            '--collect-all=pywin32',
+            '--collect-all=requests',
+            '--collect-all=cryptography',
+            '--collect-all=certifi',
+            '--collect-all=Pillow',
+            '--collect-all=dateutil',
+            '--collect-all=pytz',
+            '--collect-all=google.generativeai',
+            '--add-data=icons;icons',
+            '--add-data=themes;themes',
+            '--add-data=providers;providers',
+            '--add-data=views;views',
+            '--add-data=VERSION;.',
+            '--add-data=credentials.json;.',
+            'ui_main.py'
+        ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         print("Build completed successfully!")
         print("STDOUT:", result.stdout[-1000:])  # Show last 1000 chars of output
@@ -358,7 +388,7 @@ def main():
     
     # Build process
     clean_build()
-    create_spec_file()
+    create_version_info(get_version())  # Create version info file directly
     
     if build_application():
         create_installer()
