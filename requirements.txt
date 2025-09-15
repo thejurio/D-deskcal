@@ -25,11 +25,20 @@ rsa==4.9.1
 six==1.17.0
 uritemplate==4.2.0
 urllib3==2.5.0
-keyboard
+keyboard==0.13.5
 plyer==2.1.0
 pywin32==310
 Pillow==10.4.0
 pytz==2024.1
 win10toast==0.9
-tzdata
-google-generativeai 
+tzdata==2024.2
+google-generativeai==0.8.3
+# PyInstaller dependencies
+altgraph==0.17.4
+pyinstaller==6.11.1
+pyinstaller-hooks-contrib==2024.10
+pefile==2024.8.26
+# Additional Windows dependencies
+cffi==1.17.1
+pycparser==2.22
+cryptography==44.0.0
