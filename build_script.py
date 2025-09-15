@@ -115,6 +115,11 @@ a = Analysis(
         ('VERSION', '.'),
         ('credentials.json', '.'),
     ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
     collect_all_submodules=[
         'PyQt6',
         'google',
@@ -130,7 +135,18 @@ a = Analysis(
         'Pillow',
         'dateutil',
         'pytz',
+        'google.generativeai',
     ],
+    module_collection_mode={
+        'PyQt6': 'pyz+py',
+        'google': 'pyz+py',
+        'googleapiclient': 'pyz+py',
+        'keyboard': 'pyz+py',
+        'plyer': 'pyz+py',
+        'requests': 'pyz+py',
+        'cryptography': 'pyz+py',
+        'Pillow': 'pyz+py',
+    },
     hiddenimports=[
         'keyboard',
         'plyer',
@@ -304,23 +320,8 @@ def build_application():
     print("Building D-deskcal...")
     
     try:
-        # Run PyInstaller with additional metadata copying
-        cmd = [
-            sys.executable, '-m', 'PyInstaller', '--clean',
-            '--copy-metadata', 'PyQt6',
-            '--copy-metadata', 'google-api-python-client',
-            '--copy-metadata', 'google-auth',
-            '--copy-metadata', 'google-auth-oauthlib',
-            '--copy-metadata', 'keyboard',
-            '--copy-metadata', 'plyer',
-            '--copy-metadata', 'requests',
-            '--copy-metadata', 'cryptography',
-            '--copy-metadata', 'certifi',
-            '--copy-metadata', 'Pillow',
-            '--copy-metadata', 'python-dateutil',
-            '--copy-metadata', 'pytz',
-            'D-deskcal.spec'
-        ]
+        # Run PyInstaller with spec file only - all collection is handled in spec
+        cmd = [sys.executable, '-m', 'PyInstaller', '--clean', 'D-deskcal.spec']
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         print("Build completed successfully!")
         print("STDOUT:", result.stdout[-1000:])  # Show last 1000 chars of output
