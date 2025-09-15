@@ -93,7 +93,7 @@ def create_spec_file():
     version = get_version()
     create_version_info(version)  # Create version info file
     
-    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+    spec_content = '''# -*- mode: python ; coding: utf-8 -*-
 
 import os
 from pathlib import Path
@@ -268,7 +268,7 @@ a = Analysis(
         'mimetypes',
     ],
     hookspath=[],
-    hooksconfig={{}},
+    hooksconfig={},
     runtime_hooks=[],
     excludes=[],
     win_no_prefer_redirects=False,
