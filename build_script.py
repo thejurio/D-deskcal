@@ -314,6 +314,7 @@ def build_application():
             '--icon=icons/tray_icon.ico',
             '--version-file=version_info.txt',
             '--name=D-deskcal',
+            '--log-level=DEBUG',
             '--collect-all=PyQt6',
             '--collect-all=google',
             '--collect-all=googleapiclient',
