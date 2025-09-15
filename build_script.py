@@ -304,11 +304,26 @@ def build_application():
     print("Building D-deskcal...")
     
     try:
-        # Run PyInstaller with the spec file (collect_all is now in spec)
-        cmd = [sys.executable, '-m', 'PyInstaller', '--clean', 'D-deskcal.spec']
+        # Run PyInstaller with additional metadata copying
+        cmd = [
+            sys.executable, '-m', 'PyInstaller', '--clean',
+            '--copy-metadata', 'PyQt6',
+            '--copy-metadata', 'google-api-python-client',
+            '--copy-metadata', 'google-auth',
+            '--copy-metadata', 'google-auth-oauthlib',
+            '--copy-metadata', 'keyboard',
+            '--copy-metadata', 'plyer',
+            '--copy-metadata', 'requests',
+            '--copy-metadata', 'cryptography',
+            '--copy-metadata', 'certifi',
+            '--copy-metadata', 'Pillow',
+            '--copy-metadata', 'python-dateutil',
+            '--copy-metadata', 'pytz',
+            'D-deskcal.spec'
+        ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         print("Build completed successfully!")
-        print("STDOUT:", result.stdout[-500:])  # Show last 500 chars of output
+        print("STDOUT:", result.stdout[-1000:])  # Show last 1000 chars of output
         return True
     except subprocess.CalledProcessError as e:
         print(f"Build failed: {e}")
