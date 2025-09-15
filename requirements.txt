@@ -117,7 +117,7 @@ plyer==2.1.0
 prometheus_client==0.22.1
 prompt_toolkit==3.0.51
 proto-plus==1.26.1
-protobuf==6.31.1
+protobuf==5.28.3
 psutil==7.0.0
 pure_eval==0.2.3
 pyarmor==9.1.7
