@@ -102,16 +102,23 @@ class UpdateDownloader(QObject):
             assets = release_data.get('assets', [])
             installer_asset = None
             
-            # .exe 인스톨러 파일 우선 찾기
+            # portable.zip 파일 우선 찾기 (GitHub Actions 빌드 결과물)
             for asset in assets:
-                if asset['name'].endswith('-installer.exe'):
+                if asset['name'].endswith('-portable.zip'):
                     installer_asset = asset
                     break
             
-            # .exe가 없으면 .zip 파일 찾기 (하위 호환성)
+            # portable이 없으면 installer.zip 파일 찾기 (하위 호환성)
             if not installer_asset:
                 for asset in assets:
                     if asset['name'].endswith('-installer.zip'):
+                        installer_asset = asset
+                        break
+            
+            # 그래도 없으면 .exe 파일 찾기
+            if not installer_asset:
+                for asset in assets:
+                    if asset['name'].endswith('-installer.exe'):
                         installer_asset = asset
                         break
             
