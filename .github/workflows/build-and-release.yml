@@ -27,6 +27,8 @@ jobs:
         pip install pyinstaller-hooks-contrib
         pip install -r requirements.txt
         pip freeze > freeze_ci.txt
+      env:
+        PYTHONIOENCODING: utf-8
     
     - name: Verify icon file exists
       run: |

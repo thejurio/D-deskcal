@@ -28,7 +28,7 @@ cssselect2==0.8.0
 customtkinter==5.2.2
 darkdetect==0.8.0
 debugpy==1.8.15
-decompyle3 @ file:///C:/Users/user/OneDrive%20-%20%EC%A0%84%EB%B6%81%ED%8A%B9%EB%B3%84%EC%9E%90%EC%B9%98%EB%8F%84%EA%B5%90%EC%9C%A1%EC%B2%AD/%EB%B0%94%ED%83%95%20%ED%99%94%EB%A9%B4/%EB%8B%A5%ED%84%B0%ED%81%B4%EB%A6%AD/%EB%8B%A5%ED%84%B0%ED%81%B4%EB%A6%AD_%EA%B8%B0%EB%B3%B8%ED%98%95.exe_extracted/decompyle3-3.9.2-py3-none-any.whl#sha256=77cc6b17a9866b525d2ddf64e1ddb2b4a1f59b97e809ef0913193e406dc173ef
+decompyle3==3.9.2
 decorator==5.2.1
 defusedxml==0.7.1
 et_xmlfile==2.0.0
@@ -112,7 +112,6 @@ pefile==2023.2.7
 pillow==10.4.0
 platformdirs==4.3.8
 playwright==1.52.0
-playwright-stealth @ git+https://github.com/AtuboDad/playwright_stealth.git@43f7433057906945b1648179304d7dbd8eb10874
 pluggy==1.6.0
 plyer==2.1.0
 prometheus_client==0.22.1
