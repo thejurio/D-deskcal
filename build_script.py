@@ -115,6 +115,22 @@ a = Analysis(
         ('VERSION', '.'),
         ('credentials.json', '.'),
     ],
+    collect_all_submodules=[
+        'PyQt6',
+        'google',
+        'googleapiclient', 
+        'google_auth_oauthlib',
+        'keyboard',
+        'plyer',
+        'win10toast',
+        'pywin32',
+        'requests',
+        'cryptography',
+        'certifi',
+        'Pillow',
+        'dateutil',
+        'pytz',
+    ],
     hiddenimports=[
         'keyboard',
         'plyer',
@@ -288,26 +304,8 @@ def build_application():
     print("Building D-deskcal...")
     
     try:
-        # Run PyInstaller with additional options to ensure all libraries are included
-        cmd = [
-            sys.executable, '-m', 'PyInstaller',
-            '--clean',
-            '--collect-all', 'PyQt6',
-            '--collect-all', 'google',
-            '--collect-all', 'googleapiclient',
-            '--collect-all', 'google_auth_oauthlib',
-            '--collect-all', 'keyboard',
-            '--collect-all', 'plyer',
-            '--collect-all', 'win10toast',
-            '--collect-all', 'pywin32',
-            '--collect-all', 'requests',
-            '--collect-all', 'cryptography',
-            '--collect-all', 'certifi',
-            '--collect-all', 'Pillow',
-            '--collect-all', 'dateutil',
-            '--collect-all', 'pytz',
-            'D-deskcal.spec'
-        ]
+        # Run PyInstaller with the spec file (collect_all is now in spec)
+        cmd = [sys.executable, '-m', 'PyInstaller', '--clean', 'D-deskcal.spec']
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         print("Build completed successfully!")
         print("STDOUT:", result.stdout[-500:])  # Show last 500 chars of output
