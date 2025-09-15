@@ -5,16 +5,17 @@ venv/
 __pycache__/
 *.pyc
 
-# Sensitive files - DO NOT COMMIT
-credentials.json
+# Sensitive user data - DO NOT COMMIT
 token.json
-calendar.db
 settings.json
 error.log
 debug_cache.log
 test_cache_debug.log
 .env
 .gemini/
+
+# OAuth client config (public - safe to include)
+# credentials.json - included for app functionality
 
 # Code signing certificates (generated locally)
 *.cer
