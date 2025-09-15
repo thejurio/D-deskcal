@@ -81,71 +81,65 @@ jobs:
       run: |
         $version = Get-Content -Path "VERSION" -Raw
         $version = $version.Trim()
-        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-        echo "TAG_NAME=v$version" >> $env:GITHUB_OUTPUT
+        echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        echo "TAG_NAME=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+    
+    - name: Create portable zip
+      run: |
+        $version = "${{ steps.version.outputs.VERSION }}"
+        $portableName = "D-deskcal-v$version-portable.zip"
+        
+        # Create portable zip with all necessary files (same as installer but different name)
+        Compress-Archive -Path "dist/D-deskcal/*" -DestinationPath "dist/$portableName" -Force
+        
+        Write-Host "✅ Created portable: $portableName"
+        
+        # Verify portable file
+        if (Test-Path "dist/$portableName") {
+          $size = (Get-Item "dist/$portableName").Length / 1MB
+          Write-Host "📦 Portable size: $([math]::Round($size, 2)) MB"
+        }
     
     - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.version.outputs.TAG_NAME }}
-        release_name: D-deskcal v${{ steps.version.outputs.VERSION }}
-        body: |
-          ## D-deskcal v${{ steps.version.outputs.VERSION }}
-          
-          ### 📦 Downloads
-          - **Installer**: D-deskcal-v${{ steps.version.outputs.VERSION }}-installer.zip
-          - **Portable**: Direct executable in the zip file
-          
-          ### 🚀 Features
-          - Desktop calendar widget with Google Calendar integration
-          - System tray integration
-          - Local-first data storage
-          - Auto-update functionality
-          
-          ### 📋 Installation
-          1. Download the installer zip file
-          2. Extract to your desired location
-          3. Run `D-deskcal.exe`
-          4. Configure your Google Calendar (optional)
-          
-          ### ⚙️ System Requirements
-          - Windows 10/11
-          - Internet connection (for Google Calendar sync)
-          
-          ### 🔄 Auto-Update
-          This version includes automatic update checking. The application will notify you when new updates are available.
-          
-          ---
-          
-          **Full Changelog**: https://github.com/thejurio/D-deskcal/commits/${{ steps.version.outputs.TAG_NAME }}
-        draft: false
-        prerelease: false
-    
-    - name: Upload Installer to Release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/D-deskcal-v${{ steps.version.outputs.VERSION }}-installer.zip
-        asset_name: D-deskcal-v${{ steps.version.outputs.VERSION }}-installer.zip
-        asset_content_type: application/zip
-    
-    - name: Upload Executable to Release
       run: |
-        # Create a separate zip with just the executable for easy access
         $version = "${{ steps.version.outputs.VERSION }}"
-        $exeName = "D-deskcal-v$version-portable.zip"
+        $tagName = "${{ steps.version.outputs.TAG_NAME }}"
         
-        Compress-Archive -Path "dist/D-deskcal/D-deskcal.exe" -DestinationPath "dist/$exeName" -Force
+        $releaseBody = @"
+        ## D-deskcal v$version
         
-        # Upload using GitHub CLI (alternative method)
-        gh release upload "v$version" "dist/$exeName" --clobber
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ### 📦 Downloads
+        - **Installer**: D-deskcal-v$version-installer.zip
+        - **Portable**: D-deskcal-v$version-portable.zip
+        
+        ### 🚀 Features
+        - Desktop calendar widget with Google Calendar integration
+        - System tray integration  
+        - Local-first data storage
+        - Auto-update functionality
+        
+        ### 📋 Installation
+        1. Download the installer zip file
+        2. Extract to your desired location
+        3. Run ``D-deskcal.exe``
+        4. Configure your Google Calendar (optional)
+        
+        ### ⚙️ System Requirements
+        - Windows 10/11
+        - Internet connection (for Google Calendar sync)
+        
+        ### 🔄 Auto-Update
+        This version includes automatic update checking. The application will notify you when new updates are available.
+        
+        ---
+        
+        **Full Changelog**: https://github.com/thejurio/D-deskcal/commits/$tagName
+        "@
+        
+        gh release create "$tagName" "dist/D-deskcal-v$version-installer.zip" "dist/D-deskcal-v$version-portable.zip" --title "D-deskcal v$version" --notes "$releaseBody"
+    
 
   notify-completion:
     needs: build-windows
