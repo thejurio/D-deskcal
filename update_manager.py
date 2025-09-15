@@ -29,7 +29,19 @@ class UpdateManager(QObject):
         """GitHub API를 통해 최신 릴리스 정보를 가져와 버전을 비교합니다."""
         try:
             api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-            response = requests.get(api_url, timeout=10)
+            headers = {
+                'User-Agent': 'D-DeskCal/1.1.7 (Windows Desktop Calendar Application)',
+                'Accept': 'application/vnd.github.v3+json',
+                'Cache-Control': 'max-age=3600'  # 1시간 캐시
+            }
+            # SSL 인증서 검증 및 타임아웃 설정
+            response = requests.get(
+                api_url, 
+                timeout=10, 
+                headers=headers, 
+                verify=True,  # SSL 인증서 검증
+                allow_redirects=True
+            )
             response.raise_for_status()
             
             latest_release = response.json()

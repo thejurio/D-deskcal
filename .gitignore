@@ -16,9 +16,17 @@ test_cache_debug.log
 .env
 .gemini/
 
-# Build artifacts
+# Code signing certificates (generated locally)
+*.cer
+*.p12
+*.pfx
+
+# Build artifacts and release files
 build/
 dist/
+release/
+_internal/
+old/
 *.spec
 
 # IDE files
@@ -42,4 +50,14 @@ cache/
 # Test files and logs
 test_*.log
 debug_*.log
+signal_report_*.log
 nul
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Local configuration
+.claude/
+settings.local.json

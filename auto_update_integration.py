@@ -125,7 +125,22 @@ class AutoUpdateDialog(QObject):
                 settings=self.settings
             )
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                self._start_update_download(release_data)
+                # PE 파일 생성 감지를 피하기 위해 브라우저로 다운로드 페이지 열기
+                import webbrowser
+                download_url = release_data.get('html_url', '')
+                if download_url:
+                    webbrowser.open(download_url)
+                    
+                    # 안내 메시지 표시
+                    if CUSTOM_DIALOGS_AVAILABLE:
+                        from custom_update_dialogs import UpdateCompleteDialog
+                        info_dialog = UpdateCompleteDialog(parent=self.parent, settings=self.settings)
+                        info_dialog.setWindowTitle("다운로드 안내")
+                        # 메시지 수정
+                        info_dialog.findChild(QLabel).setText("브라우저에서 다운로드 페이지를 열었습니다.\n수동으로 새 버전을 다운로드해주세요.")
+                        info_dialog.exec()
+                else:
+                    self._start_update_download(release_data)
         else:
             # 릴리스 노트를 간략하게 정리
             if len(release_notes) > 300:
@@ -308,13 +323,13 @@ class AutoUpdateChecker:
         self.timer = QTimer()
         self.timer.timeout.connect(self._periodic_check)
         
-        # 24시간마다 자동 체크 (86400000 ms)
-        self.check_interval = 24 * 60 * 60 * 1000
+        # 72시간마다 자동 체크로 변경 (네트워크 요청 빈도 감소)
+        self.check_interval = 72 * 60 * 60 * 1000
     
     def start_periodic_check(self):
         """주기적 업데이트 확인 시작"""
-        # 시작 5초 후 첫 번째 체크 (자동이므로 silent=True)
-        QTimer.singleShot(5000, lambda: self.update_dialog.check_for_updates(silent=True))
+        # 시작 10분 후 첫 번째 체크 (네트워크 요청 지연으로 의심 행위 감소)
+        QTimer.singleShot(600000, lambda: self.update_dialog.check_for_updates(silent=True))
         
         # 그 후 24시간마다 체크
         self.timer.start(self.check_interval)
