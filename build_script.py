@@ -115,11 +115,6 @@ a = Analysis(
         ('VERSION', '.'),
         ('credentials.json', '.'),
     ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    noarchive=False,
     collect_all_submodules=[
         'PyQt6',
         'google',
@@ -137,16 +132,6 @@ a = Analysis(
         'pytz',
         'google.generativeai',
     ],
-    module_collection_mode={
-        'PyQt6': 'pyz+py',
-        'google': 'pyz+py',
-        'googleapiclient': 'pyz+py',
-        'keyboard': 'pyz+py',
-        'plyer': 'pyz+py',
-        'requests': 'pyz+py',
-        'cryptography': 'pyz+py',
-        'Pillow': 'pyz+py',
-    },
     hiddenimports=[
         'keyboard',
         'plyer',
