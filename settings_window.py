@@ -38,14 +38,8 @@ class SettingsWindow(BaseDialog):
         self.setModal(True)
         self.setMinimumSize(530, 620)
         
-        # 창의 Z-order 조정: 다른 프로그램보다는 아래, 현재 프로그램보다는 위
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
-        if parent:
-            # 부모가 있으면 부모 위에 표시하되 다른 앱보다는 아래
-            self.setWindowFlags(self.windowFlags() | Qt.WindowType.Dialog)
-        else:
-            # 부모가 없으면 일반 창으로 표시
-            self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        # 설정창은 다른 창들 위에 표시되어야 함
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
         # 저장된 위치로 창을 이동 (UI 초기화 전에)
         self.restore_position()

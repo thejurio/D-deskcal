@@ -1201,14 +1201,22 @@ class MainWidget(QWidget):
         menu.exec(event.globalPos())
 
     def closeEvent(self, event):
-        event.ignore()
-        self.hide()
-        self.tray_icon.showMessage(
-            "D-DeskCal",
-            "캘린더가 백그라운드에서 실행 중입니다.",
-            QSystemTrayIcon.MessageIcon.Information,
-            2000
-        )
+        # Ctrl+Alt+F4를 누르거나 시스템 종료 시 실제로 종료
+        modifiers = QApplication.keyboardModifiers()
+        if (modifiers == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)):
+            print("🛑 강제 종료 키 조합 감지됨 - 프로그램 종료")
+            self.quit_application()
+            event.accept()
+        else:
+            # 일반적인 X 버튼 클릭은 트레이로 숨기기
+            event.ignore()
+            self.hide()
+            self.tray_icon.showMessage(
+                "D-DeskCal",
+                "캘린더가 백그라운드에서 실행 중입니다. 완전 종료하려면 트레이 아이콘에서 '종료'를 선택하세요.",
+                QSystemTrayIcon.MessageIcon.Information,
+                3000
+            )
 
     def mousePressEvent(self, event):
         if not self.is_interaction_unlocked():

@@ -80,13 +80,9 @@
             "x": 1331,
             "y": 292
         },
-        "SettingsWindow": {
-            "x": 1203,
-            "y": 141
-        },
         "NoUpdateDialog": {
-            "x": 760,
-            "y": 338
+            "x": 1203,
+            "y": 361
         },
         "AIEventInputDialog": {
             "x": 727,
