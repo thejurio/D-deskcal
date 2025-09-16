@@ -2,9 +2,9 @@
 
 ## 코드 서명 정보
 
-이 프로젝트는 **SignPath Foundation**에서 제공하는 무료 오픈소스 코드 서명 서비스를 이용합니다.
+이 프로젝트는 **SignPath Foundation**의 무료 오픈소스 코드 서명 프로그램 승인을 신청 중입니다.
 
-**Free code signing provided by [SignPath.io](https://signpath.io), certificate by SignPath Foundation**
+**Code signing certification pending approval from [SignPath.io](https://signpath.io) OSS program**
 
 ## 팀 역할 및 구성원
 
