@@ -158,23 +158,21 @@ jobs:
           exit 1
         }
 
-    - name: Create installer package
+    - name: Create portable zip
       run: |
         $version = Get-Content -Path "VERSION" -Raw
         $version = $version.Trim()
-        
-        # Create installer zip
-        $installerName = "D-deskcal-v$version-installer.zip"
-        
-        # Compress the built application
-        Compress-Archive -Path "dist/D-deskcal/*" -DestinationPath "dist/$installerName" -Force
-        
-        Write-Host "✅ Created installer: $installerName"
-        
-        # Verify installer
-        if (Test-Path "dist/$installerName") {
-          $size = (Get-Item "dist/$installerName").Length / 1MB
-          Write-Host "📦 Installer size: $([math]::Round($size, 2)) MB"
+        $portableName = "D-deskcal-v$version-portable.zip"
+
+        # Create portable zip with all necessary files
+        Compress-Archive -Path "dist/D-deskcal/*" -DestinationPath "dist/$portableName" -Force
+
+        Write-Host "✅ Created portable: $portableName"
+
+        # Verify portable file
+        if (Test-Path "dist/$portableName") {
+          $size = (Get-Item "dist/$portableName").Length / 1MB
+          Write-Host "📦 Portable size: $([math]::Round($size, 2)) MB"
         }
     
     - name: Upload build artifacts
@@ -182,7 +180,7 @@ jobs:
       with:
         name: D-deskcal-build
         path: |
-          dist/D-deskcal-v*-installer.zip
+          dist/D-deskcal-v*-portable.zip
           dist/D-deskcal/
           release/D-deskcal-v*-installer.exe
           freeze_ci.txt
@@ -197,21 +195,6 @@ jobs:
         echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         echo "TAG_NAME=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
     
-    - name: Create portable zip
-      run: |
-        $version = "${{ steps.version.outputs.VERSION }}"
-        $portableName = "D-deskcal-v$version-portable.zip"
-        
-        # Create portable zip with all necessary files (same as installer but different name)
-        Compress-Archive -Path "dist/D-deskcal/*" -DestinationPath "dist/$portableName" -Force
-        
-        Write-Host "✅ Created portable: $portableName"
-        
-        # Verify portable file
-        if (Test-Path "dist/$portableName") {
-          $size = (Get-Item "dist/$portableName").Length / 1MB
-          Write-Host "📦 Portable size: $([math]::Round($size, 2)) MB"
-        }
     
     - name: Create Release
       env:
@@ -226,7 +209,6 @@ jobs:
         ### 📦 Downloads
         - **Windows Installer**: D-deskcal-v$version-installer.exe (Recommended)
         - **Portable ZIP**: D-deskcal-v$version-portable.zip
-        - **Legacy ZIP**: D-deskcal-v$version-installer.zip
         
         ### 🚀 Features
         - Desktop calendar widget with Google Calendar integration
@@ -252,7 +234,7 @@ jobs:
         **Full Changelog**: https://github.com/thejurio/D-deskcal/commits/$tagName
         "@
         
-        gh release create "$tagName" "release/D-deskcal-v$version-installer.exe" "dist/D-deskcal-v$version-portable.zip" "dist/D-deskcal-v$version-installer.zip" --title "D-deskcal v$version" --notes "$releaseBody"
+        gh release create "$tagName" "release/D-deskcal-v$version-installer.exe" "dist/D-deskcal-v$version-portable.zip" --title "D-deskcal v$version" --notes "$releaseBody"
     
 
   notify-completion:
