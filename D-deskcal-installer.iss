@@ -1,7 +1,4 @@
-#define AppVersion GetFileVersion("dist\D-deskcal\D-deskcal.exe")
-#if AppVersion == ""
-  #define AppVersion GetStringFileInfo("VERSION", "1.1.7")
-#endif
+#define AppVersion "{{VERSION_PLACEHOLDER}}"
 
 [Setup]
 ; 기본 정보

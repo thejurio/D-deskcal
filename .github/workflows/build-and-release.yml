@@ -129,17 +129,28 @@ jobs:
 
     - name: Create Inno Setup installer
       run: |
+        # Get version from VERSION file
+        $version = Get-Content -Path "VERSION" -Raw
+        $version = $version.Trim()
+        Write-Host "📋 Version: $version"
+
         # Create release directory if it doesn't exist
         if (-not (Test-Path "release")) {
           New-Item -ItemType Directory -Path "release"
           Write-Host "📁 Created release directory"
         }
 
+        # Replace version placeholder in Inno Setup script
+        $issContent = Get-Content -Path "D-deskcal-installer.iss" -Raw
+        $issContent = $issContent -replace "{{VERSION_PLACEHOLDER}}", $version
+        $issContent | Out-File -FilePath "D-deskcal-installer-temp.iss" -Encoding UTF8
+        Write-Host "✅ Created temporary Inno Setup script with version $version"
+
         # Compile Inno Setup installer
         $innoSetupPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
         if (Test-Path $innoSetupPath) {
           Write-Host "🔧 Building Inno Setup installer..."
-          & $innoSetupPath "D-deskcal-installer.iss"
+          & $innoSetupPath "D-deskcal-installer-temp.iss"
 
           if ($LASTEXITCODE -eq 0) {
             Write-Host "✅ Inno Setup installer created successfully"
@@ -156,6 +167,12 @@ jobs:
         } else {
           Write-Host "❌ Inno Setup not found at: $innoSetupPath"
           exit 1
+        }
+
+        # Clean up temporary file
+        if (Test-Path "D-deskcal-installer-temp.iss") {
+          Remove-Item "D-deskcal-installer-temp.iss" -Force
+          Write-Host "🧹 Cleaned up temporary Inno Setup script"
         }
 
     - name: Create portable zip
