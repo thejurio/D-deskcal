@@ -88,10 +88,16 @@ jobs:
         }
     
     - name: Sign executable
-      if: secrets.SIGNING_CERTIFICATE
       run: |
+        # Check if signing certificate is available
+        $signingCert = "${{ secrets.SIGNING_CERTIFICATE }}"
+        if ([string]::IsNullOrEmpty($signingCert)) {
+          Write-Host "⏭️ No signing certificate configured, skipping code signing"
+          exit 0
+        }
+
         # Base64 decode certificate and save to temp file
-        $certBytes = [System.Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE }}")
+        $certBytes = [System.Convert]::FromBase64String($signingCert)
         $certPath = "temp_cert.p12"
         [System.IO.File]::WriteAllBytes($certPath, $certBytes)
         
