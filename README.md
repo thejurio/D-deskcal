@@ -154,7 +154,7 @@ GitHub Releases에서 최신 버전을 다운로드하세요:
 - **네트워크 통신**: Google Calendar API 및 업데이트 확인 외에는 외부 서버와 통신하지 않습니다
 - **데이터 수집**: 개인정보나 사용 패턴을 수집하지 않습니다
 
-자세한 내용은 [개인정보처리방침](CODE_SIGNING_POLICY.md#개인정보처리방침)을 참조하세요.
+자세한 내용은 [개인정보처리방침](PRIVACY_POLICY.md)을 참조하세요.
 
 ## 🔐 Code Signing Policy
 
