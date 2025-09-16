@@ -24,3 +24,6 @@ keyboard>=0.13.5
 
 # System monitoring
 psutil>=5.9.0
+
+# Windows API support
+pywin32>=306
