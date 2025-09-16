@@ -150,9 +150,10 @@ Code signing certification pending approval from [SignPath.io](https://signpath.
 
 ## 🔄 업데이트 이력
 
-현재 버전: v1.1.7
+현재 버전: v1.1.8
 
 주요 업데이트 내역:
+- **v1.1.8**: 자동업데이트 테스트 버전, 의존성 완전 점검 완료
 - **v1.1.7**: 업데이트 진행률 표시 개선, OAuth 토큰 만료 오류 수정
 - **v1.1.5**: 실시간 설정 미리보기 기능 추가
 - **v1.1.4**: 캐시 시스템 안정성 향상
