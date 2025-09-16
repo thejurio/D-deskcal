@@ -62,3 +62,21 @@ nul
 # Local configuration
 .claude/
 settings.local.json
+
+# Unwanted directories and files (completely removed from history)
+backup/
+claudedocs/
+contants/
+fix/
+note/
+old/
+tests/
+
+# Exclude all markdown files except essential ones
+*.md
+!README.md
+!LICENSE.md
+
+# Various test files
+test*
+*test*
