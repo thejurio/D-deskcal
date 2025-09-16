@@ -14,8 +14,8 @@ test_cache_debug.log
 .env
 .gemini/
 
-# OAuth client config (public - safe to include)
-# credentials.json - included for app functionality
+# OAuth client config - NOW MANAGED VIA GITHUB SECRETS
+credentials.json
 
 # Code signing certificates (generated locally)
 *.cer
