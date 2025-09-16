@@ -1,7 +1,12 @@
+#define AppVersion GetFileVersion("dist\D-deskcal\D-deskcal.exe")
+#if AppVersion == ""
+  #define AppVersion GetStringFileInfo("VERSION", "1.1.7")
+#endif
+
 [Setup]
 ; 기본 정보
 AppName=D-deskcal
-AppVersion=1.1.7
+AppVersion={#AppVersion}
 AppPublisher=D-deskcal Development Team
 AppPublisherURL=https://github.com/thejurio/D-deskcal
 AppSupportURL=https://github.com/thejurio/D-deskcal/issues
@@ -10,7 +15,7 @@ DefaultDirName={autopf}\D-deskcal
 DefaultGroupName=D-deskcal
 AllowNoIcons=yes
 OutputDir=release
-OutputBaseFilename=D-deskcal-v1.1.7-installer
+OutputBaseFilename=D-deskcal-v{#AppVersion}-installer
 SetupIconFile=icons\tray_icon.ico
 Compression=lzma
 SolidCompression=yes
@@ -37,7 +42,7 @@ CreateAppDir=yes
 DirExistsWarning=no
 
 ; 언인스톨 정보
-UninstallDisplayName=D-deskcal v1.1.7
+UninstallDisplayName=D-deskcal v{#AppVersion}
 UninstallDisplayIcon={app}\D-deskcal.exe
 
 [Languages]

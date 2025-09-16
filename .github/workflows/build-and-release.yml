@@ -20,12 +20,19 @@ jobs:
         python-version: '3.11'
         cache: 'pip'
     
-    - name: Install Windows SDK (for signtool)
+    - name: Install Windows SDK and Inno Setup
       run: |
+        # Install Windows SDK for signtool
         choco install windows-sdk-10.1 --force --no-progress
         # Add signtool to PATH
         $env:PATH += ";C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64"
         echo "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+        # Install Inno Setup
+        choco install innosetup --force --no-progress
+        # Add Inno Setup to PATH
+        $env:PATH += ";C:\Program Files (x86)\Inno Setup 6"
+        echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
     
     - name: Create credentials.json from secret
       run: |
@@ -119,7 +126,38 @@ jobs:
       env:
         SIGNING_CERTIFICATE: ${{ secrets.SIGNING_CERTIFICATE }}
         SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
-    
+
+    - name: Create Inno Setup installer
+      run: |
+        # Create release directory if it doesn't exist
+        if (-not (Test-Path "release")) {
+          New-Item -ItemType Directory -Path "release"
+          Write-Host "📁 Created release directory"
+        }
+
+        # Compile Inno Setup installer
+        $innoSetupPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        if (Test-Path $innoSetupPath) {
+          Write-Host "🔧 Building Inno Setup installer..."
+          & $innoSetupPath "D-deskcal-installer.iss"
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Inno Setup installer created successfully"
+
+            # List installer files
+            Get-ChildItem -Path "release" -Filter "*.exe" | ForEach-Object {
+              $size = [math]::Round($_.Length / 1MB, 2)
+              Write-Host "📦 Installer: $($_.Name) ($size MB)"
+            }
+          } else {
+            Write-Host "❌ Inno Setup compilation failed"
+            exit 1
+          }
+        } else {
+          Write-Host "❌ Inno Setup not found at: $innoSetupPath"
+          exit 1
+        }
+
     - name: Create installer package
       run: |
         $version = Get-Content -Path "VERSION" -Raw
@@ -146,6 +184,7 @@ jobs:
         path: |
           dist/D-deskcal-v*-installer.zip
           dist/D-deskcal/
+          release/D-deskcal-v*-installer.exe
           freeze_ci.txt
           build/*.toc
           build/*.txt
@@ -185,8 +224,9 @@ jobs:
         ## D-deskcal v$version
         
         ### 📦 Downloads
-        - **Installer**: D-deskcal-v$version-installer.zip
-        - **Portable**: D-deskcal-v$version-portable.zip
+        - **Windows Installer**: D-deskcal-v$version-installer.exe (Recommended)
+        - **Portable ZIP**: D-deskcal-v$version-portable.zip
+        - **Legacy ZIP**: D-deskcal-v$version-installer.zip
         
         ### 🚀 Features
         - Desktop calendar widget with Google Calendar integration
@@ -212,7 +252,7 @@ jobs:
         **Full Changelog**: https://github.com/thejurio/D-deskcal/commits/$tagName
         "@
         
-        gh release create "$tagName" "dist/D-deskcal-v$version-installer.zip" "dist/D-deskcal-v$version-portable.zip" --title "D-deskcal v$version" --notes "$releaseBody"
+        gh release create "$tagName" "release/D-deskcal-v$version-installer.exe" "dist/D-deskcal-v$version-portable.zip" "dist/D-deskcal-v$version-installer.zip" --title "D-deskcal v$version" --notes "$releaseBody"
     
 
   notify-completion:
