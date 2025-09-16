@@ -64,6 +64,16 @@
 - **메타데이터 설정**: 모든 서명된 파일에 제품명과 버전 정보 포함
 
 ### 보안 요구사항
+
+#### Multi-Factor Authentication (MFA/2FA)
+- **English**: All maintainers use multi-factor authentication. (Personal repository: all collaborators are required to have 2FA enabled.)
+- **한국어**: 모든 메인테이너는 다중 인증을 사용합니다. (개인 저장소: 모든 협력자는 2FA 활성화가 필수입니다.)
+
+#### Protected Branches
+- **English**: The main branch requires pull requests, at least 1 approval, and passing status checks before merging.
+- **한국어**: main 브랜치는 병합 전에 pull request, 최소 1개의 승인, 그리고 상태 확인 통과가 필요합니다.
+
+#### Additional Security Measures
 - **다중 인증**: GitHub 계정 및 SignPath 계정에 2FA(이중 인증) 활성화
 - **수동 승인**: 모든 릴리즈는 수동 승인 과정을 거쳐 서명
 - **변경 리뷰**: 모든 코드 변경사항은 릴리즈 전 검토됨
