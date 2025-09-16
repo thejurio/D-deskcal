@@ -1,4 +1,4 @@
-# D-deskcal - Desktop Calendar Widget
+# D-DeskCal
 
 **English**: A beautiful desktop calendar widget application built with PyQt6. Seamlessly integrates with Google Calendar and local calendars, allowing users to conveniently view and manage their schedules directly from the desktop with multiple themes and intelligent data management.
 
@@ -6,15 +6,31 @@
 
 ![Project Screenshot](https://user-images.githubusercontent.com/12345/screenshot.png) <!-- TODO: 추후 스크린샷 이미지 링크로 교체 -->
 
-## ✨ 주요 기능
+## ✨ Features / 주요 기능
 
-- **다중 캘린더 지원**: Google 계정 하나에 연결된 모든 캘린더와 로컬 DB 기반의 개인 캘린더를 동시에 사용할 수 있습니다.
-- **다양한 테마**: 사용자의 취향에 맞춰 선택할 수 있는 어두운 테마(Dark)와 밝은 테마(Light)를 제공합니다.
-- **전체 일정 검색**: 현재 보고 있는 날짜와 상관없이, 로컬 및 Google 캘린더의 모든 과거/미래 일정을 대상으로 강력한 키워드 검색을 지원합니다.
-- **다양한 뷰 모드**: 월별(Month) 및 주별(Week) 뷰를 제공하며, 추후 일간/안건 뷰를 추가할 예정입니다.
-- **상세한 일정 관리**: 반복 일정, 종일 일정, 설명 추가 등 상세한 옵션을 포함한 이벤트 생성 및 편집 기능을 제공합니다.
-- **지능형 데이터 관리**: 백그라운드 스레드를 통해 데이터를 캐싱하고 주기적으로 동기화하여, 부드럽고 빠른 UI 반응성을 보장합니다.
-- **높은 사용자 정의**: 투명도 조절, 표시할 캘린더 선택, 캘린더별 색상 지정 등 다양한 개인화 옵션을 제공합니다.
+### 📋 Calendar Display / 캘린더 표시
+- **Monthly Calendar View**: Intuitive monthly schedule display / 직관적인 월별 일정 표시
+- **Event Display**: Real-time event viewing with Google Calendar integration / Google Calendar와 연동하여 실시간 일정 확인
+- **Multiple Themes**: Light/Dark mode support / 라이트/다크 모드 지원
+- **Responsive UI**: Optimized for various screen sizes / 다양한 화면 크기에 최적화
+
+### 🔗 Google Calendar Integration / Google Calendar 연동
+- **OAuth 2.0 Authentication**: Secure Google account integration / 안전한 Google 계정 연동
+- **Real-time Sync**: Automatic Google Calendar event updates / Google Calendar 일정 자동 업데이트
+- **Offline Caching**: View recent events without network connection / 네트워크 연결 없이도 최근 일정 확인
+- **Auto Token Refresh**: Seamless integration service / 중단 없는 연동 서비스
+
+### ⚙️ User Settings / 사용자 설정
+- **Start Day Configuration**: Choose Monday/Sunday start / 월요일/일요일 시작 선택
+- **Weekend Display**: Weekend highlighting options / 주말 강조 표시 옵션
+- **Language Settings**: Korean language support / 한국어 지원
+- **Auto Start**: Automatic startup on Windows boot / Windows 부팅 시 자동 실행
+
+### 🔄 Auto Update / 자동 업데이트
+- **GitHub Integration**: Automatic latest version checking / 최신 버전 자동 확인
+- **Silent Updates**: Background checking (72-hour cycle) / 백그라운드에서 자동 확인 (72시간 주기)
+- **Manual Check**: Update check available anytime from menu / 메뉴에서 언제든 업데이트 확인
+- **Safe Installation**: Update while preserving existing settings / 기존 설정 보존하며 업데이트
 
 ## 🏛️ 아키텍처
 
@@ -88,10 +104,25 @@
 
 ## 🛠️ 설치 및 실행 방법
 
+### 다운로드
+GitHub Releases에서 최신 버전을 다운로드하세요:
+- [최신 릴리즈 다운로드](https://github.com/thejurio/D-deskcal/releases/latest)
+
+### 시스템 요구사항
+- **OS**: Windows 10/11
+- **메모리**: 최소 100MB RAM
+- **네트워크**: Google Calendar 연동 시 인터넷 연결 필요
+
+### 설치 파일
+- `D-deskcal-v[version]-portable.zip`: 포터블 버전
+- `D-deskcal-v[version]-installer.exe`: 인스톨러 버전
+
+### 개발자용 설치 방법
+
 1.  **저장소 복제**:
     ```bash
-    git clone https://github.com/your-username/your-repository-name.git
-    cd your-repository-name
+    git clone https://github.com/thejurio/D-deskcal.git
+    cd D-deskcal
     ```
 
 2.  **가상 환경 생성 및 활성화**:
@@ -107,9 +138,50 @@
 
 4.  **`credentials.json` 파일 준비**:
     - [Google Cloud Console](https://console.cloud.google.com/)에서 `데스크톱 앱` 유형으로 OAuth 2.0 클라이언트 ID를 생성합니다.
-    - 다운로드한 `credentials.json` 파일을 프로젝트 루트 폴더(`C:\dcwidget`)에 위치시킵니다.
+    - 다운로드한 `credentials.json` 파일을 프로젝트 루트 폴더에 위치시킵니다.
 
 5.  **프로그램 실행**:
     ```bash
     python ui_main.py
     ```
+
+## 🛡️ 개인정보 보호
+
+이 프로그램은 다음 개인정보처리방침을 따릅니다:
+
+- **Google Calendar 데이터**: OAuth 2.0을 통해 안전하게 처리되며, 로컬에만 저장됩니다
+- **사용자 설정**: 모든 설정은 로컬 컴퓨터에만 저장됩니다
+- **네트워크 통신**: Google Calendar API 및 업데이트 확인 외에는 외부 서버와 통신하지 않습니다
+- **데이터 수집**: 개인정보나 사용 패턴을 수집하지 않습니다
+
+자세한 내용은 [개인정보처리방침](CODE_SIGNING_POLICY.md#개인정보처리방침)을 참조하세요.
+
+## 🔐 Code Signing Policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by SignPath Foundation.
+
+자세한 코드 서명 정책은 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)를 참조하세요.
+
+## 📝 라이선스
+
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+## 🐛 버그 리포트 및 기능 요청
+
+버그 발견이나 새로운 기능 제안이 있으시면 [GitHub Issues](https://github.com/thejurio/D-deskcal/issues)에 등록해주세요.
+
+## 🔄 업데이트 이력
+
+현재 버전: v1.1.6
+
+주요 업데이트 내역:
+- **v1.1.6**: 업데이트 진행률 표시 개선, OAuth 토큰 만료 오류 수정
+- **v1.1.5**: 실시간 설정 미리보기 기능 추가
+- **v1.1.4**: 캐시 시스템 안정성 향상
+
+전체 업데이트 이력은 [Releases](https://github.com/thejurio/D-deskcal/releases)에서 확인하세요.
+
+---
+
+**개발자**: [thejurio](https://github.com/thejurio)  
+**프로젝트 홈**: [https://github.com/thejurio/D-deskcal](https://github.com/thejurio/D-deskcal)
