@@ -63,13 +63,13 @@ VSVersionInfo(
       [
       StringTable(
         u'040904B0',
-        [StringStruct(u'CompanyName', u'DeskCal Team'),
-        StringStruct(u'FileDescription', u'DeskCal - Desktop Calendar Widget'),
+        [StringStruct(u'CompanyName', u'thejurio'),
+        StringStruct(u'FileDescription', u'D-DeskCal - Desktop Calendar Widget'),
         StringStruct(u'FileVersion', u'{version_with_build}'),
-        StringStruct(u'InternalName', u'D-deskcal'),
-        StringStruct(u'LegalCopyright', u'Copyright (c) 2024 DeskCal Team'),
-        StringStruct(u'OriginalFilename', u'D-deskcal.exe'),
-        StringStruct(u'ProductName', u'DeskCal'),
+        StringStruct(u'InternalName', u'D-DeskCal'),
+        StringStruct(u'LegalCopyright', u'Copyright (c) 2025 thejurio'),
+        StringStruct(u'OriginalFilename', u'D-DeskCal.exe'),
+        StringStruct(u'ProductName', u'D-DeskCal'),
         StringStruct(u'ProductVersion', u'{version_with_build}')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
