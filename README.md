@@ -1,8 +1,10 @@
-# Glassy Calendar Widget
+# D-deskcal - Desktop Calendar Widget
+
+**English**: A beautiful desktop calendar widget application built with PyQt6. Seamlessly integrates with Google Calendar and local calendars, allowing users to conveniently view and manage their schedules directly from the desktop with multiple themes and intelligent data management.
+
+**한국어**: PyQt6로 제작된 미려한 디자인의 데스크톱 캘린더 위젯 애플리케이션입니다. Google 캘린더 및 로컬 캘린더와 연동하여 사용자의 일정을 바탕화면에서 편리하게 확인하고 관리할 수 있습니다.
 
 ![Project Screenshot](https://user-images.githubusercontent.com/12345/screenshot.png) <!-- TODO: 추후 스크린샷 이미지 링크로 교체 -->
-
-Glassy Calendar는 PyQt6로 제작된 미려한 디자인의 데스크톱 캘린더 위젯 애플리케이션입니다. Google 캘린더 및 로컬 캘린더와 연동하여 사용자의 일정을 바탕화면에서 편리하게 확인하고 관리할 수 있습니다.
 
 ## ✨ 주요 기능
 
