@@ -77,6 +77,15 @@ tests/
 !README.md
 !LICENSE.md
 
-# Various test files
+# Various test files and backup files
 test*
 *test*
+*_backup*
+*backup*
+debug_*.py
+fix_*.py
+complete_*.py
+safe_*.py
+simple_*.py
+gemini_parser.py
+*.backup_*
