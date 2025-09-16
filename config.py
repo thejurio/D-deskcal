@@ -34,7 +34,43 @@ DB_FILE = os.path.join(_DATA_DIR, "calendar.db")
 CACHE_DB_FILE = os.path.join(_DATA_DIR, "calendar_cache.db")
 SETTINGS_FILE = os.path.join(_DATA_DIR, "settings.json")
 TOKEN_FILE = os.path.join(_DATA_DIR, "token.json")
-CREDENTIALS_FILE = os.path.join(_APP_DIR, "credentials.json")  # 앱 디렉토리에서 찾기
+def get_credentials_file():
+    """
+    Get credentials.json file path with fallback strategy:
+    1. MEIPASS (bundled with executable) - highest priority
+    2. Environment variable GOOGLE_CREDENTIALS_PATH
+    3. User data directory
+    4. Development directory (current directory)
+    """
+    # Priority 1: PyInstaller bundle directory (_MEIPASS)
+    if hasattr(sys, '_MEIPASS'):
+        meipass_path = os.path.join(sys._MEIPASS, "credentials.json")
+        if os.path.exists(meipass_path):
+            return meipass_path
+
+    # Priority 2: Environment variable
+    env_path = os.environ.get('GOOGLE_CREDENTIALS_PATH')
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    # Priority 3: User data directory
+    user_path = os.path.join(_DATA_DIR, "credentials.json")
+    if os.path.exists(user_path):
+        return user_path
+
+    # Priority 4: Development directory fallback
+    dev_path = os.path.join(_APP_DIR, "credentials.json")
+    if os.path.exists(dev_path):
+        return dev_path
+
+    # Default fallback to MEIPASS path (for error messaging)
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, "credentials.json")
+
+    # Final fallback to app directory
+    return os.path.join(_APP_DIR, "credentials.json")
+
+CREDENTIALS_FILE = get_credentials_file()
 ERROR_LOG_FILE = os.path.join(_DATA_DIR, "error.log")
 
 # --- Identifiers ---

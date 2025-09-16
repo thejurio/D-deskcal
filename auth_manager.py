@@ -51,21 +51,47 @@ class LoginWorker(QObject):
         """로그인 절차를 실행하고 결과를 finished 신호로 보냅니다."""
         print("로그인 절차 시작...")
         print(f"credentials 파일 경로: {CREDENTIALS_FILE}")
-        
-        # credentials.json 파일 존재 확인
+
+        # Enhanced credential file search with detailed logging
         if os.path.exists(CREDENTIALS_FILE):
-            print("credentials.json 파일 발견됨")
+            print("✅ credentials.json 파일 발견됨")
             try:
                 with open(CREDENTIALS_FILE, 'r') as f:
                     content = f.read()
-                    print(f"credentials.json 크기: {len(content)} bytes")
+                    print(f"📄 credentials.json 크기: {len(content)} bytes")
             except Exception as e:
-                print(f"credentials.json 읽기 실패: {e}")
+                print(f"❌ credentials.json 읽기 실패: {e}")
         else:
-            print("credentials.json 파일을 찾을 수 없음!")
-            print(f"현재 작업 디렉토리: {os.getcwd()}")
+            print("❌ credentials.json 파일을 찾을 수 없음!")
+
+            # Enhanced debugging info
+            print(f"🔍 현재 작업 디렉토리: {os.getcwd()}")
+
+            # Check all possible locations
+            print("🔍 가능한 위치들 확인:")
+
             if hasattr(sys, '_MEIPASS'):
-                print(f"_MEIPASS: {sys._MEIPASS}")
+                meipass_path = os.path.join(sys._MEIPASS, "credentials.json")
+                print(f"  1. MEIPASS: {meipass_path} - {'✅' if os.path.exists(meipass_path) else '❌'}")
+
+            env_path = os.environ.get('GOOGLE_CREDENTIALS_PATH')
+            if env_path:
+                print(f"  2. ENV VAR: {env_path} - {'✅' if os.path.exists(env_path) else '❌'}")
+            else:
+                print("  2. ENV VAR: GOOGLE_CREDENTIALS_PATH 설정되지 않음")
+
+            from config import get_data_dir, get_app_dir
+            user_path = os.path.join(get_data_dir(), "credentials.json")
+            dev_path = os.path.join(get_app_dir(), "credentials.json")
+
+            print(f"  3. USER DIR: {user_path} - {'✅' if os.path.exists(user_path) else '❌'}")
+            print(f"  4. APP DIR: {dev_path} - {'✅' if os.path.exists(dev_path) else '❌'}")
+
+            print("💡 해결방법:")
+            print("  - 빌드된 실행파일: credentials.json이 번들에 포함되어야 함")
+            print("  - 개발환경: 프로젝트 루트에 credentials.json 파일 필요")
+            print("  - 사용자설치: GOOGLE_CREDENTIALS_PATH 환경변수 설정")
+
             self.finished.emit(None)
             return
 
