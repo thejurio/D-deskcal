@@ -4,8 +4,8 @@
 
 ## English Privacy Policy
 
-**Effective Date**: January 2025  
-**Last Updated**: January 2025
+**Effective Date**: September 2025  
+**Last Updated**: September 2025
 
 ### 1. Introduction
 
