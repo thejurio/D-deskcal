@@ -4,8 +4,8 @@
 
 ## English Privacy Policy
 
-**Effective Date**: January 2025  
-**Last Updated**: January 2025
+**Effective Date**: September 2025  
+**Last Updated**: September 2025
 
 ### 1. Introduction
 
@@ -113,8 +113,8 @@ If you have questions about this Privacy Policy, please contact us through:
 
 ## 한국어 개인정보처리방침
 
-**시행일**: 2025년 1월  
-**최종 수정일**: 2025년 1월
+**시행일**: 2025년 9월  
+**최종 수정일**: 2025년 9월
 
 ### 1. 개요
 
