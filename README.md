@@ -158,7 +158,7 @@ GitHub Releases에서 최신 버전을 다운로드하세요:
 
 ## 🔐 Code Signing Policy
 
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by SignPath Foundation.
+Code signing certification pending approval from [SignPath.io](https://signpath.io) OSS program.
 
 자세한 코드 서명 정책은 [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)를 참조하세요.
 
