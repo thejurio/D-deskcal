@@ -125,22 +125,8 @@ class AutoUpdateDialog(QObject):
                 settings=self.settings
             )
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                # PE 파일 생성 감지를 피하기 위해 브라우저로 다운로드 페이지 열기
-                import webbrowser
-                download_url = release_data.get('html_url', '')
-                if download_url:
-                    webbrowser.open(download_url)
-                    
-                    # 안내 메시지 표시
-                    if CUSTOM_DIALOGS_AVAILABLE:
-                        from custom_update_dialogs import UpdateCompleteDialog
-                        info_dialog = UpdateCompleteDialog(parent=self.parent, settings=self.settings)
-                        info_dialog.setWindowTitle("다운로드 안내")
-                        # 메시지 수정
-                        info_dialog.findChild(QLabel).setText("브라우저에서 다운로드 페이지를 열었습니다.\n수동으로 새 버전을 다운로드해주세요.")
-                        info_dialog.exec()
-                else:
-                    self._start_update_download(release_data)
+                # 실제 자동 업데이트 수행
+                self._start_update_download(release_data)
         else:
             # 릴리스 노트를 간략하게 정리
             if len(release_notes) > 300:
