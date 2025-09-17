@@ -251,11 +251,15 @@ class AutoUpdateDialog(QObject):
         
         # 사용자가 확인한 경우에만 프로그램 종료
         if user_confirmed:
-            logger.info("User confirmed update completion - shutting down program...")
-            
-            # 프로그램 종료 (업데이트 스크립트가 재시작함)
-            import sys
-            sys.exit(0)
+            logger.info("User confirmed update completion - scheduling delayed exit...")
+
+            # UI 스레드 블록 방지를 위해 지연된 종료
+            from PyQt6.QtCore import QTimer
+            def delayed_exit():
+                logger.info("Executing delayed exit for update restart")
+                import sys
+                sys.exit(0)
+            QTimer.singleShot(500, delayed_exit)  # 0.5초 후 안전한 종료
         else:
             logger.info("User cancelled update completion dialog")
     

@@ -276,18 +276,28 @@ class UpdateProgressDialog(BaseDialog):
 
 class UpdateCompleteDialog(BaseDialog):
     """업데이트 완료 다이얼로그"""
-    
+
     def __init__(self, parent=None, settings=None):
         super().__init__(parent=parent, settings=settings)
-        
+
         self.setWindowTitle(get_update_text("complete_title"))
         self.setModal(True)
         self.setFixedSize(400, 250)
-        
+
         # 완료 다이얼로그는 최고 우선순위로 표시 (가장 나중에 뜨므로)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        
+
         self.init_ui()
+
+    def _on_ok_clicked(self):
+        """확인 버튼 클릭 처리 - UI 반응성 개선"""
+        # 즉시 버튼 비활성화로 중복 클릭 방지
+        self.ok_btn.setEnabled(False)
+        self.ok_btn.setText("처리 중...")
+
+        # 약간의 지연 후 다이얼로그 닫기
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self.accept)
     
     def init_ui(self):
         """UI 초기화"""
@@ -327,18 +337,18 @@ class UpdateCompleteDialog(BaseDialog):
         self.restart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.restart_label.setWordWrap(True)
         content_layout.addWidget(self.restart_label)
-        
+
         # 신축성 공간
         content_layout.addStretch()
-        
+
         # 버튼 레이아웃
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         # 확인 버튼
         self.ok_btn = QPushButton(get_update_text("ok_button"))
         self.ok_btn.setObjectName("update_button")
-        self.ok_btn.clicked.connect(self.accept)
+        self.ok_btn.clicked.connect(self._on_ok_clicked)
         button_layout.addWidget(self.ok_btn)
         
         content_layout.addLayout(button_layout)
