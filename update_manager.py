@@ -216,36 +216,131 @@ class UpdateDownloader(QObject):
             raise Exception(f"인스톨러 실행 실패: {e}")
     
     def _install_from_zip(self, zip_file):
-        """ZIP 파일에서 업데이트를 설치합니다. (하위 호환성)"""
+        """ZIP 파일에서 업데이트를 설치합니다. (포터블 방식)"""
         try:
-            # 기존 ZIP 압축 해제 로직
-            extract_dir = Path(self.temp_dir) / "extracted"
-            extract_dir.mkdir(exist_ok=True)
-            
-            with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-            
-            # 현재 실행 파일의 경로
+            print(f"포터블 ZIP 업데이트 시작: {zip_file}")
+
+            # 현재 실행 파일의 경로 감지
             if getattr(sys, 'frozen', False):
                 current_exe_dir = Path(sys.executable).parent
+                current_exe_name = Path(sys.executable).name
             else:
                 current_exe_dir = Path.cwd()
-            
-            print(f"추출 디렉토리: {extract_dir}")
+                current_exe_name = "D-deskcal.exe"
+
             print(f"현재 실행 디렉토리: {current_exe_dir}")
-            
-            # 추출된 파일 내용 확인
-            print("추출된 파일 목록:")
+            print(f"현재 실행 파일: {current_exe_name}")
+
+            # 임시 추출 디렉토리
+            extract_dir = Path(self.temp_dir) / "extracted"
+            extract_dir.mkdir(exist_ok=True)
+
+            # ZIP 파일 추출
+            with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+
+            # 추출된 내용 확인
+            print("추출된 파일:")
             for item in extract_dir.rglob("*"):
                 if item.is_file():
-                    print(f"  {item.relative_to(extract_dir)}")
-            
-            # 업데이트 스크립트 생성 및 실행
-            self._create_update_script(extract_dir, current_exe_dir)
-            
+                    print(f"  {item}")
+
+            # 업데이트 스크립트 생성 - 간단한 파일 복사 방식
+            self._create_simple_update_script(extract_dir, current_exe_dir, current_exe_name)
+
         except Exception as e:
+            print(f"ZIP 설치 오류: {e}")
             raise Exception(f"ZIP 파일 설치 실패: {e}")
-    
+
+    def _create_simple_update_script(self, extract_dir, current_exe_dir, current_exe_name):
+        """간단한 파일 복사 방식으로 업데이트를 수행합니다."""
+        try:
+            print(f"간단한 업데이트 스크립트 생성 - 원본: {extract_dir}, 대상: {current_exe_dir}")
+
+            # 추출된 디렉토리에서 실행 파일 찾기
+            exe_source_path = None
+            internal_source_path = None
+
+            # 직접 경로에서 찾기
+            direct_exe = extract_dir / "D-deskcal.exe"
+            if direct_exe.exists():
+                exe_source_path = direct_exe
+                internal_source_path = extract_dir / "_internal"
+                print(f"직접 경로에서 실행 파일 발견: {exe_source_path}")
+            else:
+                # D-deskcal 폴더 안에서 찾기
+                subfolder_exe = extract_dir / "D-deskcal" / "D-deskcal.exe"
+                if subfolder_exe.exists():
+                    exe_source_path = subfolder_exe
+                    internal_source_path = extract_dir / "D-deskcal" / "_internal"
+                    print(f"D-deskcal 폴더에서 실행 파일 발견: {exe_source_path}")
+
+            if not exe_source_path:
+                raise Exception("업데이트 파일에서 실행 파일을 찾을 수 없습니다.")
+
+            # 배치 스크립트 생성
+            script_path = Path(self.temp_dir) / "simple_update.bat"
+            script_content = f'''@echo off
+chcp 65001 >nul
+echo D-deskcal 업데이트 중...
+
+REM 5초 대기 (프로그램 완전 종료 대기)
+timeout /t 5 /nobreak >nul
+
+REM 기존 파일 백업
+if exist "{current_exe_dir}\\backup" rmdir /s /q "{current_exe_dir}\\backup"
+mkdir "{current_exe_dir}\\backup" 2>nul
+if exist "{current_exe_dir}\\{current_exe_name}" (
+    copy "{current_exe_dir}\\{current_exe_name}" "{current_exe_dir}\\backup\\" /y >nul
+)
+
+REM 실행 파일 교체
+echo 실행 파일 업데이트 중...
+copy "{exe_source_path}" "{current_exe_dir}\\" /y
+if %errorlevel% neq 0 (
+    echo 실행 파일 복사 실패!
+    pause
+    goto :end
+)
+
+REM _internal 폴더 업데이트 (있는 경우)
+if exist "{internal_source_path}" (
+    echo _internal 폴더 업데이트 중...
+    if exist "{current_exe_dir}\\_internal" rmdir /s /q "{current_exe_dir}\\_internal"
+    xcopy "{internal_source_path}" "{current_exe_dir}\\_internal\\" /e /y /q
+)
+
+echo 업데이트 완료! 프로그램을 다시 시작합니다...
+timeout /t 2 /nobreak >nul
+
+REM 프로그램 재시작
+start "" "{current_exe_dir}\\{current_exe_name}"
+
+REM 임시 파일 정리
+timeout /t 3 /nobreak >nul
+rmdir /s /q "{self.temp_dir}" 2>nul
+
+:end
+exit
+'''
+
+            # 스크립트 파일 작성
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(script_content)
+
+            print(f"업데이트 스크립트 생성 완료: {script_path}")
+
+            # 스크립트 실행
+            print("업데이트 스크립트 실행 중...")
+            subprocess.Popen([str(script_path)], shell=True, cwd=str(current_exe_dir))
+
+            # 설치 완료 시그널 발생
+            self.installation_complete.emit()
+
+        except Exception as e:
+            print(f"간단한 업데이트 스크립트 생성 실패: {e}")
+            self.installation_error.emit(f"업데이트 스크립트 생성 실패: {e}")
+
     def _create_update_script(self, source_dir, target_dir):
         """업데이트 설치를 위한 배치 스크립트를 생성합니다."""
         script_path = Path(self.temp_dir) / "update.bat"
