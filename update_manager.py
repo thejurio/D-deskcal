@@ -330,9 +330,10 @@ exit
 
             print(f"업데이트 스크립트 생성 완료: {script_path}")
 
-            # 스크립트 실행
+            # 스크립트 실행 - 관리자 권한으로 실행
             print("업데이트 스크립트 실행 중...")
-            subprocess.Popen([str(script_path)], shell=True, cwd=str(current_exe_dir))
+            subprocess.Popen(['powershell', '-Command', f'Start-Process -FilePath "{script_path}" -Verb RunAs'],
+                           shell=False, cwd=str(current_exe_dir))
 
             # 설치 완료 시그널 발생
             self.installation_complete.emit()

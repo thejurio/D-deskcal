@@ -89,5 +89,4 @@ fix_*.py
 complete_*.py
 safe_*.py
 simple_*.py
-gemini_parser.py
 *.backup_*

@@ -1,0 +1,70 @@
+
+================== CRASH DETECTED ==================
+Time: 2025-09-17 12:15:23
+Runtime: 3.33 seconds
+Exception Type: ZoneInfoNotFoundError
+Exception Value: 'No time zone found with key UTC'
+
+Traceback:
+Traceback (most recent call last):
+  File "zoneinfo\_common.py", line 12, in load_tzdata
+  File "importlib\resources\_common.py", line 46, in wrapper
+  File "importlib\resources\_common.py", line 56, in files
+  File "functools.py", line 912, in wrapper
+  File "importlib\resources\_common.py", line 82, in _
+  File "importlib\__init__.py", line 90, in import_module
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1324, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'tzdata'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "data_manager.py", line 2528, in get_classified_events_for_week
+    user_tz = ZoneInfo(self.settings.get("user_timezone", "UTC"))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "zoneinfo\_common.py", line 24, in load_tzdata
+zoneinfo._common.ZoneInfoNotFoundError: 'No time zone found with key Asia/Seoul'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "zoneinfo\_common.py", line 12, in load_tzdata
+  File "importlib\resources\_common.py", line 46, in wrapper
+  File "importlib\resources\_common.py", line 56, in files
+  File "functools.py", line 912, in wrapper
+  File "importlib\resources\_common.py", line 82, in _
+  File "importlib\__init__.py", line 90, in import_module
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1310, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1324, in _find_and_load_unlocked
+ModuleNotFoundError: No module named 'tzdata'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "views\week_view.py", line 738, in on_data_updated
+    self.redraw_events_with_current_data()
+  File "views\week_view.py", line 714, in redraw_events_with_current_data
+    time_events, all_day_events = self.data_manager.get_classified_events_for_week(start_of_week)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "data_manager.py", line 2530, in get_classified_events_for_week
+    user_tz = ZoneInfo("UTC")
+              ^^^^^^^^^^^^^^^
+  File "zoneinfo\_common.py", line 24, in load_tzdata
+zoneinfo._common.ZoneInfoNotFoundError: 'No time zone found with key UTC'
+
+================== END CRASH INFO ==================

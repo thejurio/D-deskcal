@@ -1,16 +1,17 @@
 {
     "user_timezone": "Asia/Seoul",
     "selected_calendars": [
-        "thejurio@g.jbedu.kr",
         "ko.south_korea#holiday@group.v.calendar.google.com",
+        "thejurio5@gmail.com",
         "c_be9b8415154ab44d0c2c76c580d73951d89e8c1cd76c044f9b4e3b287c056f02@group.calendar.google.com",
         "c_7458e64baade9ddd9f0e356881b734e3d4ecada1eaa4acb5a30bceee2a43731b@group.calendar.google.com",
-        "c_4d71e116c57daca8ee99818748d5e94f768fb87685e5c271346ad95d332a128a@group.calendar.google.com",
         "c_d6b77747af224af450c948ba9fcce33e5ccb7d103a05a873840655242cdbb61f@group.calendar.google.com",
         "c_25f0958f9973f17e1d113ffdc6523f1510107b5e9f36ae94c4e79afdde2fbb45@group.calendar.google.com",
         "c_7fa347abd70c2d4d96120b36feb4b78c12335b201a6136178197773e52c11d87@group.calendar.google.com",
         "c_4abe852381cef73433fd28776b0f806967846647a55e10ee20c02e03fbf73a74@group.calendar.google.com",
         "c_f5d9b51118010fb0ab7e95d0868e468df8c6ebba93f724e245df498b78125a8c@group.calendar.google.com",
+        "6bfa0b6d547505ac305559dea61fd4aeebb7c60e85d47f34025e336e39b674d2@group.calendar.google.com",
+        "cb7aad8f705a49f36dd47273c47b40ff817bdf17712df8b84c3773f95f9d6111@group.calendar.google.com",
         "local_calendar"
     ],
     "calendar_colors": {
@@ -27,7 +28,10 @@
         "c_25f0958f9973f17e1d113ffdc6523f1510107b5e9f36ae94c4e79afdde2fbb45@group.calendar.google.com": "#c2c2c2",
         "c_7fa347abd70c2d4d96120b36feb4b78c12335b201a6136178197773e52c11d87@group.calendar.google.com": "#cca6ac",
         "c_4abe852381cef73433fd28776b0f806967846647a55e10ee20c02e03fbf73a74@group.calendar.google.com": "#ffad46",
-        "c_f5d9b51118010fb0ab7e95d0868e468df8c6ebba93f724e245df498b78125a8c@group.calendar.google.com": "#b99aff"
+        "c_f5d9b51118010fb0ab7e95d0868e468df8c6ebba93f724e245df498b78125a8c@group.calendar.google.com": "#b99aff",
+        "thejurio5@gmail.com": "#9fe1e7",
+        "6bfa0b6d547505ac305559dea61fd4aeebb7c60e85d47f34025e336e39b674d2@group.calendar.google.com": "#ff7537",
+        "cb7aad8f705a49f36dd47273c47b40ff817bdf17712df8b84c3773f95f9d6111@group.calendar.google.com": "#fbe983"
     },
     "sync_interval_minutes": 5,
     "start_day_of_week": 6,
@@ -42,7 +46,7 @@
     "all_day_notification_enabled": true,
     "all_day_notification_time": "09:00",
     "geometry": [
-        858,
+        2452,
         0,
         1061,
         1003
@@ -61,8 +65,8 @@
             "y": 272
         },
         "CustomMessageBox": {
-            "x": 750,
-            "y": 368
+            "x": 644,
+            "y": 320
         },
         "NewDateSelectionDialog": {
             "x": 790,
@@ -81,8 +85,8 @@
             "y": 292
         },
         "NoUpdateDialog": {
-            "x": 1203,
-            "y": 361
+            "x": 2685,
+            "y": 360
         },
         "AIEventInputDialog": {
             "x": 727,
@@ -109,16 +113,20 @@
             "y": 92
         },
         "UpdateAvailableDialog": {
-            "x": 1128,
-            "y": 161
+            "x": 2610,
+            "y": 160
         },
         "UpdateProgressDialog": {
             "x": 1153,
             "y": 311
         },
         "UpdateCompleteDialog": {
-            "x": 1178,
-            "y": 336
+            "x": 2660,
+            "y": 335
+        },
+        "SettingsWindow": {
+            "x": 2569,
+            "y": 190
         }
     }
 }
