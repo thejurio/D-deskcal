@@ -16,6 +16,7 @@ google-generativeai>=0.8.0
 
 # Date/Time utilities
 python-dateutil>=2.8.2
+tzdata>=2023.3
 
 # HTTP requests
 requests>=2.31.0
