@@ -175,6 +175,16 @@ jobs:
           Write-Host "🧹 Cleaned up temporary Inno Setup script"
         }
 
+        # Debug: List all files in release directory
+        Write-Host "🔍 Debug: Files in release directory:"
+        if (Test-Path "release") {
+          Get-ChildItem -Path "release" -Recurse | ForEach-Object {
+            Write-Host "  $($_.FullName)"
+          }
+        } else {
+          Write-Host "❌ Release directory does not exist!"
+        }
+
     - name: Create portable zip
       run: |
         $version = Get-Content -Path "VERSION" -Raw
