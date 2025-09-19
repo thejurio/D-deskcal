@@ -130,6 +130,8 @@ a = Analysis(
         'Pillow',
         'dateutil',
         'pytz',
+        'zoneinfo',
+        'tzdata',
         'google.generativeai',
     ],
     hiddenimports=[
@@ -329,6 +331,8 @@ def build_application():
             '--collect-all=Pillow',
             '--collect-all=dateutil',
             '--collect-all=pytz',
+            '--collect-all=zoneinfo',
+            '--collect-all=tzdata',
             '--collect-all=google.generativeai',
             '--add-data=icons;icons',
             '--add-data=themes;themes',
