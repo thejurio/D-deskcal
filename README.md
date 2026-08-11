@@ -32,36 +32,6 @@
 - **Manual Check**: Update check available anytime from menu / 메뉴에서 언제든 업데이트 확인
 - **Safe Installation**: Update while preserving existing settings / 기존 설정 보존하며 업데이트
 
-## 🏛️ 아키텍처
-
-본 프로젝트는 유지보수성과 확장성을 고려하여 다음과 같은 아키텍처 패턴을 기반으로 설계되었습니다.
-
-- **Model-View-Controller (MVC) 유사 패턴**: 데이터 로직(Model), UI(View), 사용자 입력 처리(Controller)를 분리하여 각 컴포넌트의 독립성을 높였습니다. PyQt의 시그널-슬롯 메커니즘이 컨트롤러 역할을 수행합니다.
-- **Provider 패턴**: `BaseCalendarProvider`라는 추상 클래스를 통해 데이터 소스를 추상화했습니다. `GoogleCalendarProvider`와 `LocalCalendarProvider`가 이를 각각 구현하며, 향후 다른 캘린더 서비스(예: CalDAV)를 쉽게 추가할 수 있는 확장 가능한 구조입니다.
-- **비동기 처리 (Multi-threading)**: Google API 연동, 데이터 동기화 등 시간이 오래 걸리는 작업을 별도의 `QThread`에서 처리하여 UI가 멈추는 현상을 방지하고 부드러운 사용자 경험을 제공합니다.
-
-## 📂 모듈 및 클래스 상세 설명
-
-| 파일 경로 | 클래스/모듈 | 역할 |
-| :--- | :--- | :--- |
-| `ui_main.py` | `MainWidget` | 애플리케이션의 메인 윈도우. 전체 UI 레이아웃, 뷰 전환, 메뉴 등을 관리합니다. |
-| `data_manager.py` | `DataManager` | 모든 데이터 흐름을 총괄하는 중앙 허브. Provider들로부터 데이터를 가져오고, 캐싱 및 동기화를 관리하며, UI에 데이터를 제공합니다. |
-| `auth_manager.py` | `AuthManager` | Google 계정의 OAuth 2.0 인증 및 토큰 관리를 전담합니다. 로그인/로그아웃 절차를 비동기 스레드로 처리하여 안정성을 확보했습니다. |
-| `providers/` | (패키지) | 다양한 데이터 소스와의 연동을 담당하는 모듈들의 집합입니다. |
-| `  base_provider.py` | `BaseCalendarProvider` | 모든 Provider가 따라야 할 공통 인터페이스를 정의한 추상 클래스입니다. |
-| `  google_provider.py`| `GoogleCalendarProvider` | Google Calendar API와 통신하여 캘린더 목록, 이벤트 조회, 검색, 수정 등의 작업을 수행합니다. |
-| `  local_provider.py` | `LocalCalendarProvider` | SQLite DB(`calendar.db`)를 사용하여 로컬 캘린더의 이벤트를 저장하고 관리합니다. |
-| `views/` | (패키지) | 월간, 주간 등 다양한 캘린더 뷰 위젯들을 포함합니다. |
-| `  base_view.py` | `BaseViewWidget` | 모든 뷰 위젯의 공통 기능을 담은 부모 클래스로, 코드 중복을 최소화합니다. |
-| `  month_view.py` | `MonthViewWidget` | 월별 달력 UI를 생성하고 이벤트를 그립니다. |
-| `  week_view.py` | `WeekViewWidget` | 주별 타임라인 UI를 생성하고 이벤트를 그립니다. |
-| `  layout_calculator.py`| `Month/WeekLayoutCalculator` | 월간/주간 뷰에 표시될 이벤트의 위치, 길이, 겹침 등을 계산하는 복잡한 로직을 분리하여 처리합니다. |
-| `settings_window.py`| `SettingsWindow` | 계정 연동, 캘린더 선택, 테마, 투명도 등 각종 설정을 변경하는 UI를 제공합니다. |
-| `event_editor_window.py`| `EventEditorWindow` | 새 일정을 추가하거나 기존 일정을 수정하는 UI를 제공합니다. |
-| `search_dialog.py` | `SearchDialog` | 전체 일정 검색을 위한 UI와 결과 목록을 표시합니다. |
-| `custom_dialogs.py` | (모듈) | `MoreEventsDialog` 등 앱 전반에서 사용되는 커스텀 팝업창들을 포함합니다. |
-| `settings_manager.py`| (모듈) | `settings.json` 파일의 로드 및 저장을 담당합니다. |
-
 ## 🚀 개발 과정 요약
 
 1.  **기반 구축**: Google API 연동 및 PyQt6를 사용한 기본 UI 창 구현.
@@ -92,36 +62,14 @@ GitHub Releases에서 최신 버전을 다운로드하세요:
 - **네트워크**: Google Calendar 연동 시 인터넷 연결 필요
 
 ### 설치 파일
-- `D-deskcal-v[version]-portable.zip`: 포터블 버전
-- `D-deskcal-v[version]-installer.exe`: 인스톨러 버전
+- `D-deskcal-win-Setup.exe`: 처음 설치할 때 이것을 받으세요
+- 나머지 파일은 **프로그램이 스스로 업데이트할 때** 쓰는 것이라 직접 받지 않아도 됩니다
 
-### 개발자용 설치 방법
+### 소스 코드
 
-1.  **저장소 복제**:
-    ```bash
-    git clone https://github.com/thejurio/D-deskcal.git
-    cd D-deskcal
-    ```
+이 저장소는 **내려받는 곳**입니다. 소스 코드는 공개하지 않습니다.
 
-2.  **가상 환경 생성 및 활성화**:
-    ```bash
-    python -m venv venv
-    .\venv\Scripts\activate
-    ```
-
-3.  **필요 라이브러리 설치**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **`credentials.json` 파일 준비**:
-    - [Google Cloud Console](https://console.cloud.google.com/)에서 `데스크톱 앱` 유형으로 OAuth 2.0 클라이언트 ID를 생성합니다.
-    - 다운로드한 `credentials.json` 파일을 프로젝트 루트 폴더에 위치시킵니다.
-
-5.  **프로그램 실행**:
-    ```bash
-    python ui_main.py
-    ```
+프로그램은 C#(.NET 8, WPF)으로 새로 만들어졌습니다. 위 설치 파일을 받아 쓰시면 됩니다.
 
 ## 🛡️ 개인정보 보호
 
