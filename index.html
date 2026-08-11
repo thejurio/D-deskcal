@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>D-deskcal</title>
 <link rel="icon" type="image/png" href="logo.png">
+<meta name="application-name" content="D-deskcal">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="D-deskcal">
+<meta property="og:title" content="D-deskcal">
+<meta property="og:url" content="https://d-deskcal.duckdns.org/">
+<meta property="og:image" content="https://d-deskcal.duckdns.org/logo.png">
+<meta property="og:description" content="D-deskcal is a free desktop calendar widget for Windows that shows your Google Calendar and Google Tasks on your desktop.">
 <meta name="description" content="D-deskcal is a free desktop calendar widget for Windows that shows your Google Calendar and Google Tasks on your desktop.">
 <meta name="google-site-verification" content="N9jnClTLV-9UGPmGf98QeOD8FJHc1VQdIIanF7SaQR0" />
 
@@ -38,6 +45,22 @@
            color:var(--muted); font-size:.95rem; }
   footer a { color:var(--accent); }
 </style>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "D-deskcal",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Windows 10, Windows 11",
+  "url": "https://d-deskcal.duckdns.org/",
+  "description": "D-deskcal is a free desktop calendar widget for Windows. It shows the events in your Google Calendar and the items in your Google Tasks on your desktop, and writes your changes back to Google.",
+  "privacyPolicy": "https://d-deskcal.duckdns.org/privacy.html",
+  "termsOfService": "https://d-deskcal.duckdns.org/terms.html",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Dooseong Jin", "email": "thejurio@gmail.com" }
+}
+</script>
 </head>
 <body>
 
@@ -114,7 +137,7 @@
   <p class="note">
     개인 API 키를 넣지 않은 경우, 키를 받기 위해 개발자가 운영하는 중계 서버를 한 번 거칩니다.
     그때 오가는 것은 키와 사용량 확인 값뿐이고 적어 넣은 글은 지나가지 않습니다.
-    자세한 내용은 <a href="privacy.html">개인정보처리방침</a>을 봐 주세요.
+    자세한 내용은 <a href="https://d-deskcal.duckdns.org/privacy.html">개인정보처리방침</a>을 봐 주세요.
   </p>
 </section>
 
@@ -136,15 +159,15 @@
     The optional AI entry feature sends the text the user types into it to Google Gemini in
     order to extract a date and a title. Calendar events and tasks are not part of that request,
     and nothing is sent unless the user uses that feature.
-    See the <a href="privacy.html">Privacy Policy</a> for details.
+    See the <a href="https://d-deskcal.duckdns.org/privacy.html">Privacy Policy</a> for details.
   </p>
   <p class="note">Developer: Dooseong Jin &middot; Windows 10/11 &middot; Free of charge</p>
 </div>
 
 <footer>
   <p>
-    <a href="privacy.html">개인정보처리방침 / Privacy Policy</a> &nbsp;|&nbsp;
-    <a href="terms.html">이용약관 / Terms of Service</a> &nbsp;|&nbsp;
+    <a href="https://d-deskcal.duckdns.org/privacy.html">개인정보처리방침 / Privacy Policy</a> &nbsp;|&nbsp;
+    <a href="https://d-deskcal.duckdns.org/terms.html">이용약관 / Terms of Service</a> &nbsp;|&nbsp;
     <a href="https://github.com/thejurio/D-deskcal">GitHub</a>
   </p>
   <p>&copy; 2025&ndash;2026 Dooseong Jin. D-deskcal.</p>
