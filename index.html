@@ -7,6 +7,7 @@
 <!-- 구글 OAuth 심사는 이 이름이 동의 화면의 앱 이름과 **정확히** 같기를 본다.
      뒤에 설명을 붙이지 않는다. -->
 <title>D-deskcal</title>
+<link rel="icon" type="image/png" href="logo.png">
 <meta name="description" content="D-deskcal is a free desktop calendar widget for Windows that shows your Google Calendar and Google Tasks on your desktop.">
 
 <!-- 구글 서치 콘솔 소유 확인. **지우지 말 것** — 지우면 소유 확인이 풀리고
@@ -21,7 +22,10 @@
          line-height:1.7; }
   .wrap { max-width:760px; margin:0 auto; padding:0 24px; }
   header { padding:56px 0 40px; border-bottom:1px solid var(--line); }
-  h1 { font-size:2.6rem; margin:0 0 12px; letter-spacing:-.02em; }
+  .brand { display:flex; align-items:center; gap:18px; margin:0 0 12px; }
+  .brand img { border-radius:16px; flex:none; }
+  h1 { font-size:2.6rem; margin:0; letter-spacing:-.02em; }
+  @media (max-width:520px) { .brand { gap:12px; } .brand img { width:56px; height:56px; } h1 { font-size:2rem; } }
   .lead { font-size:1.15rem; color:var(--muted); margin:0; }
   h2 { font-size:1.25rem; margin:40px 0 12px; }
   section { padding:8px 0; }
@@ -46,8 +50,12 @@
 <div class="wrap">
 
 <header>
-  <!-- 앱 이름만. 동의 화면과 같은 글자여야 한다. -->
-  <h1>D-deskcal</h1>
+  <!-- 앱 이름과 로고. **동의 화면과 같은 글자, 같은 그림이어야 한다** —
+       심사가 홈페이지의 상표와 동의 화면의 상표를 견준다. -->
+  <div class="brand">
+    <img src="logo.png" width="72" height="72" alt="D-deskcal">
+    <h1>D-deskcal</h1>
+  </div>
   <p class="lead">
     윈도우 바탕화면에 구글 캘린더와 할 일을 띄워 두는 무료 달력 위젯입니다.
     창을 따로 열지 않고 바탕화면에서 바로 일정을 보고, 더하고, 고칠 수 있습니다.
