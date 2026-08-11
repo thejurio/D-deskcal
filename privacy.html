@@ -1,38 +1,206 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>D-deskcal Privacy Policy</title>
-    <style> body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 20px; } </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D-deskcal 개인정보처리방침 / Privacy Policy</title>
+<style>
+  :root { --ink:#1b1b1f; --muted:#5b5b66; --line:#e3e3e8; --accent:#1a5fb4; --bg:#fbfbfd; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",Roboto,sans-serif;
+         line-height:1.75; }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 24px 64px; }
+  h1 { font-size:2rem; margin:0 0 6px; }
+  h2 { font-size:1.2rem; margin:36px 0 10px; padding-top:8px; border-top:1px solid var(--line); }
+  h3 { font-size:1.02rem; margin:20px 0 6px; }
+  .updated { color:var(--muted); margin:0 0 8px; }
+  .note { color:var(--muted); font-size:.95rem; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { width:34%; font-weight:600; }
+  code { background:#eef0f4; padding:1px 5px; border-radius:4px; font-size:.92em; }
+  .en { background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px 24px 20px; margin:36px 0 0; }
+  .en h2:first-of-type { border-top:none; }
+  a { color:var(--accent); }
+  footer { margin-top:40px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:.95rem; }
+</style>
 </head>
 <body>
-    <h1>D-deskcal Privacy Policy</h1>
-    <p><strong>Last updated:</strong> August 22, 2025</p>
-    <p>This Privacy Policy describes how D-deskcal (the "App") handles your data.</p>
+<div class="wrap">
 
-    <h2>1. No-Server Principle</h2>
-    <p><strong>D-deskcal does not use any developer-operated servers.</strong> All your information is transmitted and stored only between Google's servers and your personal computer. No data is ever sent to or stored by the developer.</p>
+<h1>D-deskcal 개인정보처리방침</h1>
+<p class="updated">최종 수정: 2026년 8월 11일</p>
+<p>
+  이 문서는 바탕화면 달력 위젯 <strong>D-deskcal</strong>(이하 "이 프로그램")이 이용자의
+  정보를 어떻게 다루는지 설명합니다.
+</p>
 
-    <h2>2. Information We Access and Why</h2>
-    <p>The App requests access to the following information via the Google OAuth 2.0 protocol. This is essential for providing the App's core functionality.</p>
-    <ul>
-        <li><strong>Google Calendar Data (Read, Write, Modify, Delete permissions):</strong> This permission is used solely for the App's core function: to display your calendar on the screen and to allow you to add, edit, and delete events directly from the App.</li>
-        <li><strong>Basic User Information (Email Address):</strong> This is used only to identify which account is currently logged into the App.</li>
-    </ul>
+<h2>1. 정보는 이용자의 컴퓨터에 저장됩니다</h2>
+<p>
+  구글에서 받아 온 <strong>일정과 할 일은 이용자의 컴퓨터에만 저장</strong>되며, 개발자에게
+  전송되거나 개발자가 보관하지 않습니다. 제3자에게 제공하거나 판매하지 않습니다.
+</p>
+<table>
+  <tr>
+    <th>구글 로그인 표(토큰)</th>
+    <td>
+      <code>%AppData%\DDeskCal\tokens</code><br>
+      <span class="note">윈도우 계정 키로 잠가서(DPAPI) 저장합니다. 다른 계정으로는 열 수 없습니다.</span>
+    </td>
+  </tr>
+  <tr>
+    <th>일정 · 할 일 · 설정 · 메모</th>
+    <td>
+      <code>%LocalAppData%\DCWidget</code><br>
+      <span class="note">calendar.db, settings.json, memos.json, todos-local.json 등</span>
+    </td>
+  </tr>
+</table>
 
-    <h2>3. Where Your Information Is Stored</h2>
-    <p>All data used by the App is stored exclusively in secure locations on your personal computer.</p>
-    <ul>
-        <li><strong>Authentication Token (`token.json`):</strong> The authentication token required to access Google Calendar is stored only on your local computer. This file is never transmitted outside the App.</li>
-        <li><strong>App Settings and Cache Data (`settings.json`, `calendar.db`):</strong> Your configured options and calendar cache data for faster loading are also stored only on your local computer.</li>
-    </ul>
+<h2>2. 구글 계정에서 청하는 권한</h2>
+<p>아래 네 가지만 청하며, 각각 다음 기능에 쓰입니다.</p>
+<table>
+  <tr>
+    <th><code>.../auth/calendar</code><br>구글 캘린더</th>
+    <td>달력에 일정을 보여 주고, 이 프로그램에서 만들거나 고치거나 지운 일정을 구글에
+        반영하기 위해 필요합니다.</td>
+  </tr>
+  <tr>
+    <th><code>.../auth/tasks</code><br>구글 할 일</th>
+    <td>할 일 목록을 보여 주고, 이 프로그램에서 더하거나 고치거나 완료 표시한 항목을
+        구글에 반영하기 위해 필요합니다.</td>
+  </tr>
+  <tr>
+    <th><code>.../auth/userinfo.email</code><br><code>openid</code></th>
+    <td>설정 화면에 "어느 계정으로 로그인했는지"를 보여 주기 위해서만 씁니다.</td>
+  </tr>
+</table>
+<p class="note">
+  로그인하지 않고도 이 프로그램을 쓸 수 있습니다. 그때는 일정과 할 일이 이 컴퓨터에만
+  저장되고 구글과 아무것도 주고받지 않습니다.
+</p>
 
-    <h2>4. Sharing of Information</h2>
-    <p>The App does not share or sell any of your information with any third parties.</p>
+<h2>3. 외부와 통신하는 경우</h2>
+<p>이 프로그램이 인터넷을 쓰는 경우는 다음이 전부입니다.</p>
 
-    <h2>5. Contact Us</h2>
-    <p>If you have any questions about this policy, please contact us at the email below.</p>
-    <p><strong>Developer:</strong> Dooseong Jin<br>
-    <strong>Email:</strong> thejurio2@gmail.com</p>
+<h3>3-1. 구글 캘린더 · 구글 할 일</h3>
+<p>이용자가 로그인한 경우, 일정과 할 일을 읽고 쓰기 위해 구글 API 와 통신합니다.</p>
+
+<h3>3-2. AI 일정 입력 (선택 기능)</h3>
+<p>
+  "AI 일정 추가" 기능을 쓰면 <strong>그때 이용자가 적어 넣은 글이 구글 Gemini
+  (<code>generativelanguage.googleapis.com</code>) 로 전송</strong>됩니다. 글에서 날짜와 제목을
+  뽑아내기 위해서입니다.
+</p>
+<p class="note">
+  캘린더의 일정이나 할 일 목록이 함께 전송되지는 않습니다.
+  <strong>이 기능을 쓰지 않으면 아무것도 전송되지 않습니다.</strong>
+</p>
+
+<h3>3-3. 개발자가 운영하는 중계 서버</h3>
+<p>
+  AI 기능에 쓸 공용 API 키를 내려받기 위해, 개발자가 운영하는 중계 서버(Google Apps Script)와
+  통신합니다. 프로그램을 켤 때 한 번, 그리고 AI 기능을 쓸 때 접속합니다.
+</p>
+<p>
+  이때 전송되는 것은 <strong>프로그램 버전, 요청 종류, 시각, 임의의 난수와 서명값</strong>뿐입니다.
+  <strong>이용자의 이메일 주소, 구글 계정 정보, 일정, 할 일, 메모, 적어 넣은 글은 전송되지
+  않습니다.</strong> 설정에서 개인 API 키를 넣으면 이 중계 서버를 쓰지 않습니다.
+</p>
+
+<h3>3-4. 업데이트 확인</h3>
+<p>
+  새 판이 나왔는지 확인하기 위해 GitHub(<code>api.github.com</code>)에 접속합니다.
+  이때 개인 정보는 전송되지 않습니다.
+</p>
+
+<h2>4. 저장된 정보를 지우는 방법</h2>
+<ul>
+  <li><strong>로그아웃</strong> — 설정 창에서 구글 연결을 끊으면 로그인 표와 이 컴퓨터에
+      저장해 둔 구글 일정·할 일이 함께 지워집니다.</li>
+  <li><strong>전체 지우기</strong> — 설정 창에 이 컴퓨터에 저장된 모든 자료를 지우는 기능이
+      있습니다.</li>
+  <li><strong>구글 쪽에서 권한 해제</strong> —
+      <a href="https://myaccount.google.com/permissions">구글 계정 권한 관리</a>에서 이 프로그램의
+      접근 권한을 언제든 해제할 수 있습니다.</li>
+</ul>
+<p class="note">
+  이 프로그램은 구글 API 로 받은 정보를 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>(제한적 사용 요건 포함)에 따라 다룹니다.
+</p>
+
+<h2>5. 문의</h2>
+<p>
+  개발자: Dooseong Jin<br>
+  이메일: <a href="mailto:thejurio2@gmail.com">thejurio2@gmail.com</a>
+</p>
+
+<div class="en">
+<h2>Privacy Policy (English)</h2>
+<p class="updated">Last updated: 11 August 2026</p>
+<p>
+  <strong>D-deskcal</strong> is a desktop calendar widget for Windows. This policy explains how
+  it handles user data.
+</p>
+
+<h3>Data stays on the user's computer</h3>
+<p>
+  Calendar events and tasks retrieved from Google are stored <strong>only on the user's own
+  computer</strong>. They are never transmitted to, or stored by, the developer, and are never
+  sold or shared with third parties. OAuth tokens are stored encrypted with the Windows account
+  key (DPAPI) under <code>%AppData%\DDeskCal\tokens</code>; other data is stored under
+  <code>%LocalAppData%\DCWidget</code>.
+</p>
+
+<h3>Scopes requested and why</h3>
+<table>
+  <tr><th><code>.../auth/calendar</code></th>
+      <td>To display the user's events and to create, edit and delete events on their behalf.</td></tr>
+  <tr><th><code>.../auth/tasks</code></th>
+      <td>To display the user's tasks and to add, edit and complete them on their behalf.</td></tr>
+  <tr><th><code>.../auth/userinfo.email</code>, <code>openid</code></th>
+      <td>Only to show which account is currently signed in.</td></tr>
+</table>
+<p class="note">Signing in is optional; the app is fully usable offline with local-only data.</p>
+
+<h3>Network connections</h3>
+<ul>
+  <li><strong>Google Calendar and Google Tasks APIs</strong> — when the user is signed in.</li>
+  <li><strong>Google Gemini</strong> (<code>generativelanguage.googleapis.com</code>) — the optional
+      AI entry feature sends the text the user types into it, in order to extract a date and a
+      title. Calendar events and tasks are not included. Nothing is sent unless the feature is used.</li>
+  <li><strong>A relay operated by the developer</strong> (Google Apps Script) — contacted on
+      startup and when the AI feature is used, to obtain a shared API key. Only the application
+      version, the request type, a timestamp, a nonce and a signature are transmitted.
+      No email address, account information, events, tasks, notes or typed text are sent.
+      Users who enter their own API key are not routed through it.</li>
+  <li><strong>GitHub</strong> (<code>api.github.com</code>) — to check for application updates.
+      No personal data is transmitted.</li>
+</ul>
+
+<h3>Deleting stored data</h3>
+<p>
+  Signing out removes the stored token and the locally cached Google data. The settings window
+  also offers erasing everything stored on the computer. Access can be revoked at any time at
+  <a href="https://myaccount.google.com/permissions">Google Account permissions</a>.
+</p>
+
+<h3>Limited Use</h3>
+<p>
+  D-deskcal's use and transfer of information received from Google APIs adheres to the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services
+  User Data Policy</a>, including the Limited Use requirements.
+</p>
+
+<h3>Contact</h3>
+<p>Developer: Dooseong Jin &middot; <a href="mailto:thejurio2@gmail.com">thejurio2@gmail.com</a></p>
+</div>
+
+<footer>
+  <a href="index.html">D-deskcal 홈</a> &nbsp;|&nbsp;
+  <a href="terms.html">이용약관 / Terms of Service</a>
+</footer>
+
+</div>
 </body>
 </html>

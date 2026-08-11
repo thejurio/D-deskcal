@@ -1,49 +1,150 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>D-deskcal - AI-Powered Desktop Calendar Widget</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background: #f4f4f4; color: #333; }
-        .container { max-width: 800px; margin: auto; padding: 0 20px; }
-        header { background: #333; color: #fff; padding: 1rem 0; text-align: center; }
-        .showcase { padding: 2rem 0; text-align: center; }
-        .showcase h1 { font-size: 2.5rem; }
-        .screenshot { max-width: 100%; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin: 1.5rem 0; }
-        .btn { display: inline-block; background: #0078D7; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
-        footer { text-align: center; padding: 2rem 0; background: #333; color: #fff; }
-        footer a { color: #fff; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- 구글 OAuth 심사는 이 이름이 동의 화면의 앱 이름과 **정확히** 같기를 본다.
+     뒤에 설명을 붙이지 않는다. -->
+<title>D-deskcal</title>
+<meta name="description" content="D-deskcal is a free desktop calendar widget for Windows that shows your Google Calendar and Google Tasks on your desktop.">
+
+<!-- 구글 서치 콘솔 소유 확인. **지우지 말 것** — 지우면 소유 확인이 풀리고
+     OAuth 심사에서 "홈페이지가 등록되어 있지 않다" 로 되돌아간다. -->
+<meta name="google-site-verification" content="N9jnClTLV-9UGPmGf98QeOD8FJHc1VQdIIanF7SaQR0" />
+
+<style>
+  :root { --ink:#1b1b1f; --muted:#5b5b66; --line:#e3e3e8; --accent:#1a5fb4; --bg:#fbfbfd; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",Roboto,sans-serif;
+         line-height:1.7; }
+  .wrap { max-width:760px; margin:0 auto; padding:0 24px; }
+  header { padding:56px 0 40px; border-bottom:1px solid var(--line); }
+  h1 { font-size:2.6rem; margin:0 0 12px; letter-spacing:-.02em; }
+  .lead { font-size:1.15rem; color:var(--muted); margin:0; }
+  h2 { font-size:1.25rem; margin:40px 0 12px; }
+  section { padding:8px 0; }
+  ul { padding-left:1.1rem; }
+  li { margin:6px 0; }
+  .btn { display:inline-block; background:var(--accent); color:#fff; padding:12px 22px;
+         border-radius:6px; text-decoration:none; font-weight:600; margin:20px 0 8px; }
+  .btn:hover { background:#14498c; }
+  .note { color:var(--muted); font-size:.95rem; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { width:38%; font-weight:600; }
+  .en { background:#fff; border:1px solid var(--line); border-radius:8px; padding:20px 24px; margin:32px 0; }
+  .en h2 { margin-top:0; }
+  footer { margin-top:48px; padding:28px 0 56px; border-top:1px solid var(--line);
+           color:var(--muted); font-size:.95rem; }
+  footer a { color:var(--accent); }
+</style>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>D-deskcal</h1>
-            <p>Your desktop calendar widget with AI event parsing and a beautiful design.</p>
-        </div>
-    </header>
-    <section class="showcase">
-        <div class="container">
-            <a href="[Link to your installer .exe file on GitHub Releases]" class="btn">Download for Windows (v1.0.0)</a>
-            <img src="[Path or URL to your screenshot image file]" alt="D-deskcal Screenshot" class="screenshot">
-            <h2>Key Features</h2>
-            <ul style="list-style-type: none; padding: 0;">
-                <li>✓ Real-time Google Calendar Sync</li>
-                <li>✓ Automatic Event Parsing from Text with AI</li>
-                <li>✓ Desktop Widget with Lock Mode Support</li>
-                <li>✓ Month, Week, and Agenda Views</li>
-            </ul>
-        </div>
-    </section>
-    <footer>
-        <div class="container">
-            <p>
-                <a href="privacy.html">Privacy Policy</a> | 
-                <a href="terms.html">Terms of Service</a>
-            </p>
-            <p>Copyright &copy; 2025, Dooseong Jin</p>
-        </div>
-    </footer>
+
+<div class="wrap">
+
+<header>
+  <!-- 앱 이름만. 동의 화면과 같은 글자여야 한다. -->
+  <h1>D-deskcal</h1>
+  <p class="lead">
+    윈도우 바탕화면에 구글 캘린더와 할 일을 띄워 두는 무료 달력 위젯입니다.
+    창을 따로 열지 않고 바탕화면에서 바로 일정을 보고, 더하고, 고칠 수 있습니다.
+  </p>
+</header>
+
+<section>
+  <h2>이 프로그램이 하는 일</h2>
+  <p>
+    D-deskcal 은 바탕화면에 붙어 있는 달력입니다. 구글 계정으로 로그인하면
+    <strong>구글 캘린더의 일정</strong>과 <strong>구글 할 일(Google Tasks)</strong>을 그대로 보여 주고,
+    여기서 고친 것은 구글에도 반영됩니다. 로그인하지 않고 이 컴퓨터에만 저장하며 쓸 수도 있습니다.
+  </p>
+
+  <ul>
+    <li>월간 · 주간 · 안건 세 가지로 일정 보기</li>
+    <li>일정 추가 · 수정 · 삭제 (구글 캘린더와 양방향)</li>
+    <li>할 일 목록 (구글 할 일과 연동, 로그인 없이도 사용 가능)</li>
+    <li>바탕화면 메모지</li>
+    <li>일정 시작 전 알림</li>
+    <li>적어 둔 글에서 일정을 자동으로 뽑아 주는 AI 입력 (선택 기능)</li>
+  </ul>
+
+  <a class="btn" href="https://github.com/thejurio/D-deskcal/releases/latest">윈도우용 내려받기</a>
+  <p class="note">Windows 10 / 11 · 무료 · 설치 후 자동으로 업데이트됩니다.</p>
+</section>
+
+<section>
+  <h2>구글 계정에서 무엇을 왜 쓰나요</h2>
+  <p>
+    아래 권한만 청합니다. <strong>구글에서 받아 온 일정과 할 일은 이 컴퓨터에만 저장하며,
+    저희 서버로 보내지 않습니다.</strong>
+  </p>
+  <table>
+    <tr>
+      <th>구글 캘린더<br><span class="note">calendar</span></th>
+      <td>달력에 일정을 보여 주고, 여기서 만든 · 고친 · 지운 일정을 구글에 반영하기 위해 필요합니다.</td>
+    </tr>
+    <tr>
+      <th>구글 할 일<br><span class="note">tasks</span></th>
+      <td>할 일 목록을 보여 주고, 여기서 더하거나 완료 표시한 것을 구글에 반영하기 위해 필요합니다.</td>
+    </tr>
+    <tr>
+      <th>이메일 주소<br><span class="note">userinfo.email · openid</span></th>
+      <td>설정 화면에 "어느 계정으로 로그인했는지" 를 보여 주기 위해서만 씁니다.</td>
+    </tr>
+  </table>
+  <p class="note">
+    로그아웃하면 이 컴퓨터에 저장된 구글 자료도 함께 지워집니다.
+  </p>
+
+  <h2>AI 일정 입력을 쓸 때 (선택 기능)</h2>
+  <p>
+    "AI 일정 추가" 를 쓰면 <strong>그때 적어 넣은 글이 구글 Gemini 로 전송됩니다</strong>
+    (<span class="note">generativelanguage.googleapis.com</span>). 글에서 날짜와 제목을 뽑아내기
+    위해서입니다. 캘린더 일정이나 할 일 자체가 전송되지는 않으며, <strong>이 기능을 쓰지 않으면
+    아무것도 전송되지 않습니다.</strong>
+  </p>
+  <p class="note">
+    개인 API 키를 넣지 않은 경우, 키를 받기 위해 개발자가 운영하는 중계 서버를 한 번 거칩니다.
+    그때 오가는 것은 키와 사용량 확인 값뿐이고 적어 넣은 글은 지나가지 않습니다.
+    자세한 내용은 <a href="privacy.html">개인정보처리방침</a>을 봐 주세요.
+  </p>
+</section>
+
+<div class="en">
+  <h2>About D-deskcal (English)</h2>
+  <p>
+    <strong>D-deskcal</strong> is a free desktop calendar widget for Windows. It sits on the
+    desktop and shows the events in your Google Calendar and the items in your Google Tasks,
+    so you can read and edit your schedule without opening a browser. Changes made in the
+    widget are written back to Google.
+  </p>
+  <p>
+    It requests the <em>Google Calendar</em> and <em>Google Tasks</em> scopes to read and write
+    those items on your behalf, and your email address only to display which account is signed
+    in. Calendar events and tasks retrieved from Google are stored only on the user's own
+    computer and are never sent to any server operated by us.
+  </p>
+  <p>
+    The optional AI entry feature sends the text the user types into it to Google Gemini in
+    order to extract a date and a title. Calendar events and tasks are not part of that request,
+    and nothing is sent unless the user uses that feature.
+    See the <a href="privacy.html">Privacy Policy</a> for details.
+  </p>
+  <p class="note">Developer: Dooseong Jin &middot; Windows 10/11 &middot; Free of charge</p>
+</div>
+
+<footer>
+  <p>
+    <a href="privacy.html">개인정보처리방침 / Privacy Policy</a> &nbsp;|&nbsp;
+    <a href="terms.html">이용약관 / Terms of Service</a> &nbsp;|&nbsp;
+    <a href="https://github.com/thejurio/D-deskcal">GitHub</a>
+  </p>
+  <p>&copy; 2025&ndash;2026 Dooseong Jin. D-deskcal.</p>
+</footer>
+
+</div>
 </body>
 </html>
