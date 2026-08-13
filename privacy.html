@@ -30,7 +30,7 @@
 <div class="wrap">
 
 <h1>D-deskcal 개인정보처리방침</h1>
-<p class="updated">최종 수정: 2026년 8월 11일</p>
+<p class="updated">최종 수정: 2026년 8월 14일</p>
 <p>
   이 문서는 바탕화면 달력 위젯 <strong>D-deskcal</strong>(이하 "이 프로그램")이 이용자의
   정보를 어떻게 다루는지 설명합니다.
@@ -129,7 +129,56 @@
   이 프로그램은 구글 API 로 받은 정보를 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>(제한적 사용 요건 포함)에 따라 다룹니다.
 </p>
 
-<h2>5. 문의</h2>
+<h2>5. 정보를 지키기 위한 조치</h2>
+<p>
+  이 프로그램은 구글 캘린더의 일정과 구글 할 일을 <strong>민감한 정보</strong>로 보고
+  다음과 같이 보호합니다.
+</p>
+<table>
+  <tr>
+    <th>전송 중 암호화</th>
+    <td>구글 캘린더 · 구글 할 일 · Gemini · 중계 서버 · 업데이트 확인을 포함해
+        <strong>이 프로그램이 맺는 모든 연결은 HTTPS(TLS 1.2 이상)</strong>로 암호화됩니다.
+        암호화되지 않은 연결은 쓰지 않습니다.</td>
+  </tr>
+  <tr>
+    <th>저장 시 암호화</th>
+    <td>구글 로그인 표(OAuth 액세스 · 리프레시 토큰)는 <strong>윈도우 DPAPI</strong>로 암호화해
+        저장합니다. 이 암호는 그 컴퓨터의 그 윈도우 계정에 묶여 있어서, 파일을 그대로 복사해
+        가더라도 <strong>다른 계정이나 다른 컴퓨터에서는 열 수 없습니다.</strong></td>
+  </tr>
+  <tr>
+    <th>접근 통제</th>
+    <td>일정과 할 일은 <strong>개발자의 서버에 전혀 저장되지 않으므로</strong> 개발자를 포함해
+        누구도 열람할 수 없습니다. 이용자의 컴퓨터에 저장된 파일은 윈도우 사용자 프로필 안에
+        있어 해당 윈도우 계정의 권한으로만 읽을 수 있습니다.</td>
+  </tr>
+  <tr>
+    <th>최소 권한</th>
+    <td>2절에 적은 권한만 청하며, 기능에 필요하지 않은 권한은 청하지 않습니다. 구글에서 받아 온
+        정보는 <strong>화면에 보여 주고 이용자가 고친 것을 구글에 되돌려 보내는 데에만</strong>
+        씁니다. 광고 · 이용 분석 · 인공지능 모델 학습에는 쓰지 않습니다.</td>
+  </tr>
+  <tr>
+    <th>보관과 파기</th>
+    <td>구글에서 받아 온 자료는 화면에 빨리 띄우기 위한 사본일 뿐입니다. 로그아웃하면 로그인 표와
+        함께 <strong>즉시 지워집니다</strong>(4절 참고). 개발자 쪽에는 보관본이 없으므로 따로
+        지울 것이 없습니다.</td>
+  </tr>
+  <tr>
+    <th>프로그램의 무결성</th>
+    <td>설치본과 업데이트는 GitHub 릴리스에서만 HTTPS 로 배포합니다. 자동 업데이트로 내려받은
+        꾸러미는 배포 목록에 적힌 <strong>SHA-256 해시값과 대조해</strong> 중간에 바뀌지 않았는지
+        확인한 뒤에만 적용합니다.</td>
+  </tr>
+  <tr>
+    <th>문제가 생겼을 때</th>
+    <td>개인정보와 관련한 문제를 발견하시면 아래 주소로 알려 주십시오. 확인하는 대로 조치하고,
+        이용자에게 영향이 있는 일이면 이 문서와 릴리스 안내를 통해 알리겠습니다.</td>
+  </tr>
+</table>
+
+<h2>6. 문의</h2>
 <p>
   개발자: Dooseong Jin<br>
   이메일: <a href="mailto:thejurio@gmail.com">thejurio@gmail.com</a>
@@ -137,7 +186,7 @@
 
 <div class="en">
 <h2>Privacy Policy (English)</h2>
-<p class="updated">Last updated: 11 August 2026</p>
+<p class="updated">Last updated: 14 August 2026</p>
 <p>
   <strong>D-deskcal</strong> is a desktop calendar widget for Windows. This policy explains how
   it handles user data.
@@ -184,6 +233,46 @@
   also offers erasing everything stored on the computer. Access can be revoked at any time at
   <a href="https://myaccount.google.com/permissions">Google Account permissions</a>.
 </p>
+
+<h3>How we protect your data</h3>
+<p>
+  D-deskcal treats Google Calendar events and Google Tasks as <strong>sensitive user data</strong>
+  and protects them with the following mechanisms.
+</p>
+<table>
+  <tr><th>Encryption in transit</th>
+      <td>Every connection the application makes &mdash; Google Calendar, Google Tasks, Gemini, the
+          developer's relay and the update check &mdash; uses <strong>HTTPS (TLS 1.2 or
+          higher)</strong>. No unencrypted connection is used.</td></tr>
+  <tr><th>Encryption at rest</th>
+      <td>OAuth access and refresh tokens are stored <strong>encrypted with the Windows Data
+          Protection API (DPAPI)</strong>, keyed to the user's Windows account on that machine.
+          Copying the token file to another account or another computer does not make it
+          readable.</td></tr>
+  <tr><th>Access controls</th>
+      <td>Events and tasks are <strong>never stored on any server operated by the developer</strong>,
+          so no one &mdash; including the developer &mdash; can access them. Files kept on the
+          user's computer live inside the Windows user profile and are readable only under that
+          Windows account.</td></tr>
+  <tr><th>Least privilege</th>
+      <td>Only the scopes listed above are requested, and no scope is requested that a shipped
+          feature does not use. Data received from Google APIs is used
+          <strong>solely to display the user's schedule and to write the user's own edits back to
+          Google</strong> &mdash; never for advertising, analytics or training AI models.</td></tr>
+  <tr><th>Retention and deletion</th>
+      <td>Data received from Google is only a local cache for fast display. Signing out
+          <strong>deletes it immediately</strong> together with the stored token. There is no
+          developer-side copy to delete.</td></tr>
+  <tr><th>Integrity of the application</th>
+      <td>Installers and updates are distributed only through GitHub Releases over HTTPS. Update
+          packages downloaded automatically are verified against the
+          <strong>SHA-256 hash</strong> published in the release manifest before they are
+          applied.</td></tr>
+  <tr><th>Incident handling</th>
+      <td>Privacy or security concerns can be reported to the address below. Reports are acted on
+          as soon as they are confirmed, and any issue affecting users is announced in this
+          document and in the release notes.</td></tr>
+</table>
 
 <h3>Limited Use</h3>
 <p>
