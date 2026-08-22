@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -30,7 +30,7 @@
 <div class="wrap">
 
 <h1>D-deskcal 개인정보처리방침</h1>
-<p class="updated">최종 수정: 2026년 8월 14일</p>
+<p class="updated">최종 수정: 2026년 8월 22일</p>
 <p>
   이 문서는 바탕화면 달력 위젯 <strong>D-deskcal</strong>(이하 "이 프로그램")이 이용자의
   정보를 어떻게 다루는지 설명합니다.
@@ -109,7 +109,18 @@
   않습니다.</strong> 설정에서 개인 API 키를 넣으면 이 중계 서버를 쓰지 않습니다.
 </p>
 
-<h3>3-4. 업데이트 확인</h3>
+<h3>3-4. 공휴일 받아 오기</h3>
+<p>
+  달력에 공휴일을 보여 주기 위해 구글이 <strong>누구에게나 공개해 둔</strong> 공휴일
+  달력(<code>calendar.google.com</code>)을 내려받습니다. <strong>로그인하지 않아도
+  공휴일이 보이도록</strong> 하려는 것이라 로그인 여부와 상관없이 접속합니다.
+</p>
+<p class="note">
+  공개된 자료를 받아 오기만 하며, <strong>이용자를 알아볼 수 있는 정보는 전송되지
+  않습니다.</strong> 받아 온 공휴일은 이 컴퓨터에 적어 두고 2주에 한 번만 다시 받습니다.
+</p>
+
+<h3>3-5. 업데이트 확인</h3>
 <p>
   새 판이 나왔는지 확인하기 위해 GitHub(<code>api.github.com</code>)에 접속합니다.
   이때 개인 정보는 전송되지 않습니다.
@@ -186,7 +197,7 @@
 
 <div class="en">
 <h2>Privacy Policy (English)</h2>
-<p class="updated">Last updated: 14 August 2026</p>
+<p class="updated">Last updated: 22 August 2026</p>
 <p>
   <strong>D-deskcal</strong> is a desktop calendar widget for Windows. This policy explains how
   it handles user data.
@@ -223,6 +234,11 @@
       version, the request type, a timestamp, a nonce and a signature are transmitted.
       No email address, account information, events, tasks, notes or typed text are sent.
       Users who enter their own API key are not routed through it.</li>
+  <li><strong>Google's public holiday calendar</strong> (<code>calendar.google.com</code>) —
+      downloaded so that public holidays appear on the calendar even when the user is not
+      signed in. It is a publicly readable feed, requires no authentication, and carries
+      nothing that identifies the user. The result is cached locally and refreshed once
+      every two weeks.</li>
   <li><strong>GitHub</strong> (<code>api.github.com</code>) — to check for application updates.
       No personal data is transmitted.</li>
 </ul>
